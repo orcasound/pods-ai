@@ -45,7 +45,14 @@ def get_label(
     orcahello_det: Optional[OrcaHelloDetection],
 ) -> Optional[str]:
     """
-    Returns one of: 'resident', 'transient', 'humpback', 'other', or None (unknown).
+    Derives a normalized label for an OrcasiteDetection based on its category, description, and an optional OrcaHelloDetection match.
+    
+    Parameters:
+        orcasite_det (OrcasiteDetection): The detection to label.
+        orcahello_det (Optional[OrcaHelloDetection]): An optional time-matched OrcaHello detection used to upgrade some whale labels.
+    
+    Returns:
+        str | None: `'resident'`, `'transient'`, `'humpback'`, or `'other'` when a label can be determined; `None` when the label is unknown.
     """
     desc = (orcasite_det.description or "").lower()
     cat = (orcasite_det.category or "").lower()
@@ -127,6 +134,22 @@ def classify_detection(
     label: str,
     all_detections: List[OrcasiteDetection],
 ) -> Classification:
+    """
+    Assigns a Classification to an OrcasiteDetection based on its label, source, category, and nearby detections.
+    
+    Parameters:
+        det (OrcasiteDetection): The detection to classify.
+        label (str): The computed label for the detection (e.g., 'resident', 'transient', 'humpback', 'other', or None).
+        all_detections (List[OrcasiteDetection]): All detections for the same feed used to determine temporal context.
+    
+    Returns:
+        Classification: An object with `kind` set to one of:
+            - 'tp_human_only' for human-sourced whale detections with no nearby machine whale detections,
+            - 'tp_machine_only' for machine-sourced whale detections,
+            - 'fp_machine_only' for machine-sourced non-whale detections labeled 'other',
+            - 'skip' for detections that should be excluded.
+        The `include` field indicates whether the detection should be included in downstream processing (`true` if included, `false` otherwise).
+    """
     cat = (det.category or "").lower()
     src = (det.source or "").lower()
 
@@ -159,8 +182,13 @@ N_SECONDS = 10  # or whatever
 
 def get_segments_for_detection(det: OrcasiteDetection) -> List[tuple[datetime, int]]:
     """
-    Return a list of (start_time, duration_seconds) tuples.
-    You can compute start_time as det.timestamp - N/2 etc.
+    Produce audio segment timings anchored to a detection timestamp.
+    
+    Parameters:
+        det (OrcasiteDetection): Detection whose timestamp is used as the segment start anchor.
+    
+    Returns:
+        List[tuple[datetime, int]]: A list of (start_time, duration_seconds) tuples. Each tuple specifies the segment start time (anchored at the detection's timestamp) and a duration equal to N_SECONDS (10 seconds).
     """
     start_time = det.timestamp  # or det.timestamp - timedelta(seconds=N_SECONDS/2)
     return [(start_time, N_SECONDS)]
@@ -173,7 +201,15 @@ def extract_and_save_segments(
     output_root: Path,
 ):
     """
-    Extract audio segments for a detection and save them to disk.
+    Extract audio segments for a detection and save them into label-specific directories under output_root.
+    
+    This function creates a directory for the provided label, converts each (start_time, duration_seconds) segment to Pacific time, constructs an HLS stream range for the detection's hydrophone, and attempts to retrieve and save the resulting audio clip. If DateRangeHLSStream initialization fails it prints diagnostic information and exits the process; if clip retrieval fails it prints a warning and continues.
+    
+    Parameters:
+        det (OrcasiteDetection): Detection whose feed and timestamp are used to build the stream URL and time range.
+        label (str): Label name used to create a subdirectory under output_root where clips are saved.
+        segments (List[tuple[datetime, int]]): List of tuples with segment start time (datetime) and duration in seconds.
+        output_root (Path): Root directory where label subdirectories and extracted clips will be written.
     """
     label_dir = output_root / label
 
@@ -214,7 +250,12 @@ def extract_and_save_segments(
 
 def get_orcasite_feeds() -> List[OrcasiteFeed]:
     """
-    Fetch all Orcasite feeds and return them as a list of OrcasiteFeed instances.
+    Fetch feeds from the Orcasite API and parse them into a list of OrcasiteFeed objects.
+    
+    Each feed includes metadata such as id, name, node_name, slug, storage bucket info, visibility, geographic location (latitude, longitude), and optional image and CloudFront URLs. If the API request fails or the response cannot be parsed, an empty list is returned.
+    
+    Returns:
+        List[OrcasiteFeed]: A list of parsed feed objects; empty if fetching or parsing fails.
     """
     url = "https://live.orcasound.net/api/json/feeds"
 
@@ -253,8 +294,15 @@ def get_orcasite_feeds() -> List[OrcasiteFeed]:
 
 def get_orcasite_detections(feed: OrcasiteFeed) -> List[OrcasiteDetection]:
     """
-    Fetch Orcasite detections for a specific feed.
-    Returns a list of Detection objects.
+    Fetch detections from the Orcasite API for the given feed.
+    
+    Parses API response into a list of OrcasiteDetection objects filtered to the provided feed. Timestamps are parsed from ISO strings and will be None if parsing fails. On network or parsing errors the function prints an error and returns an empty list.
+    
+    Parameters:
+        feed (OrcasiteFeed): Feed whose detections should be retrieved and matched by feed.id.
+    
+    Returns:
+        List[OrcasiteDetection]: Detections associated with the specified feed (may be empty).
     """
 
     # Base endpoint
@@ -315,12 +363,25 @@ def get_orcasite_detections(feed: OrcasiteFeed) -> List[OrcasiteDetection]:
         return []
 
 def get_node_name_for_feed(feed: OrcasiteFeed) -> str:
+    """
+    Retrieve the node name associated with an OrcasiteFeed.
+    
+    Returns:
+        node_name (str): The feed's node_name.
+    """
     return feed.node_name
 
 def get_orcahello_detections(feed: OrcasiteFeed) -> List[OrcaHelloDetection]:
     """
-    Fetch OrcaHello detections and filter them to only those belonging
-    to the given feed (via node_name match in audioUri).
+    Retrieve OrcaHello detections and return those whose audio URI contains the given feed's node_name.
+    
+    Fetches recent detections from the OrcaHello API, filters results to entries whose `audioUri` includes the feed's node_name, maps review fields to a `status` of "confirmed", "rejected", or "unreviewed", and parses the detection timestamp when possible.
+    
+    Parameters:
+        feed (OrcasiteFeed): Feed whose node_name is used to filter OrcaHello detection audio URIs.
+    
+    Returns:
+        List[OrcaHelloDetection]: A list of detections associated with the feed. Each detection's `timestamp` is a `datetime` or `None` if parsing failed, and `status` is one of `"confirmed"`, `"rejected"`, or `"unreviewed"`.
     """
 
     node_name = get_node_name_for_feed(feed)  # e.g., "rpi_sunset_bay"
