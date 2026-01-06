@@ -1,13 +1,17 @@
+# Copyright (c) PODS-AI contributors
+# SPDX-License-Identifier: MIT
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Optional, List, Tuple
-from orca_hls_utils.DateRangeHLSStream import DateRangeHLSStream
-from pytz import timezone
 import sys
 
+from orca_hls_utils.DateRangeHLSStream import DateRangeHLSStream
+from pytz import timezone
+import requests
 @dataclass
 class OrcasiteFeed:
-    id: str                     # e.g. "feed_02u8r4EPgmlYQmh6gzlGIL"
+    id: str                     # e.g., "feed_02u8r4EPgmlYQmh6gzlGIL"
     name: str                   # "Beach Camp at Sunset Bay"
     node_name: str              # "rpi_sunset_bay"
     slug: str                   # "sunset-bay"
@@ -24,7 +28,7 @@ class OrcasiteDetection:
     feed: OrcasiteFeed
     timestamp: datetime          # center or start time (we'll define)
     source: str                  # "machine" | "human"
-    category: str                # e.g. "whale", "vessel", "other", "none"
+    category: str                # e.g., "whale", "vessel", "other", "none"
     description: str             # free text; may be ""
     # extra fields as needed
 
@@ -33,10 +37,8 @@ class OrcaHelloDetection:
     id: str
     feed: OrcasiteFeed
     timestamp: datetime
-    status: str                  # e.g. "confirmed", "rejected", etc.
+    status: str                  # e.g., "confirmed", "rejected", etc.
     # extra fields as needed
-
-import re
 
 def get_label(
     orcasite_det: OrcasiteDetection,
@@ -153,8 +155,6 @@ def classify_detection(
     # False positive, human-only and true negative are effectively already skipped
     return Classification(kind="skip", include=False)
 
-from pathlib import Path
-
 N_SECONDS = 10  # or whatever
 
 def get_segments_for_detection(det: OrcasiteDetection) -> List[tuple[datetime, int]]:
@@ -212,10 +212,6 @@ def extract_and_save_segments(
             print(f"Error details: {type(e).__name__}: {str(e)}")
             print(f"Hydrophone: {hls_hydrophone_id}")
 
-from pathlib import Path
-import requests
-from typing import List
-
 def get_orcasite_feeds() -> List[OrcasiteFeed]:
     """
     Fetch all Orcasite feeds and return them as a list of OrcasiteFeed instances.
@@ -254,11 +250,6 @@ def get_orcasite_feeds() -> List[OrcasiteFeed]:
     except Exception as e:
         print("Error fetching Orcasite feeds:", e)
         return []
-
-
-import requests
-from datetime import datetime
-from typing import List
 
 def get_orcasite_detections(feed: OrcasiteFeed) -> List[OrcasiteDetection]:
     """
@@ -323,10 +314,6 @@ def get_orcasite_detections(feed: OrcasiteFeed) -> List[OrcasiteDetection]:
         print(f"Error fetching detections for feed {feed.id}: {e}")
         return []
 
-import requests
-from datetime import datetime
-from typing import List
-
 def get_node_name_for_feed(feed: OrcasiteFeed) -> str:
     return feed.node_name
 
@@ -336,7 +323,7 @@ def get_orcahello_detections(feed: OrcasiteFeed) -> List[OrcaHelloDetection]:
     to the given feed (via node_name match in audioUri).
     """
 
-    node_name = get_node_name_for_feed(feed)  # e.g. "rpi_sunset_bay"
+    node_name = get_node_name_for_feed(feed)  # e.g., "rpi_sunset_bay"
 
     url = "https://aifororcasdetections.azurewebsites.net/api/detections"
     params = {
