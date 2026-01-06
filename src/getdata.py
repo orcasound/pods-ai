@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional, List, Tuple
-import re
 import sys
 
 from orca_hls_utils.DateRangeHLSStream import DateRangeHLSStream
