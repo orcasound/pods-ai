@@ -417,7 +417,7 @@ def process_all_feeds(output_root: Path):
     with open(csv_path, 'w', newline='') as csvfile:
         csv_writer = csv.writer(csvfile)
         # Write header
-        csv_writer.writerow(['Category', 'Node', 'NodeName', 'Timestamp', 'URI'])
+        csv_writer.writerow(['Category', 'NodeName', 'Timestamp', 'URI'])
 
         for feed in feeds:
             print(f"Processing feed {feed.id} ({feed.node_name})")
@@ -444,11 +444,10 @@ def process_all_feeds(output_root: Path):
                 
                 # Write to CSV
                 category = label
-                node = det.feed.slug  # Use slug for node (e.g., "andrews-bay")
                 node_name = det.feed.node_name  # e.g., "rpi_sunset_bay"
                 timestamp_pst = format_timestamp_pst(det.timestamp)
-                uri = generate_uri(node, det.timestamp)
-                csv_writer.writerow([category, node, node_name, timestamp_pst, uri])
+                uri = generate_uri(det.feed.slug, det.timestamp)
+                csv_writer.writerow([category, node_name, timestamp_pst, uri])
 
 if __name__ == "__main__":
     output_root = Path("output_segments")

@@ -17,7 +17,6 @@ N_SECONDS = 10  # or whatever
 @dataclass
 class CSVRow:
     category: str
-    node: str
     node_name: str
     timestamp_pst: str
     uri: str
@@ -38,13 +37,12 @@ def parse_csv(csv_path: Path) -> List[CSVRow]:
         # Skip header
         next(csv_reader)
         for row in csv_reader:
-            if len(row) >= 5:
+            if len(row) >= 4:
                 rows.append(CSVRow(
                     category=row[0],
-                    node=row[1],
-                    node_name=row[2],
-                    timestamp_pst=row[3],
-                    uri=row[4]
+                    node_name=row[1],
+                    timestamp_pst=row[2],
+                    uri=row[3]
                 ))
     return rows
 
@@ -150,7 +148,7 @@ def process_csv(csv_path: Path, output_root: Path):
     print(f"Found {len(rows)} detections to process")
     
     for row in rows:
-        print(f"Processing: {row.category} - {row.node} - {row.timestamp_pst}")
+        print(f"Processing: {row.category} - {row.node_name} - {row.timestamp_pst}")
         timestamp_pst = parse_timestamp_pst(row.timestamp_pst)
         download_audio_segment(row.category, row.node_name, timestamp_pst, output_root)
 
