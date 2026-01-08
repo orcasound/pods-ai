@@ -1,0 +1,57 @@
+---
+name: Make CSV
+
+on:
+  pull_request:
+
+concurrency:
+  # Cancel any CI/CD workflow currently in progress for the same PR.
+  # Allow running concurrently with any other commits.
+  group: build-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  make_csv:
+    permissions:
+      actions: write  # for fkirc/skip-duplicate-actions to skip or stop workflow runs
+      contents: read  # for actions/checkout to fetch code
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@20cf305ff2072d973412fa9b1e3a4f227bda3c76  # v2.14.0
+        with:
+          egress-policy: audit
+
+      - id: skip_check
+        uses: fkirc/skip-duplicate-actions@f75f66ce1886f00957d99748a42c724f4330bdcf  # v5.3.1
+        with:
+          cancel_others: 'false'
+          paths_ignore: '["**.md"]'
+
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8  # v6.0.1
+        if: steps.skip_check.outputs.should_skip != 'true'
+        with:
+          submodules: 'recursive'
+
+      - uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548  # v6.1.0
+        if: steps.skip_check.outputs.should_skip != 'true'
+        with:
+          python-version: '3.11'
+
+      - name: Make CSV
+        if: steps.skip_check.outputs.should_skip != 'true'
+        run: |
+          python src/make_csv.py
+
+      - name: Verify working tree is clean
+        if: steps.skip_check.outputs.should_skip != 'true'
+        run: |
+          if [[ -n "$(git status --porcelain)" ]]; then
+            echo "Repository has uncommitted changes after CSV generation"
+            git status
+            exit 1
+          fi
