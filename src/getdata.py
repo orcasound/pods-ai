@@ -106,6 +106,8 @@ def index_orcahello_by_time(
     return find_match
 
 FIVE_MIN = timedelta(minutes=5)
+PACIFIC_TZ = timezone('US/Pacific')
+UTC_TZ = timezone('UTC')
 
 def is_isolated_human_whale(
     det: OrcasiteDetection,
@@ -220,12 +222,11 @@ def extract_and_save_segments(
         hls_hydrophone_id=det.feed.node_name
         hydrophone_stream_url = 'https://s3-us-west-2.amazonaws.com/audio-orcasound-net/' + hls_hydrophone_id
 
-        pacific = timezone('US/Pacific')
-        start_dt_aware = det.timestamp.astimezone(pacific)
+        start_dt_aware = det.timestamp.astimezone(PACIFIC_TZ)
         hls_start_time_unix = int(start_dt_aware.timestamp())
 
         end_time = start_time + timedelta(seconds=duration_s)
-        end_dt_aware = end_time.astimezone(pacific)
+        end_dt_aware = end_time.astimezone(PACIFIC_TZ)
         hls_end_time_unix = int(end_dt_aware.timestamp())
 
         try:
@@ -454,8 +455,7 @@ def format_timestamp_pst(dt: datetime) -> str:
     Returns:
         str: Formatted timestamp string (e.g., "2025_12_24_17_51_23_PST").
     """
-    pacific = timezone('US/Pacific')
-    dt_pst = dt.astimezone(pacific)
+    dt_pst = dt.astimezone(PACIFIC_TZ)
     return dt_pst.strftime("%Y_%m_%d_%H_%M_%S_PST")
 
 def generate_uri(node: str, dt: datetime) -> str:
@@ -470,7 +470,7 @@ def generate_uri(node: str, dt: datetime) -> str:
         str: URI in the format "https://live.orcasound.net/bouts/new/{node}?time={utc_time}".
     """
     # Ensure the datetime is in UTC
-    utc_dt = dt.astimezone(timezone('UTC'))
+    utc_dt = dt.astimezone(UTC_TZ)
     # Format as ISO 8601 with milliseconds and Z suffix
     time_str = utc_dt.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
     # URL encode the time parameter
