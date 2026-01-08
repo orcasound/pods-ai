@@ -84,9 +84,11 @@ def download_audio_segment(
     # The file name format is: {node-name-with-hyphens}_{timestamp}_PST.wav
     # DateRangeHLSStream converts underscores to hyphens within the node name,
     # but underscores are still used as separators between components
-    timestamp_str = timestamp_pst.strftime("%Y_%m_%d_%H_%M_%S")
+    duration_s = N_SECONDS
+    end_timestamp_pst = timestamp_pst + timedelta(seconds=duration_s)
+    end_timestamp_str = end_timestamp_pst.strftime("%Y_%m_%d_%H_%M_%S")
     node_name_in_filename = node_name.replace("_", "-")
-    expected_filename = f"{node_name_in_filename}_{timestamp_str}_PST.wav"
+    expected_filename = f"{node_name_in_filename}_{end_timestamp_str}_PST.wav"
     expected_path = label_dir / expected_filename
     
     if expected_path.exists():
@@ -98,7 +100,6 @@ def download_audio_segment(
     hydrophone_stream_url = 'https://s3-us-west-2.amazonaws.com/audio-orcasound-net/' + hls_hydrophone_id
     
     start_time = timestamp_pst
-    duration_s = N_SECONDS
     end_time = start_time + timedelta(seconds=duration_s)
     
     hls_start_time_unix = int(start_time.timestamp())
