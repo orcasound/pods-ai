@@ -82,8 +82,10 @@ def download_audio_segment(
     
     # Check if the file already exists
     # The file name format is: {node_name}_{timestamp}_PST.wav
+    # Note: DateRangeHLSStream converts underscores to hyphens in the filename
     timestamp_str = timestamp_pst.strftime("%Y_%m_%d_%H_%M_%S")
-    expected_filename = f"{node_name}_{timestamp_str}_PST.wav"
+    node_name_in_filename = node_name.replace("_", "-")
+    expected_filename = f"{node_name_in_filename}_{timestamp_str}_PST.wav"
     expected_path = label_dir / expected_filename
     
     if expected_path.exists():
