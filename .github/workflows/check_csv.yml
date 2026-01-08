@@ -1,7 +1,7 @@
 # Copyright (c) PODS-AI contributors
 # SPDX-License-Identifier: MIT
 ---
-name: Make CSV
+name: Check CSV
 
 on:
   pull_request:
@@ -43,6 +43,10 @@ jobs:
         if: steps.skip_check.outputs.should_skip != 'true'
         with:
           python-version: '3.11'
+
+      - name: Install Python dependencies
+        if: steps.skip_check.outputs.should_skip != 'true'
+        run: pip install -r requirements.txt
 
       - name: Make CSV
         if: steps.skip_check.outputs.should_skip != 'true'
