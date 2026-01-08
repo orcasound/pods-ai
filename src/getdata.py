@@ -4,7 +4,9 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional, List, Tuple
+import csv
 import sys
+from urllib.parse import quote
 
 from orca_hls_utils.DateRangeHLSStream import DateRangeHLSStream
 from pytz import timezone
@@ -104,6 +106,8 @@ def index_orcahello_by_time(
     return find_match
 
 FIVE_MIN = timedelta(minutes=5)
+PACIFIC_TZ = timezone('US/Pacific')
+UTC_TZ = timezone('UTC')
 
 def is_isolated_human_whale(
     det: OrcasiteDetection,
@@ -218,12 +222,11 @@ def extract_and_save_segments(
         hls_hydrophone_id=det.feed.node_name
         hydrophone_stream_url = 'https://s3-us-west-2.amazonaws.com/audio-orcasound-net/' + hls_hydrophone_id
 
-        pacific = timezone('US/Pacific')
-        start_dt_aware = det.timestamp.astimezone(pacific)
+        start_dt_aware = det.timestamp.astimezone(PACIFIC_TZ)
         hls_start_time_unix = int(start_dt_aware.timestamp())
 
         end_time = start_time + timedelta(seconds=duration_s)
-        end_dt_aware = end_time.astimezone(pacific)
+        end_dt_aware = end_time.astimezone(PACIFIC_TZ)
         hls_end_time_unix = int(end_dt_aware.timestamp())
 
         try:
@@ -442,34 +445,82 @@ def get_orcahello_detections(feed: OrcasiteFeed) -> List[OrcaHelloDetection]:
         print(f"Error fetching OrcaHello detections for feed {feed.id}: {e}")
         return []
 
+def format_timestamp_pst(dt: datetime) -> str:
+    """
+    Format a datetime object as PST timestamp string in the format YYYY_MM_DD_HH_MM_SS_PST.
+    
+    Parameters:
+        dt (datetime): The datetime to format (should be timezone-aware).
+    
+    Returns:
+        str: Formatted timestamp string (e.g., "2025_12_24_17_51_23_PST").
+    """
+    dt_pst = dt.astimezone(PACIFIC_TZ)
+    return dt_pst.strftime("%Y_%m_%d_%H_%M_%S_PST")
+
+def generate_uri(node: str, dt: datetime) -> str:
+    """
+    Generate a URI for the Orcasound bouts interface.
+    
+    Parameters:
+        node (str): The node name (e.g., "andrews-bay").
+        dt (datetime): The datetime in UTC.
+    
+    Returns:
+        str: URI in the format "https://live.orcasound.net/bouts/new/{node}?time={utc_time}".
+    """
+    # Ensure the datetime is in UTC
+    utc_dt = dt.astimezone(UTC_TZ)
+    # Format as ISO 8601 with milliseconds and Z suffix
+    time_str = utc_dt.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+    # URL encode the time parameter
+    time_encoded = quote(time_str, safe='')
+    return f"https://live.orcasound.net/bouts/new/{node}?time={time_encoded}"
+
 def process_all_feeds(output_root: Path):
     feeds = get_orcasite_feeds()
+    
+    # Create CSV file
+    csv_path = output_root / "detections.csv"
+    output_root.mkdir(parents=True, exist_ok=True)
+    
+    with open(csv_path, 'w', newline='') as csvfile:
+        csv_writer = csv.writer(csvfile)
+        # Write header
+        csv_writer.writerow(['Category', 'Node', 'Timestamp', 'URI'])
 
-    for feed in feeds:
-        print(f"Processing feed {feed.id} ({feed.node_name})")
-        orcasite_dets = get_orcasite_detections(feed)
-        orcahello_dets = get_orcahello_detections(feed)
+        for feed in feeds:
+            print(f"Processing feed {feed.id} ({feed.node_name})")
+            orcasite_dets = get_orcasite_detections(feed)
+            orcahello_dets = get_orcahello_detections(feed)
 
-        # Create time-based matcher for this feed's OrcaHello detections
-        find_oh_match = index_orcahello_by_time(orcahello_dets)
+            # Create time-based matcher for this feed's OrcaHello detections
+            find_oh_match = index_orcahello_by_time(orcahello_dets)
 
-        for det in orcasite_dets:
-            # Only care about source=machine or human as per your logic
-            orcahello_match = None
-            if det.source == "machine":
-                orcahello_match = find_oh_match(det.feed, det.timestamp)
+            for det in orcasite_dets:
+                # Only care about source=machine or human as per your logic
+                orcahello_match = None
+                if det.source == "machine":
+                    orcahello_match = find_oh_match(det.feed, det.timestamp)
 
-            label = get_label(det, orcahello_match)
-            if label is None:
-                # label unknown ⇒ skip
-                continue
+                label = get_label(det, orcahello_match)
+                if label is None:
+                    # label unknown ⇒ skip
+                    continue
 
-            classification = classify_detection(det, label, orcasite_dets)
-            if not classification.include:
-                continue
+                classification = classify_detection(det, label, orcasite_dets)
+                if not classification.include:
+                    continue
+                
+                # Write to CSV
+                category = label
+                node = det.feed.slug  # Use slug for node (e.g., "andrews-bay")
+                timestamp_pst = format_timestamp_pst(det.timestamp)
+                uri = generate_uri(node, det.timestamp)
+                csv_writer.writerow([category, node, timestamp_pst, uri])
 
-            segments = get_segments_for_detection(det)
-            extract_and_save_segments(det, label, segments, output_root)
+                segments = get_segments_for_detection(det)
+                extract_and_save_segments(det, label, segments, output_root)
 
 if __name__ == "__main__":
     output_root = Path("output_segments")
