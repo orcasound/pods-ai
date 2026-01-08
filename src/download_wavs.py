@@ -3,10 +3,9 @@
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import List, Tuple
+from typing import List
 import csv
 import sys
-from urllib.parse import unquote, parse_qs, urlparse
 
 from orca_hls_utils.DateRangeHLSStream import DateRangeHLSStream
 from pytz import timezone
@@ -63,24 +62,6 @@ def parse_timestamp_pst(timestamp_str: str) -> datetime:
     # Localize to Pacific timezone
     dt_aware = PACIFIC_TZ.localize(dt_naive)
     return dt_aware
-
-def extract_node_name_from_uri(uri: str) -> str:
-    """
-    Extract the node name from the Orcasound bouts URI.
-    
-    Parameters:
-        uri (str): URI in the format "https://live.orcasound.net/bouts/new/{node}?time={utc_time}".
-    
-    Returns:
-        str: The node name (e.g., "andrews-bay").
-    """
-    # Parse the URI to get the path
-    parsed = urlparse(uri)
-    path_parts = parsed.path.split('/')
-    # The node is the last part of the path
-    if len(path_parts) >= 4:  # ['', 'bouts', 'new', 'node']
-        return path_parts[-1]
-    return ""
 
 def download_audio_segment(
     category: str,
