@@ -5,12 +5,11 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional, List, Tuple
 import csv
-import sys
 from urllib.parse import quote
 
-from orca_hls_utils.DateRangeHLSStream import DateRangeHLSStream
 from pytz import timezone
 import requests
+
 @dataclass
 class OrcasiteFeed:
     id: str                     # e.g., "feed_02u8r4EPgmlYQmh6gzlGIL"
@@ -181,75 +180,6 @@ def classify_detection(
 
     # False positive, human-only and true negative are effectively already skipped
     return Classification(kind="skip", include=False)
-
-N_SECONDS = 10  # or whatever
-
-def get_segments_for_detection(det: OrcasiteDetection) -> List[tuple[datetime, int]]:
-    """
-    Produce audio segment timings anchored to a detection timestamp.
-    
-    Parameters:
-        det (OrcasiteDetection): Detection whose timestamp is used as the segment start anchor.
-    
-    Returns:
-        List[tuple[datetime, int]]: A list of (start_time, duration_seconds) tuples. Each tuple specifies the segment start time (anchored at the detection's timestamp) and a duration equal to N_SECONDS (10 seconds).
-    """
-    start_time = det.timestamp  # or det.timestamp - timedelta(seconds=N_SECONDS/2)
-    return [(start_time, N_SECONDS)]
-
-
-def extract_and_save_segments(
-    det: OrcasiteDetection,
-    label: str,
-    segments: List[tuple[datetime, int]],
-    output_root: Path,
-):
-    """
-    Extract audio segments for a detection and save them into label-specific directories under output_root.
-    
-    This function creates a directory for the provided label, converts each (start_time, duration_seconds) segment to Pacific time, constructs an HLS stream range for the detection's hydrophone, and attempts to retrieve and save the resulting audio clip. If DateRangeHLSStream initialization fails it prints diagnostic information and exits the process; if clip retrieval fails it prints a warning and continues.
-    
-    Parameters:
-        det (OrcasiteDetection): Detection whose feed and timestamp are used to build the stream URL and time range.
-        label (str): Label name used to create a subdirectory under output_root where clips are saved.
-        segments (List[tuple[datetime, int]]): List of tuples with segment start time (datetime) and duration in seconds.
-        output_root (Path): Root directory where label subdirectories and extracted clips will be written.
-    """
-    label_dir = output_root / label
-
-    for idx, (start_time, duration_s) in enumerate(segments):
-        hls_polling_interval=60
-        hls_hydrophone_id=det.feed.node_name
-        hydrophone_stream_url = 'https://s3-us-west-2.amazonaws.com/audio-orcasound-net/' + hls_hydrophone_id
-
-        start_dt_aware = det.timestamp.astimezone(PACIFIC_TZ)
-        hls_start_time_unix = int(start_dt_aware.timestamp())
-
-        end_time = start_time + timedelta(seconds=duration_s)
-        end_dt_aware = end_time.astimezone(PACIFIC_TZ)
-        hls_end_time_unix = int(end_dt_aware.timestamp())
-
-        try:
-            hls_stream = DateRangeHLSStream(hydrophone_stream_url, hls_polling_interval, hls_start_time_unix, hls_end_time_unix, label_dir, False)
-        except IndexError as e:
-            print("\nERROR: Failed to initialize DateRangeHLSStream.")
-            print("This usually means the S3 folder list is malformed or unsorted.")
-            print(f"Details: {e}")
-            print(f"Hydrophone: {hls_hydrophone_id}")
-            print(f"Start time (unix): {hls_start_time_unix}")
-            print(f"End time (unix)  : {hls_end_time_unix}")
-            sys.exit(0)
-
-        try:
-            # DateRangeHLSStream currently requires a naive UTC end time, not one already set to UTC.
-            naive_end_time_utc = end_time.replace(tzinfo=None)
-
-            clip_path, start_timestamp, next_clip_end_time = hls_stream.get_next_clip(naive_end_time_utc)
-        except (IndexError, ValueError) as e:
-            # Handle case when no audio files exist for the specified time range
-            print(f"\nWarning: Unable to retrieve audio clip. This may occur when no audio files exist for the specified time range.")
-            print(f"Error details: {type(e).__name__}: {str(e)}")
-            print(f"Hydrophone: {hls_hydrophone_id}")
 
 def get_orcasite_feeds() -> List[OrcasiteFeed]:
     """
@@ -487,7 +417,7 @@ def process_all_feeds(output_root: Path):
     with open(csv_path, 'w', newline='') as csvfile:
         csv_writer = csv.writer(csvfile)
         # Write header
-        csv_writer.writerow(['Category', 'Node', 'Timestamp', 'URI'])
+        csv_writer.writerow(['Category', 'NodeName', 'Timestamp', 'URI'])
 
         for feed in feeds:
             print(f"Processing feed {feed.id} ({feed.node_name})")
@@ -514,13 +444,10 @@ def process_all_feeds(output_root: Path):
                 
                 # Write to CSV
                 category = label
-                node = det.feed.slug  # Use slug for node (e.g., "andrews-bay")
+                node_name = det.feed.node_name  # e.g., "rpi_sunset_bay"
                 timestamp_pst = format_timestamp_pst(det.timestamp)
-                uri = generate_uri(node, det.timestamp)
-                csv_writer.writerow([category, node, timestamp_pst, uri])
-
-                segments = get_segments_for_detection(det)
-                extract_and_save_segments(det, label, segments, output_root)
+                uri = generate_uri(det.feed.slug, det.timestamp)
+                csv_writer.writerow([category, node_name, timestamp_pst, uri])
 
 if __name__ == "__main__":
     output_root = Path("output_segments")
