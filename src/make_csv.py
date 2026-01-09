@@ -314,6 +314,18 @@ def get_node_name_for_feed(feed: OrcasiteFeed) -> str:
     """
     return feed.node_name
 
+def get_orcahello_name_for_feed(feed: OrcasiteFeed) -> str:
+    """
+    Retrieve the OrcaHello name associated with an OrcasiteFeed.
+    
+    Returns:
+        name (str): The feed's name in OrcaHello format.
+    """
+    name = feed.name
+    if " at " in name:
+        name = name.split(" at ", 1)[1]
+    return name
+
 def get_orcahello_detections(feed: OrcasiteFeed) -> List[OrcaHelloDetection]:
     """
     Retrieve OrcaHello detections and return those whose audio URI contains the given feed's node_name.
@@ -331,6 +343,8 @@ def get_orcahello_detections(feed: OrcasiteFeed) -> List[OrcaHelloDetection]:
 
     node_name = get_node_name_for_feed(feed)  # e.g., "rpi_sunset_bay"
 
+    orcahello_name = get_orcahello_name_for_feed(feed)  # e.g., "Sunset Bay"
+
     url = "https://aifororcasdetections.azurewebsites.net/api/detections"
     
     # Collect all detections from all pages before filtering
@@ -343,7 +357,7 @@ def get_orcahello_detections(feed: OrcasiteFeed) -> List[OrcaHelloDetection]:
             "SortBy": "timestamp",
             "SortOrder": "desc",
             "Timeframe": "1m",
-            "Location": "all",
+            "Location": orcahello_name,
             "RecordsPerPage": 50,   # API max is 50
         }
         
