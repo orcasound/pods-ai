@@ -97,7 +97,6 @@ def index_orcahello_by_time(
     def find_match(feed: OrcasiteFeed, t: datetime) -> Optional[OrcaHelloDetection]:
         best = None
         best_dt = max_delta
-        print(f"Looking for {t}...")
 
         for d in detections:
             if d.feed.id != feed.id:
