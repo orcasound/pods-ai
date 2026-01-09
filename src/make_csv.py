@@ -324,6 +324,8 @@ def get_orcahello_name_for_feed(feed: OrcasiteFeed) -> str:
     name = feed.name
     if " at " in name:
         name = name.split(" at ", 1)[1]
+    if name == "MaST Center Aquarium":
+        return "Mast Center"
     return name
 
 def get_orcahello_detections(feed: OrcasiteFeed) -> List[OrcaHelloDetection]:
