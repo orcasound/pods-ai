@@ -358,7 +358,7 @@ def get_orcahello_detections(feed: OrcasiteFeed) -> List[OrcaHelloDetection]:
             "Page": page,
             "SortBy": "timestamp",
             "SortOrder": "desc",
-            "Timeframe": "1m",
+            "Timeframe": "all",
             "Location": orcahello_name,
             "RecordsPerPage": 50,   # API max is 50
         }
