@@ -444,7 +444,7 @@ def process_all_feeds(output_root: Path):
                 orcahello_match = None
                 if det.source == "machine":
                     orcahello_match = find_oh_match(det.feed, det.timestamp)
-                    if orcahello_match is None:                     
+                    if orcahello_match is None:
                         print(f"Warning: couldn't find matching OrcaHello detection for {det.feed.slug} {det.timestamp}")
                         continue
 
