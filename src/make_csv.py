@@ -80,9 +80,7 @@ def get_label(
 
     # 4. Other
     if orcasite_det.source == "machine" and not ("click" in desc or "call" in desc or "whistle" in desc):
-        print(f"timestamp: {orcasite_det.timestamp}  desc: {desc}")
         return "other"
-
     # Unknown
     return None
 
