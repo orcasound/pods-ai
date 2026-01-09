@@ -320,6 +320,8 @@ def get_orcahello_detections(feed: OrcasiteFeed) -> List[OrcaHelloDetection]:
     
     Fetches recent detections from the OrcaHello API, filters results to entries whose `audioUri` includes the feed's node_name, maps review fields to a `status` of "confirmed", "rejected", or "unreviewed", and parses the detection timestamp when possible.
     
+    Implements pagination to fetch all available detections by incrementing the Page parameter until an empty page is returned.
+    
     Parameters:
         feed (OrcasiteFeed): Feed whose node_name is used to filter OrcaHello detection audio URIs.
     
@@ -330,60 +332,74 @@ def get_orcahello_detections(feed: OrcasiteFeed) -> List[OrcaHelloDetection]:
     node_name = get_node_name_for_feed(feed)  # e.g., "rpi_sunset_bay"
 
     url = "https://aifororcasdetections.azurewebsites.net/api/detections"
-    params = {
-        "Page": 1,
-        "SortBy": "timestamp",
-        "SortOrder": "desc",
-        "Timeframe": "1m",
-        "Location": "all",
-        "RecordsPerPage": 50,   # get more so we don't miss matches
-    }
+    
+    # Collect all detections from all pages before filtering
+    all_items = []
+    page = 1
+    
+    while True:
+        params = {
+            "Page": page,
+            "SortBy": "timestamp",
+            "SortOrder": "desc",
+            "Timeframe": "1m",
+            "Location": "all",
+            "RecordsPerPage": 50,   # API max is 50
+        }
+        
+        try:
+            r = requests.get(url, params=params, timeout=10)
+            r.raise_for_status()
+            data = r.json()
+            
+            # If the page is empty, we've fetched all available detections
+            if not data:
+                break
+            
+            all_items.extend(data)
+            page += 1
+            
+        except Exception as e:
+            print(f"Error fetching OrcaHello detections page {page} for feed {feed.id}: {e}")
+            break
+    
+    # Now filter and process all collected items
+    results = []
+    
+    for item in all_items:
+        audio_uri = item.get("audioUri", "")
 
-    try:
-        r = requests.get(url, params=params, timeout=10)
-        r.raise_for_status()
-        data = r.json()
+        # Filter by node_name inside the audio filename
+        if node_name not in audio_uri:
+            continue
 
-        results = []
+        found = item.get("found", "").lower()
+        reviewed = item.get("reviewed", False)
 
-        for item in data:
-            audio_uri = item.get("audioUri", "")
+        if reviewed and found == "yes":
+            status = "confirmed"
+        elif reviewed and found == "no":
+            status = "rejected"
+        else:
+            status = "unreviewed"
 
-            # Filter by node_name inside the audio filename
-            if node_name not in audio_uri:
-                continue
+        # Parse timestamp
+        ts_raw = item.get("timestamp")
+        try:
+            ts = datetime.fromisoformat(ts_raw.replace("Z", "+00:00"))
+        except Exception:
+            ts = None
 
-            found = item.get("found", "").lower()
-            reviewed = item.get("reviewed", False)
+        det = OrcaHelloDetection(
+            id=item.get("id"),
+            feed=feed,
+            timestamp=ts,
+            status=status,
+        )
 
-            if reviewed and found == "yes":
-                status = "confirmed"
-            elif reviewed and found == "no":
-                status = "rejected"
-            else:
-                status = "unreviewed"
+        results.append(det)
 
-            # Parse timestamp
-            ts_raw = item.get("timestamp")
-            try:
-                ts = datetime.fromisoformat(ts_raw.replace("Z", "+00:00"))
-            except Exception:
-                ts = None
-
-            det = OrcaHelloDetection(
-                id=item.get("id"),
-                feed=feed,
-                timestamp=ts,
-                status=status,
-            )
-
-            results.append(det)
-
-        return results
-
-    except Exception as e:
-        print(f"Error fetching OrcaHello detections for feed {feed.id}: {e}")
-        return []
+    return results
 
 def format_timestamp_pst(dt: datetime) -> str:
     """
