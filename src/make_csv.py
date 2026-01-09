@@ -58,6 +58,9 @@ def get_label(
     desc = (orcasite_det.description or "").lower()
     cat = (orcasite_det.category or "").lower()
 
+    if orcahello_det and orcahello_det.status.lower() == "unreviewed":
+        return None
+
     # 1. Resident
     if cat == "whale":
         if ("resident" in desc) or ("pod" in desc):
@@ -76,9 +79,8 @@ def get_label(
             return "humpback"
 
     # 4. Other
-    if cat != "whale" and orcasite_det.source == "machine":
+    if orcasite_det.source == "machine" and not ("click" in desc or "call" in desc or "whistle" in desc):
         return "other"
-
     # Unknown
     return None
 
@@ -88,18 +90,26 @@ def index_orcahello_by_time(
 ):
     """
     Returns a function that maps (feed, time) -> best matching OrcaHelloDetection or None.
-    For simplicity, do a linear scan (optimize later if needed).
+    Only matches detections whose timestamp is <= t.
     """
     def find_match(feed: OrcasiteFeed, t: datetime) -> Optional[OrcaHelloDetection]:
         best = None
         best_dt = max_delta
+
         for d in detections:
             if d.feed.id != feed.id:
                 continue
-            dt = abs(d.timestamp - t)
+
+            # Only consider detections at or BEFORE t
+            if d.timestamp > t:
+                continue
+
+            dt = t - d.timestamp  # guaranteed non-negative
+
             if dt <= best_dt:
                 best_dt = dt
                 best = d
+
         return best
 
     return find_match
@@ -324,9 +334,9 @@ def get_orcahello_detections(feed: OrcasiteFeed) -> List[OrcaHelloDetection]:
         "Page": 1,
         "SortBy": "timestamp",
         "SortOrder": "desc",
-        "Timeframe": "1w",
+        "Timeframe": "1m",
         "Location": "all",
-        "RecordsPerPage": 500,   # get more so we don't miss matches
+        "RecordsPerPage": 50,   # get more so we don't miss matches
     }
 
     try:
@@ -432,6 +442,9 @@ def process_all_feeds(output_root: Path):
                 orcahello_match = None
                 if det.source == "machine":
                     orcahello_match = find_oh_match(det.feed, det.timestamp)
+                    if orcahello_match is None:
+                        print(f"Warning: couldn't find matching OrcaHello detection for {det.feed.slug} {det.timestamp}")
+                        continue
 
                 label = get_label(det, orcahello_match)
                 if label is None:
