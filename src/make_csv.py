@@ -288,20 +288,6 @@ def get_node_name_for_feed(feed: OrcasiteFeed) -> str:
     """
     return feed.node_name
 
-def get_orcahello_name_for_feed(feed: OrcasiteFeed) -> str:
-    """
-    Retrieve the OrcaHello name associated with an OrcasiteFeed.
-    
-    Returns:
-        name (str): The feed's name in OrcaHello format.
-    """
-    name = feed.name
-    if " at " in name:
-        name = name.split(" at ", 1)[1]
-    if name == "MaST Center Aquarium":
-        return "Mast Center"
-    return name
-
 def get_orcahello_detections(feed: OrcasiteFeed) -> List[OrcaHelloDetection]:
     """
     Retrieve OrcaHello detections and return those whose audio URI contains the given feed's node_name.
@@ -313,7 +299,6 @@ def get_orcahello_detections(feed: OrcasiteFeed) -> List[OrcaHelloDetection]:
         List[OrcaHelloDetection]: A list of detections associated with the feed. Each detection's `timestamp` is a `datetime` or `None` if parsing failed, and `status` is one of `"confirmed"`, `"rejected"`, or `"unreviewed"`.
     """
     node_name = get_node_name_for_feed(feed)      # e.g., "rpi_sunset_bay"
-    orcahello_name = get_orcahello_name_for_feed(feed)
 
     # Cosmos DB SQL query
     query = """
