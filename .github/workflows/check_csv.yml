@@ -21,6 +21,8 @@ jobs:
       actions: write  # for fkirc/skip-duplicate-actions to skip or stop workflow runs
       contents: read  # for actions/checkout to fetch code
     runs-on: ubuntu-latest
+    env:
+      COSMOS_KEY: ${{ secrets.COSMOS_KEY }}
 
     steps:
       - name: Harden Runner
