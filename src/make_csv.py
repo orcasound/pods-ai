@@ -254,21 +254,14 @@ def get_orcasite_detections(feed: OrcasiteFeed) -> List[OrcasiteDetection]:
 
     # Fields we want (already URL-encoded in your example)
     fields = (
-        "id,source_ip,playlist_timestamp,player_offset,"
-        "listener_count,timestamp,description,visible,"
-        "source,category,candidate_id,feed_id"
+        "id,playlist_timestamp,player_offset,timestamp,description,"
+        "source,category,feed_id,idempotency_key"
     )
 
     # Build query parameters
     params = {
         "fields[detection]": fields,
         "filter[feed_id]": feed.id,
-        # You *said* "&source]=whale" but that looks like a typo.
-        # If you want only whale detections, use:
-        # "filter[category]": "whale"
-        #
-        # But since your sample includes non-whale detections,
-        # I will NOT filter category here unless you tell me to.
     }
 
     try:
