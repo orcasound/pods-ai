@@ -13,7 +13,7 @@ import requests
 from azure.cosmos import CosmosClient
 import os
 
-COSMOS_URL = os.environ.get("COSMOS_URL", "https://aifororcasmetadatastore.documents.azure.com:443/")
+COSMOS_URL = os.environ.get("COSMOS_URL") or "https://aifororcasmetadatastore.documents.azure.com:443/"
 COSMOS_KEY = os.environ.get("COSMOS_KEY", "<your-primary-key>")
 COSMOS_DB = os.environ.get("COSMOS_DB", "predictions")
 COSMOS_CONTAINER = os.environ.get("COSMOS_CONTAINER", "metadata")
