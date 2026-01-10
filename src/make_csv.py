@@ -465,7 +465,7 @@ def generate_uri(node: str, dt: datetime) -> str:
     time_encoded = quote(time_str, safe='')
     return f"https://live.orcasound.net/bouts/new/{node}?time={time_encoded}"
 
-def process_all_feeds(output_root: Path, feed_filter: str | None = None, use_localhost: bool = False):
+def process_all_feeds(output_root: Path, feed_filter: Optional[str] = None, use_localhost: bool = False):
     """
     Generate a consolidated CSV file of selected Orcasite detections, optionally filtered by feed
     and matched with corresponding OrcaHello detections.
