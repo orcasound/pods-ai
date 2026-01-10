@@ -8,7 +8,18 @@ import csv
 from urllib.parse import quote
 
 from pytz import timezone
+import argparse
 import requests
+from azure.cosmos import CosmosClient
+import os
+
+COSMOS_URL = os.environ.get("COSMOS_URL", "").strip() or "https://aifororcasmetadatastore.documents.azure.com:443/"
+COSMOS_KEY = os.environ.get("COSMOS_KEY", "<your-primary-key>")
+COSMOS_DB = os.environ.get("COSMOS_DB", "predictions")
+COSMOS_CONTAINER = os.environ.get("COSMOS_CONTAINER", "metadata")
+client = CosmosClient(COSMOS_URL, credential=COSMOS_KEY)
+database = client.get_database_client(COSMOS_DB)
+container = database.get_container_client(COSMOS_CONTAINER)
 
 @dataclass
 class OrcasiteFeed:
@@ -31,7 +42,7 @@ class OrcasiteDetection:
     source: str                  # "machine" | "human"
     category: str                # e.g., "whale", "vessel", "other", "none"
     description: str             # free text; may be ""
-    # extra fields as needed
+    idempotency_key: str
 
 @dataclass
 class OrcaHelloDetection:
@@ -39,7 +50,6 @@ class OrcaHelloDetection:
     feed: OrcasiteFeed
     timestamp: datetime
     status: str                  # e.g., "confirmed", "rejected", etc.
-    # extra fields as needed
 
 def get_label(
     orcasite_det: OrcasiteDetection,
@@ -83,36 +93,6 @@ def get_label(
         return "other"
     # Unknown
     return None
-
-def index_orcahello_by_time(
-    detections: List[OrcaHelloDetection],
-    max_delta: timedelta = timedelta(minutes=2),
-):
-    """
-    Returns a function that maps (feed, time) -> best matching OrcaHelloDetection or None.
-    Only matches detections whose timestamp is <= t.
-    """
-    def find_match(feed: OrcasiteFeed, t: datetime) -> Optional[OrcaHelloDetection]:
-        best = None
-        best_dt = max_delta
-
-        for d in detections:
-            if d.feed.id != feed.id:
-                continue
-
-            # Only consider detections at or BEFORE t
-            if d.timestamp > t:
-                continue
-
-            dt = t - d.timestamp  # guaranteed non-negative
-
-            if dt <= best_dt:
-                best_dt = dt
-                best = d
-
-        return best
-
-    return find_match
 
 FIVE_MIN = timedelta(minutes=5)
 PACIFIC_TZ = timezone('US/Pacific')
@@ -253,21 +233,14 @@ def get_orcasite_detections(feed: OrcasiteFeed) -> List[OrcasiteDetection]:
 
     # Fields we want (already URL-encoded in your example)
     fields = (
-        "id,source_ip,playlist_timestamp,player_offset,"
-        "listener_count,timestamp,description,visible,"
-        "source,category,candidate_id,feed_id"
+        "id,playlist_timestamp,player_offset,timestamp,description,"
+        "source,category,feed_id,idempotency_key"
     )
 
     # Build query parameters
     params = {
         "fields[detection]": fields,
         "filter[feed_id]": feed.id,
-        # You *said* "&source]=whale" but that looks like a typo.
-        # If you want only whale detections, use:
-        # "filter[category]": "whale"
-        #
-        # But since your sample includes non-whale detections,
-        # I will NOT filter category here unless you tell me to.
     }
 
     try:
@@ -293,6 +266,7 @@ def get_orcasite_detections(feed: OrcasiteFeed) -> List[OrcasiteDetection]:
                 source=attrs.get("source"),
                 category=attrs.get("category"),
                 description=attrs.get("description") or "",
+                idempotency_key=attrs.get("idempotency_key") or "",
             )
 
             # Only include detections for THIS feed
@@ -314,27 +288,9 @@ def get_node_name_for_feed(feed: OrcasiteFeed) -> str:
     """
     return feed.node_name
 
-def get_orcahello_name_for_feed(feed: OrcasiteFeed) -> str:
-    """
-    Retrieve the OrcaHello name associated with an OrcasiteFeed.
-    
-    Returns:
-        name (str): The feed's name in OrcaHello format.
-    """
-    name = feed.name
-    if " at " in name:
-        name = name.split(" at ", 1)[1]
-    if name == "MaST Center Aquarium":
-        return "Mast Center"
-    return name
-
 def get_orcahello_detections(feed: OrcasiteFeed) -> List[OrcaHelloDetection]:
     """
     Retrieve OrcaHello detections and return those whose audio URI contains the given feed's node_name.
-    
-    Fetches recent detections from the OrcaHello API, filters results to entries whose `audioUri` includes the feed's node_name, maps review fields to a `status` of "confirmed", "rejected", or "unreviewed", and parses the detection timestamp when possible.
-    
-    Implements pagination to fetch all available detections by incrementing the Page parameter until an empty page is returned.
     
     Parameters:
         feed (OrcasiteFeed): Feed whose node_name is used to filter OrcaHello detection audio URIs.
@@ -342,53 +298,29 @@ def get_orcahello_detections(feed: OrcasiteFeed) -> List[OrcaHelloDetection]:
     Returns:
         List[OrcaHelloDetection]: A list of detections associated with the feed. Each detection's `timestamp` is a `datetime` or `None` if parsing failed, and `status` is one of `"confirmed"`, `"rejected"`, or `"unreviewed"`.
     """
+    node_name = get_node_name_for_feed(feed)      # e.g., "rpi_sunset_bay"
 
-    node_name = get_node_name_for_feed(feed)  # e.g., "rpi_sunset_bay"
+    # Cosmos DB SQL query
+    query = """
+        SELECT * FROM c
+        WHERE CONTAINS(c.audioUri, @node_name)
+        ORDER BY c.timestamp DESC
+    """
 
-    orcahello_name = get_orcahello_name_for_feed(feed)  # e.g., "Sunset Bay"
+    params = [
+        {"name": "@node_name", "value": node_name}
+    ]
 
-    url = "https://aifororcasdetections.azurewebsites.net/api/detections"
-    
-    # Collect all detections from all pages before filtering
-    all_items = []
-    page = 1
-    
-    while True:
-        params = {
-            "Page": page,
-            "SortBy": "timestamp",
-            "SortOrder": "desc",
-            "Timeframe": "1m",
-            "Location": orcahello_name,
-            "RecordsPerPage": 50,   # API max is 50
-        }
-        
-        try:
-            r = requests.get(url, params=params, timeout=10)
-            r.raise_for_status()
-            data = r.json()
-            
-            # If the page is empty, we've fetched all available detections
-            if not data:
-                break
-            
-            all_items.extend(data)
-            page += 1
-            
-        except Exception as e:
-            print(f"Error fetching OrcaHello detections page {page} for feed {feed.id}: {e}")
-            break
-    
-    # Now filter and process all collected items
+    # Cosmos DB returns an iterator that handles pagination internally
+    items = container.query_items(
+        query=query,
+        parameters=params,
+        enable_cross_partition_query=True
+    )
+
     results = []
-    
-    for item in all_items:
-        audio_uri = item.get("audioUri", "")
 
-        # Filter by node_name inside the audio filename
-        if node_name not in audio_uri:
-            continue
-
+    for item in items:
         found = item.get("found", "").lower()
         reviewed = item.get("reviewed", False)
 
@@ -449,8 +381,30 @@ def generate_uri(node: str, dt: datetime) -> str:
     time_encoded = quote(time_str, safe='')
     return f"https://live.orcasound.net/bouts/new/{node}?time={time_encoded}"
 
-def process_all_feeds(output_root: Path):
+def process_all_feeds(output_root: Path, feed_filter: Optional[str] = None):
+    """
+    Generate a consolidated CSV file of selected Orcasite detections, optionally filtered by feed
+    and matched with corresponding OrcaHello detections.
+
+    This function retrieves all available Orcasite feeds, optionally filters them by
+    a specific node name, fetches detections from both Orcasite and OrcaHello for each
+    feed, matches detections in time, classifies them, and writes the resulting
+    detections to a CSV file named ``detections.csv`` under the given ``output_root``.
+
+    Parameters:
+        output_root (Path): Directory in which the output CSV file ``detections.csv`` will be
+            created. The directory (and any missing parents) will be created if it does not exist.
+        feed_filter (str | None, optional): If provided, only feeds whose ``node_name`` matches
+            this value are processed. If no feed matches the given name, the function logs a
+            message and returns without creating a CSV file. Defaults to ``None`` (process all feeds).
+    """
     feeds = get_orcasite_feeds()
+
+    if feed_filter:
+        feeds = [f for f in feeds if f.node_name == feed_filter]
+        if not feeds:
+            print(f"No feed found with node_name '{feed_filter}'")
+            return
     
     # Create CSV file
     csv_path = output_root / "detections.csv"
@@ -466,14 +420,10 @@ def process_all_feeds(output_root: Path):
             orcasite_dets = get_orcasite_detections(feed)
             orcahello_dets = get_orcahello_detections(feed)
 
-            # Create time-based matcher for this feed's OrcaHello detections
-            find_oh_match = index_orcahello_by_time(orcahello_dets)
-
             for det in orcasite_dets:
-                # Only care about source=machine or human as per your logic
                 orcahello_match = None
                 if det.source == "machine":
-                    orcahello_match = find_oh_match(det.feed, det.timestamp)
+                    orcahello_match = next((d for d in orcahello_dets if d.id == det.idempotency_key), None)
                     if orcahello_match is None:
                         print(f"Warning: couldn't find matching OrcaHello detection for {det.feed.slug} {det.timestamp}")
                         continue
@@ -495,5 +445,15 @@ def process_all_feeds(output_root: Path):
                 csv_writer.writerow([category, node_name, timestamp_pst, uri])
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        description="Generate CSV of detections from Orcasite and OrcaHello data"
+    )
+    parser.add_argument(
+        "--feed",
+        type=str,
+        help="Process only this feed (by node_name, e.g., rpi_sunset_bay)"
+    )
+    args = parser.parse_args()
+
     output_root = Path("output_segments")
-    process_all_feeds(output_root)
+    process_all_feeds(output_root, feed_filter=args.feed)
