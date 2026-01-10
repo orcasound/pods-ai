@@ -342,6 +342,7 @@ def get_orcahello_detections(
     
     Parameters:
         feed (OrcasiteFeed): Feed whose node_name is used to filter OrcaHello detection audio URIs.
+        use_localhost (bool): If True, use local OrcaHello server (https://localhost:44386) instead of cloud API. Defaults to False.
     
     Returns:
         List[OrcaHelloDetection]: A list of detections associated with the feed. Each detection's `timestamp` is a `datetime` or `None` if parsing failed, and `status` is one of `"confirmed"`, `"rejected"`, or `"unreviewed"`.
@@ -368,6 +369,8 @@ def get_orcahello_detections(
             "SortBy": "timestamp",
             "SortOrder": "desc",
             "Timeframe": "all",
+            # We don't currently use the Location parameter, just the hydrophoneId
+            # parameter.
             #"Location": orcahello_name,
             "HydrophoneId": node_name,
             "RecordsPerPage": 50,   # API max is 50
@@ -536,7 +539,9 @@ def process_all_feeds(output_root: Path, feed_filter: Optional[str] = None, use_
                 csv_writer.writerow([category, node_name, timestamp_pst, uri])
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+        description="Generate CSV of detections from Orcasite and OrcaHello data"
+    )
     parser.add_argument(
         "--feed",
         type=str,
