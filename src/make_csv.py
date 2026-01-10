@@ -466,6 +466,25 @@ def generate_uri(node: str, dt: datetime) -> str:
     return f"https://live.orcasound.net/bouts/new/{node}?time={time_encoded}"
 
 def process_all_feeds(output_root: Path, feed_filter: str | None = None, use_localhost: bool = False):
+    """
+    Generate a consolidated CSV file of selected Orcasite detections, optionally filtered by feed
+    and matched with corresponding OrcaHello detections.
+
+    This function retrieves all available Orcasite feeds, optionally filters them by
+    a specific node name, fetches detections from both Orcasite and OrcaHello for each
+    feed, matches detections in time, classifies them, and writes the resulting
+    detections to a CSV file named ``detections.csv`` under the given ``output_root``.
+
+    Parameters:
+        output_root (Path): Directory in which the output CSV file ``detections.csv`` will be
+            created. The directory (and any missing parents) will be created if it does not exist.
+        feed_filter (str | None, optional): If provided, only feeds whose ``node_name`` matches
+            this value are processed. If no feed matches the given name, the function logs a
+            message and returns without creating a CSV file. Defaults to ``None`` (process all feeds).
+        use_localhost (bool, optional): If ``True``, instructs OrcaHello-related queries to use a
+            localhost endpoint instead of the default remote service. This is useful when running
+            against a locally hosted OrcaHello instance. Defaults to ``False``.
+    """
     feeds = get_orcasite_feeds()
 
     if feed_filter:

@@ -12,7 +12,9 @@
     <Name>pods-ai</Name>
     <RootNamespace>pods-ai</RootNamespace>
     <LaunchProvider>Standard Python launcher</LaunchProvider>
-    <CommandLineArguments>--localhost</CommandLineArguments>
+    <!-- Command line arguments are intentionally left blank.
+         Developers may customize this locally (e.g., to pass --localhost). -->
+    <CommandLineArguments></CommandLineArguments>
     <EnableNativeCodeDebugging>False</EnableNativeCodeDebugging>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
