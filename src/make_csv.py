@@ -8,6 +8,7 @@ import csv
 from urllib.parse import quote
 
 from pytz import timezone
+import argparse
 import requests
 
 @dataclass
@@ -328,7 +329,10 @@ def get_orcahello_name_for_feed(feed: OrcasiteFeed) -> str:
         return "Mast Center"
     return name
 
-def get_orcahello_detections(feed: OrcasiteFeed) -> List[OrcaHelloDetection]:
+def get_orcahello_detections(
+    feed: OrcasiteFeed,
+    use_localhost: bool = False
+) -> List[OrcaHelloDetection]:
     """
     Retrieve OrcaHello detections and return those whose audio URI contains the given feed's node_name.
     
@@ -347,7 +351,12 @@ def get_orcahello_detections(feed: OrcasiteFeed) -> List[OrcaHelloDetection]:
 
     orcahello_name = get_orcahello_name_for_feed(feed)  # e.g., "Sunset Bay"
 
-    url = "https://aifororcasdetections.azurewebsites.net/api/detections"
+    if use_localhost:
+        url = "https://localhost:44386/api/detections"
+        verify = False
+    else:
+        url = "https://aifororcasdetections.azurewebsites.net/api/detections"
+        verify = True
     
     # Collect all detections from all pages before filtering
     all_items = []
@@ -359,12 +368,19 @@ def get_orcahello_detections(feed: OrcasiteFeed) -> List[OrcaHelloDetection]:
             "SortBy": "timestamp",
             "SortOrder": "desc",
             "Timeframe": "all",
-            "Location": orcahello_name,
+            #"Location": orcahello_name,
+            "HydrophoneId": node_name,
             "RecordsPerPage": 50,   # API max is 50
         }
         
         try:
-            r = requests.get(url, params=params, timeout=10)
+            print(f"Fetching page {page} for feed {feed.id} ({node_name})...")
+            r = requests.get(url, params=params, timeout=10, verify=verify)
+
+            # 204 means "no more pages"
+            if r.status_code == 204:
+               break
+
             r.raise_for_status()
             data = r.json()
             
@@ -449,8 +465,14 @@ def generate_uri(node: str, dt: datetime) -> str:
     time_encoded = quote(time_str, safe='')
     return f"https://live.orcasound.net/bouts/new/{node}?time={time_encoded}"
 
-def process_all_feeds(output_root: Path):
+def process_all_feeds(output_root: Path, feed_filter: str | None = None, use_localhost: bool = False):
     feeds = get_orcasite_feeds()
+
+    if feed_filter:
+        feeds = [f for f in feeds if f.node_name == feed_filter]
+        if not feeds:
+            print(f"No feed found with node_name '{feed_filter}'")
+            return
     
     # Create CSV file
     csv_path = output_root / "detections.csv"
@@ -464,7 +486,7 @@ def process_all_feeds(output_root: Path):
         for feed in feeds:
             print(f"Processing feed {feed.id} ({feed.node_name})")
             orcasite_dets = get_orcasite_detections(feed)
-            orcahello_dets = get_orcahello_detections(feed)
+            orcahello_dets = get_orcahello_detections(feed, use_localhost)
 
             # Create time-based matcher for this feed's OrcaHello detections
             find_oh_match = index_orcahello_by_time(orcahello_dets)
@@ -495,5 +517,18 @@ def process_all_feeds(output_root: Path):
                 csv_writer.writerow([category, node_name, timestamp_pst, uri])
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--feed",
+        type=str,
+        help="Process only this feed (by node_name, e.g., rpi_sunset_bay)"
+    )
+    parser.add_argument(
+        "--localhost",
+        action="store_true",
+        help="Use the local OrcaHello server instead of the cloud API"
+    )
+    args = parser.parse_args()
+
     output_root = Path("output_segments")
-    process_all_feeds(output_root)
+    process_all_feeds(output_root, feed_filter=args.feed, use_localhost=args.localhost)
