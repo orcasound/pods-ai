@@ -23,7 +23,6 @@ jobs:
     runs-on: ubuntu-latest
     env:
       COSMOS_KEY: ${{ secrets.COSMOS_KEY }}
-      COSMOS_URL: ${{ secrets.COSMOS_URL }}
 
     steps:
       - name: Harden Runner
