@@ -68,9 +68,6 @@ def get_label(
     desc = (orcasite_det.description or "").lower()
     cat = (orcasite_det.category or "").lower()
 
-    if orcahello_det and orcahello_det.status.lower() == "unreviewed":
-        return None
-
     # 1. Resident
     if cat == "whale":
         if ("resident" in desc) or ("pod" in desc):
@@ -88,9 +85,13 @@ def get_label(
         if "humpback" in desc:
             return "humpback"
 
+    if orcahello_det and orcahello_det.status.lower() == "unreviewed":
+        return None
+
     # 4. Other
     if orcasite_det.source == "machine" and not ("click" in desc or "call" in desc or "whistle" in desc):
         return "other"
+
     # Unknown
     return None
 
@@ -238,6 +239,8 @@ def get_orcasite_detections(feed: OrcasiteFeed) -> List[OrcasiteDetection]:
 
     # Build query parameters
     params = {
+        "page[limit]": 500,
+        "page[offset]": 0,
         "fields[detection]": fields,
         "filter[feed_id]": feed.id,
     }
