@@ -60,7 +60,7 @@ def get_label(
     
     Parameters:
         orcasite_det (OrcasiteDetection): The detection to label.
-        orcahello_det (Optional[OrcaHelloDetection]): An optional time-matched OrcaHello detection used to upgrade some whale labels.
+        orcahello_det (Optional[OrcaHelloDetection]): An optional id-matched OrcaHello detection used to upgrade some whale labels.
     
     Returns:
         str | None: `'resident'`, `'transient'`, `'humpback'`, or `'other'` when a label can be determined; `None` when the label is unknown.
@@ -94,7 +94,7 @@ def get_label(
     # Unknown
     return None
 
-FIVE_MIN = timedelta(minutes=5)
+NEAR_MIN = timedelta(minutes=10)
 PACIFIC_TZ = timezone('US/Pacific')
 UTC_TZ = timezone('UTC')
 
@@ -103,7 +103,7 @@ def is_isolated_human_whale(
     all_detections: List[OrcasiteDetection],
 ) -> bool:
     """
-    True if there is NO machine whale detection at same feed within ±5 minutes.
+    True if there is NO machine whale detection at same feed within NEAR_MIN minutes.
     """
     for d in all_detections:
         if d.feed.id != det.feed.id:
@@ -112,14 +112,13 @@ def is_isolated_human_whale(
             continue
         if (d.category or "").lower() != "whale":
             continue
-        if abs(d.timestamp - det.timestamp) <= FIVE_MIN:
+        if abs(d.timestamp - det.timestamp) <= NEAR_MIN:
             return False
     return True
 
-
 @dataclass
 class Classification:
-    kind: str       # 'tp_human_only', 'tp_machine_only', 'fp_machine_only', 'skip'
+    kind: str       # 'tp_human_only', 'tp_machine_only', 'fp_machine_only', 'tp_both', 'skip'
     include: bool
 
 def classify_detection(
@@ -140,6 +139,7 @@ def classify_detection(
             - 'tp_human_only' for human-sourced whale detections with no nearby machine whale detections,
             - 'tp_machine_only' for machine-sourced whale detections,
             - 'fp_machine_only' for machine-sourced non-whale detections labeled 'other',
+            - 'tp_both' for human-sourced whale detections with a nearby machine whale detection,
             - 'skip' for detections that should be excluded.
         The `include` field indicates whether the detection should be included in downstream processing (`true` if included, `false` otherwise).
     """
@@ -160,8 +160,7 @@ def classify_detection(
             return Classification(kind="tp_human_only", include=True)
         else:
             # There is a nearby machine whale detection → not human-only
-            # You can choose to skip or treat differently.
-            return Classification(kind="skip", include=False)
+            return Classification(kind="tp_both", include=True)
 
     # True positive, machine-only (maybe include)
     if cat == "whale" and src == "machine":
@@ -413,7 +412,7 @@ def process_all_feeds(output_root: Path, feed_filter: Optional[str] = None):
     with open(csv_path, 'w', newline='') as csvfile:
         csv_writer = csv.writer(csvfile)
         # Write header
-        csv_writer.writerow(['Category', 'NodeName', 'Timestamp', 'URI'])
+        csv_writer.writerow(['Category', 'NodeName', 'Timestamp', 'URI', 'Notes'])
 
         for feed in feeds:
             print(f"Processing feed {feed.id} ({feed.node_name})")
@@ -421,6 +420,9 @@ def process_all_feeds(output_root: Path, feed_filter: Optional[str] = None):
             orcahello_dets = get_orcahello_detections(feed)
 
             for det in orcasite_dets:
+                if det.id == "det_031vMIoi0Z8TAfmZxgj89l":
+                    print("det")
+
                 orcahello_match = None
                 if det.source == "machine":
                     orcahello_match = next((d for d in orcahello_dets if d.id == det.idempotency_key), None)
@@ -442,7 +444,7 @@ def process_all_feeds(output_root: Path, feed_filter: Optional[str] = None):
                 node_name = det.feed.node_name  # e.g., "rpi_sunset_bay"
                 timestamp_pst = format_timestamp_pst(det.timestamp)
                 uri = generate_uri(det.feed.slug, det.timestamp)
-                csv_writer.writerow([category, node_name, timestamp_pst, uri])
+                csv_writer.writerow([category, node_name, timestamp_pst, uri, classification.kind])
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
