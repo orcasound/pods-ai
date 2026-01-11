@@ -285,9 +285,7 @@ def get_orcasite_detections(feed: OrcasiteFeed) -> List[OrcasiteDetection]:
                     idempotency_key=attrs.get("idempotency_key") or "",
                 )
 
-                # Only include detections for THIS feed
-                if det.feed.id == feed.id:
-                    dets.append(det)
+                dets.append(det)
 
             # Increment offset for next page
             offset += limit
