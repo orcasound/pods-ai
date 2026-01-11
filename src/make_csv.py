@@ -420,7 +420,6 @@ def process_all_feeds(output_root: Path, feed_filter: Optional[str] = None):
             orcahello_dets = get_orcahello_detections(feed)
 
             for det in orcasite_dets:
-
                 orcahello_match = None
                 if det.source == "machine":
                     orcahello_match = next((d for d in orcahello_dets if d.id == det.idempotency_key), None)
