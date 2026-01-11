@@ -98,6 +98,7 @@ def get_label(
 NEAR_MIN = timedelta(minutes=10)
 PACIFIC_TZ = timezone('US/Pacific')
 UTC_TZ = timezone('UTC')
+MAX_DETECTION_PAGES = 1000  # Safety limit to prevent infinite loops (500k detections max)
 
 def is_isolated_human_whale(
     det: OrcasiteDetection,
@@ -247,12 +248,11 @@ def get_orcasite_detections(feed: OrcasiteFeed) -> List[OrcasiteDetection]:
     }
 
     dets = []
-    max_pages = 1000  # Safety limit to prevent infinite loops
     page_count = 0
     
     try:
         # Loop through all pages until no more data is returned
-        while page_count < max_pages:
+        while page_count < MAX_DETECTION_PAGES:
             params["page[offset]"] = offset
             
             r = requests.get(base_url, params=params, timeout=10)
@@ -285,7 +285,9 @@ def get_orcasite_detections(feed: OrcasiteFeed) -> List[OrcasiteDetection]:
                     idempotency_key=attrs.get("idempotency_key") or "",
                 )
 
-                dets.append(det)
+                # Only include detections for THIS feed
+                if det.feed.id == feed.id:
+                    dets.append(det)
 
             # Increment offset for next page
             offset += limit
