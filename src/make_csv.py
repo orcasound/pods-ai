@@ -238,42 +238,58 @@ def get_orcasite_detections(feed: OrcasiteFeed) -> List[OrcasiteDetection]:
     )
 
     # Build query parameters
+    limit = 500
+    offset = 0
     params = {
-        "page[limit]": 500,
-        "page[offset]": 0,
+        "page[limit]": limit,
+        "page[offset]": offset,
         "fields[detection]": fields,
         "filter[feed_id]": feed.id,
     }
 
+    dets = []
+    
     try:
-        r = requests.get(base_url, params=params, timeout=10)
-        r.raise_for_status()
-        data = r.json()
+        # Loop through all pages until no more data is returned
+        while True:
+            params["page[offset]"] = offset
+            
+            r = requests.get(base_url, params=params, timeout=10)
+            r.raise_for_status()
+            data = r.json()
 
-        dets = []
-        for item in data.get("data", []):
-            attrs = item.get("attributes", {})
+            items = data.get("data", [])
+            
+            # If no data is returned, we've fetched all pages
+            if not items:
+                break
 
-            # Parse timestamp safely
-            ts_raw = attrs.get("timestamp")
-            try:
-                ts = datetime.fromisoformat(ts_raw.replace("Z", "+00:00"))
-            except Exception:
-                ts = None
+            for item in items:
+                attrs = item.get("attributes", {})
 
-            det = OrcasiteDetection(
-                id=item.get("id"),
-                feed=feed,
-                timestamp=ts,
-                source=attrs.get("source"),
-                category=attrs.get("category"),
-                description=attrs.get("description") or "",
-                idempotency_key=attrs.get("idempotency_key") or "",
-            )
+                # Parse timestamp safely
+                ts_raw = attrs.get("timestamp")
+                try:
+                    ts = datetime.fromisoformat(ts_raw.replace("Z", "+00:00"))
+                except Exception:
+                    ts = None
 
-            # Only include detections for THIS feed
-            if det.feed.id == feed.id:
-                dets.append(det)
+                det = OrcasiteDetection(
+                    id=item.get("id"),
+                    feed=feed,
+                    timestamp=ts,
+                    source=attrs.get("source"),
+                    category=attrs.get("category"),
+                    description=attrs.get("description") or "",
+                    idempotency_key=attrs.get("idempotency_key") or "",
+                )
+
+                # Only include detections for THIS feed
+                if det.feed.id == feed.id:
+                    dets.append(det)
+
+            # Increment offset for next page
+            offset += limit
 
         return dets
 
