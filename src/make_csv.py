@@ -242,16 +242,17 @@ def get_orcasite_detections(feed: OrcasiteFeed) -> List[OrcasiteDetection]:
     offset = 0
     params = {
         "page[limit]": limit,
-        "page[offset]": offset,
         "fields[detection]": fields,
         "filter[feed_id]": feed.id,
     }
 
     dets = []
+    max_pages = 1000  # Safety limit to prevent infinite loops
+    page_count = 0
     
     try:
         # Loop through all pages until no more data is returned
-        while True:
+        while page_count < max_pages:
             params["page[offset]"] = offset
             
             r = requests.get(base_url, params=params, timeout=10)
@@ -288,6 +289,7 @@ def get_orcasite_detections(feed: OrcasiteFeed) -> List[OrcasiteDetection]:
 
             # Increment offset for next page
             offset += limit
+            page_count += 1
 
         return dets
 
