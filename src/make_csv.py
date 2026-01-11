@@ -255,6 +255,7 @@ def get_orcasite_detections(feed: OrcasiteFeed) -> List[OrcasiteDetection]:
         while page_count < MAX_DETECTION_PAGES:
             params["page[offset]"] = offset
             
+            print(f"Fetching Orcasite page {page_count}...")
             r = requests.get(base_url, params=params, timeout=10)
             r.raise_for_status()
             data = r.json()
@@ -263,6 +264,7 @@ def get_orcasite_detections(feed: OrcasiteFeed) -> List[OrcasiteDetection]:
             
             # If no data is returned, we've fetched all pages
             if not items:
+                print(f"Finished after page {page_count}")
                 break
 
             for item in items:
@@ -439,6 +441,7 @@ def process_all_feeds(output_root: Path, feed_filter: Optional[str] = None):
             orcahello_dets = get_orcahello_detections(feed)
 
             for det in orcasite_dets:
+                pst = format_timestamp_pst(det.timestamp)
                 orcahello_match = None
                 if det.source == "machine":
                     orcahello_match = next((d for d in orcahello_dets if d.id == det.idempotency_key), None)
