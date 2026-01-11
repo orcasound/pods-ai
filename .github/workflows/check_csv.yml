@@ -56,5 +56,6 @@ jobs:
           python src/make_csv.py
 
       - name: Verify there are no changes
+        if: steps.skip_check.outputs.should_skip != 'true'
         run: |
           git diff --exit-code

@@ -68,9 +68,6 @@ def get_label(
     desc = (orcasite_det.description or "").lower()
     cat = (orcasite_det.category or "").lower()
 
-    if orcahello_det and orcahello_det.status.lower() == "unreviewed":
-        return None
-
     # 1. Resident
     if cat == "whale":
         if ("resident" in desc) or ("pod" in desc):
@@ -88,15 +85,20 @@ def get_label(
         if "humpback" in desc:
             return "humpback"
 
+    if orcahello_det and orcahello_det.status.lower() == "unreviewed":
+        return None
+
     # 4. Other
     if orcasite_det.source == "machine" and not ("click" in desc or "call" in desc or "whistle" in desc):
         return "other"
+
     # Unknown
     return None
 
 NEAR_MIN = timedelta(minutes=10)
 PACIFIC_TZ = timezone('US/Pacific')
 UTC_TZ = timezone('UTC')
+MAX_DETECTION_PAGES = 1000  # Safety limit to prevent infinite loops (500k detections max)
 
 def is_isolated_human_whale(
     det: OrcasiteDetection,
@@ -237,40 +239,59 @@ def get_orcasite_detections(feed: OrcasiteFeed) -> List[OrcasiteDetection]:
     )
 
     # Build query parameters
+    limit = 500
+    offset = 0
     params = {
+        "page[limit]": limit,
         "fields[detection]": fields,
         "filter[feed_id]": feed.id,
     }
 
+    dets = []
+    page_count = 0
+    
     try:
-        r = requests.get(base_url, params=params, timeout=10)
-        r.raise_for_status()
-        data = r.json()
+        # Loop through all pages until no more data is returned
+        while page_count < MAX_DETECTION_PAGES:
+            params["page[offset]"] = offset
+            
+            print(f"Fetching Orcasite page {page_count}...")
+            r = requests.get(base_url, params=params, timeout=10)
+            r.raise_for_status()
+            data = r.json()
 
-        dets = []
-        for item in data.get("data", []):
-            attrs = item.get("attributes", {})
+            items = data.get("data", [])
+            
+            # If no data is returned, we've fetched all pages
+            if not items:
+                print(f"Finished after page {page_count}")
+                break
 
-            # Parse timestamp safely
-            ts_raw = attrs.get("timestamp")
-            try:
-                ts = datetime.fromisoformat(ts_raw.replace("Z", "+00:00"))
-            except Exception:
-                ts = None
+            for item in items:
+                attrs = item.get("attributes", {})
 
-            det = OrcasiteDetection(
-                id=item.get("id"),
-                feed=feed,
-                timestamp=ts,
-                source=attrs.get("source"),
-                category=attrs.get("category"),
-                description=attrs.get("description") or "",
-                idempotency_key=attrs.get("idempotency_key") or "",
-            )
+                # Parse timestamp safely
+                ts_raw = attrs.get("timestamp")
+                try:
+                    ts = datetime.fromisoformat(ts_raw.replace("Z", "+00:00"))
+                except Exception:
+                    ts = None
 
-            # Only include detections for THIS feed
-            if det.feed.id == feed.id:
+                det = OrcasiteDetection(
+                    id=item.get("id"),
+                    feed=feed,
+                    timestamp=ts,
+                    source=attrs.get("source"),
+                    category=attrs.get("category"),
+                    description=attrs.get("description") or "",
+                    idempotency_key=attrs.get("idempotency_key") or "",
+                )
+
                 dets.append(det)
+
+            # Increment offset for next page
+            offset += limit
+            page_count += 1
 
         return dets
 
@@ -420,7 +441,7 @@ def process_all_feeds(output_root: Path, feed_filter: Optional[str] = None):
             orcahello_dets = get_orcahello_detections(feed)
 
             for det in orcasite_dets:
-
+                pst = format_timestamp_pst(det.timestamp)
                 orcahello_match = None
                 if det.source == "machine":
                     orcahello_match = next((d for d in orcahello_dets if d.id == det.idempotency_key), None)
