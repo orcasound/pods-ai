@@ -41,7 +41,8 @@ def parse_csv(csv_path: Path) -> List[CSVRow]:
                     category=row[0],
                     node_name=row[1],
                     timestamp_pst=row[2],
-                    uri=row[3]
+                    uri=row[3],
+                    notes=row[4]
                 ))
     return rows
 
