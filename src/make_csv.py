@@ -458,8 +458,8 @@ def process_all_feeds(output_root: Path, feed_filter: Optional[str] = None):
             uri = generate_uri(det.feed.slug, det.timestamp)
             all_rows.append((det.timestamp, category, node_name, timestamp_pst, uri, classification.kind))
     
-    # Sort all rows by timestamp (first element of tuple)
-    all_rows.sort(key=lambda row: row[0], reverse=True)
+    # Sort all rows by timestamp (first element of tuple) - oldest first, newest last
+    all_rows.sort(key=lambda row: row[0])
     
     # Create CSV file and write sorted rows
     csv_path = output_root / "detections.csv"
