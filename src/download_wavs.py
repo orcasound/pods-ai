@@ -38,7 +38,7 @@ def parse_csv(csv_path: Path) -> List[CSVRow]:
         # Skip header
         next(csv_reader)
         for row in csv_reader:
-            if len(row) >= 4:
+            if len(row) >= 6:
                 rows.append(CSVRow(
                     category=row[0],
                     node_name=row[1],
