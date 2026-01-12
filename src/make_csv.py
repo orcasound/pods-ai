@@ -456,7 +456,7 @@ def process_all_feeds(output_root: Path, feed_filter: Optional[str] = None):
             node_name = det.feed.node_name  # e.g., "rpi_sunset_bay"
             timestamp_pst = format_timestamp_pst(det.timestamp)
             uri = generate_uri(det.feed.slug, det.timestamp)
-            all_rows.append((det.timestamp, category, node_name, timestamp_pst, uri, classification.kind))
+            all_rows.append((det.timestamp, category, node_name, timestamp_pst, uri, det.description, classification.kind))
     
     # Sort all rows by timestamp (first element of tuple) - oldest first, newest last
     all_rows.sort(key=lambda row: row[0])
@@ -465,14 +465,14 @@ def process_all_feeds(output_root: Path, feed_filter: Optional[str] = None):
     csv_path = output_root / "detections.csv"
     output_root.mkdir(parents=True, exist_ok=True)
     
-    with open(csv_path, 'w', newline='') as csvfile:
+    with open(csv_path, 'w', newline='', encoding='utf-8') as csvfile:
         csv_writer = csv.writer(csvfile)
         # Write header
-        csv_writer.writerow(['Category', 'NodeName', 'Timestamp', 'URI', 'Notes'])
+        csv_writer.writerow(['Category', 'NodeName', 'Timestamp', 'URI', 'Description', 'Notes'])
         
         # Write sorted rows (exclude the timestamp used for sorting)
         for row in all_rows:
-            csv_writer.writerow([row[1], row[2], row[3], row[4], row[5]])
+            csv_writer.writerow([row[1], row[2], row[3], row[4], row[5], row[6]])
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
