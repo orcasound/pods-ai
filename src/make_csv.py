@@ -426,7 +426,42 @@ def process_all_feeds(output_root: Path, feed_filter: Optional[str] = None):
             print(f"No feed found with node_name '{feed_filter}'")
             return
     
-    # Create CSV file
+    # Collect all detections first before writing to CSV
+    all_rows = []
+    
+    for feed in feeds:
+        print(f"Processing feed {feed.id} ({feed.node_name})")
+        orcasite_dets = get_orcasite_detections(feed)
+        orcahello_dets = get_orcahello_detections(feed)
+
+        for det in orcasite_dets:
+            orcahello_match = None
+            if det.source == "machine":
+                orcahello_match = next((d for d in orcahello_dets if d.id == det.idempotency_key), None)
+                if orcahello_match is None:
+                    print(f"Warning: couldn't find matching OrcaHello detection for {det.feed.slug} {det.timestamp}")
+                    continue
+
+            label = get_label(det, orcahello_match)
+            if label is None:
+                # label unknown ⇒ skip
+                continue
+
+            classification = classify_detection(det, label, orcasite_dets)
+            if not classification.include:
+                continue
+            
+            # Collect row data with timestamp for sorting
+            category = label
+            node_name = det.feed.node_name  # e.g., "rpi_sunset_bay"
+            timestamp_pst = format_timestamp_pst(det.timestamp)
+            uri = generate_uri(det.feed.slug, det.timestamp)
+            all_rows.append((det.timestamp, category, node_name, timestamp_pst, uri, classification.kind))
+    
+    # Sort all rows by timestamp (first element of tuple)
+    all_rows.sort(key=lambda row: row[0], reverse=True)
+    
+    # Create CSV file and write sorted rows
     csv_path = output_root / "detections.csv"
     output_root.mkdir(parents=True, exist_ok=True)
     
@@ -434,35 +469,10 @@ def process_all_feeds(output_root: Path, feed_filter: Optional[str] = None):
         csv_writer = csv.writer(csvfile)
         # Write header
         csv_writer.writerow(['Category', 'NodeName', 'Timestamp', 'URI', 'Notes'])
-
-        for feed in feeds:
-            print(f"Processing feed {feed.id} ({feed.node_name})")
-            orcasite_dets = get_orcasite_detections(feed)
-            orcahello_dets = get_orcahello_detections(feed)
-
-            for det in orcasite_dets:
-                orcahello_match = None
-                if det.source == "machine":
-                    orcahello_match = next((d for d in orcahello_dets if d.id == det.idempotency_key), None)
-                    if orcahello_match is None:
-                        print(f"Warning: couldn't find matching OrcaHello detection for {det.feed.slug} {det.timestamp}")
-                        continue
-
-                label = get_label(det, orcahello_match)
-                if label is None:
-                    # label unknown ⇒ skip
-                    continue
-
-                classification = classify_detection(det, label, orcasite_dets)
-                if not classification.include:
-                    continue
-                
-                # Write to CSV
-                category = label
-                node_name = det.feed.node_name  # e.g., "rpi_sunset_bay"
-                timestamp_pst = format_timestamp_pst(det.timestamp)
-                uri = generate_uri(det.feed.slug, det.timestamp)
-                csv_writer.writerow([category, node_name, timestamp_pst, uri, classification.kind])
+        
+        # Write sorted rows (exclude the timestamp used for sorting)
+        for row in all_rows:
+            csv_writer.writerow([row[1], row[2], row[3], row[4], row[5]])
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
