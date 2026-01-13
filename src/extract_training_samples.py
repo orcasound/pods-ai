@@ -197,7 +197,19 @@ def main():
         print(f"  {category}: {category_counts[category]} samples")
         for node in sorted(category_node_counts[category].keys()):
             print(f"    {node}: {category_node_counts[category][node]}")
+
+    # Print breakdown by type
+    type_counts = defaultdict(int)
+    type_node_counts = defaultdict(lambda: defaultdict(int))
+    for sample in samples:
+        type_counts[sample['Notes']] += 1
+        type_node_counts[sample['Notes']][sample['NodeName']] += 1
     
+    for type in sorted(type_counts.keys()):
+        print(f"  {type}: {type_counts[type]} samples")
+        for node in sorted(type_node_counts[type].keys()):
+            print(f"    {node}: {type_node_counts[type][node]}")
+
     print(f"\nWriting training samples to {output_path}...")
     write_training_samples(samples, output_path)
     print("Done!")
