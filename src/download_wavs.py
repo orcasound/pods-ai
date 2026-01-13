@@ -20,7 +20,7 @@ from pytz import timezone
 import requests
 
 PACIFIC_TZ = timezone('US/Pacific')
-N_SECONDS = 2  # Create 2-second wav files
+N_SECONDS = 2  # Create 2-second wav files.
 
 @dataclass
 class CSVRow:
@@ -85,7 +85,7 @@ def get_folders_between_timestamp(bucket_list: List[str], start_time: int, end_t
     while end_index >= 0 and bucket_list[end_index] > end_time:
         end_index -= 1
     
-    # Include the folder before start_time to ensure we have data
+    # Include the folder before start_time to ensure we have data.
     return bucket_list[max(0, start_index - 1) : end_index + 1]
 
 # ============================================================================
@@ -187,12 +187,15 @@ def parse_timestamp_pst(timestamp_str: str) -> datetime:
     Returns:
         datetime: Parsed datetime object with Pacific timezone.
     """
-    # Remove _PST suffix if present
+    # Remove _PST suffix if present.
     timestamp_str = timestamp_str.replace('_PST', '')
-    # Parse the datetime
+
+    # Parse the datetime.
     dt_naive = datetime.strptime(timestamp_str, "%Y_%m_%d_%H_%M_%S")
-    # Localize to Pacific timezone
+
+    # Localize to Pacific timezone.
     dt_aware = PACIFIC_TZ.localize(dt_naive)
+
     return dt_aware
 
 def download_audio_segment(
@@ -216,7 +219,7 @@ def download_audio_segment(
     label_dir = output_root / category
     label_dir.mkdir(parents=True, exist_ok=True)
     
-    # Check if the file already exists
+    # Check if the file already exists.
     duration_s = N_SECONDS
     end_timestamp_pst = timestamp_pst + timedelta(seconds=duration_s)
     end_timestamp_str = end_timestamp_pst.strftime("%Y_%m_%d_%H_%M_%S")
@@ -228,7 +231,7 @@ def download_audio_segment(
         print(f"Skipping (already exists): {expected_path}")
         return
     
-    # Setup S3 bucket and folder information
+    # Set up S3 bucket and folder information.
     hydrophone_stream_url = 'https://s3-us-west-2.amazonaws.com/audio-orcasound-net/' + node_name
     bucket_folder = hydrophone_stream_url.split("https://s3-us-west-2.amazonaws.com/")[1]
     tokens = bucket_folder.split("/")
@@ -236,13 +239,13 @@ def download_audio_segment(
     folder_name = tokens[1]
     prefix = folder_name + "/hls/"
     
-    # Convert timestamps to unix time
+    # Convert timestamps to unix time.
     start_time = timestamp_pst
     end_time = start_time + timedelta(seconds=duration_s)
     start_unix_time = int(start_time.timestamp())
     end_unix_time = int(end_time.timestamp())
     
-    # Get all folders from S3 and filter by timestamp
+    # Get all folders from S3 and filter by timestamp.
     try:
         all_hydrophone_folders = get_all_folders(s3_bucket, prefix=prefix)
         print(f"Found {len(all_hydrophone_folders)} folders in total for hydrophone")
@@ -254,7 +257,7 @@ def download_audio_segment(
             print(f"Warning: No folders found for timestamp {start_time}")
             return
         
-        # Use the first valid folder
+        # Use the first valid folder.
         current_folder = int(valid_folders[0])
         
     except Exception as e:
@@ -265,12 +268,12 @@ def download_audio_segment(
         print(f"End time (unix): {end_unix_time}")
         return
     
-    # Generate clip name
+    # Generate clip name.
     clipname, clip_start_time = get_clip_name_from_unix_time(
         folder_name.replace("_", "-"), start_unix_time
     )
     
-    # Read the m3u8 file for the current folder
+    # Read the m3u8 file for the current folder.
     stream_url = f"{hydrophone_stream_url}/hls/{current_folder}/live.m3u8"
     
     try:
@@ -285,14 +288,14 @@ def download_audio_segment(
         print(f"ERROR: No segments found in m3u8 file")
         return
     
-    # Calculate target duration (average segment duration)
+    # Calculate target duration (average segment duration).
     target_duration = sum(item.duration for item in stream_obj.segments) / num_total_segments
     
-    # Calculate number of segments needed for N_SECONDS
+    # Calculate number of segments needed for N_SECONDS.
     num_segments_needed = math.ceil(N_SECONDS / target_duration)
     
-    # Calculate start index based on time since folder start
-    # Note: there's typically a 2-second audio offset
+    # Calculate start index based on time since folder start.
+    # Note: there's typically a 2-second audio offset.
     audio_offset = 2
     time_since_folder_start = get_difference_between_times_in_seconds(start_unix_time, current_folder)
     time_since_folder_start -= audio_offset
@@ -304,7 +307,7 @@ def download_audio_segment(
         print(f"ERROR: Not enough segments available. Need {segment_end_index}, but only {num_total_segments} available.")
         return
     
-    # Download and process segments
+    # Download and process segments.
     try:
         with TemporaryDirectory() as tmp_path:
             os.makedirs(tmp_path, exist_ok=True)
@@ -325,14 +328,14 @@ def download_audio_segment(
                 print("ERROR: No segments were successfully downloaded")
                 return
             
-            # Concatenate all .ts files
+            # Concatenate all .ts files.
             hls_file = os.path.join(tmp_path, clipname + ".ts")
             with open(hls_file, "wb") as wfd:
                 for f in file_names:
                     with open(os.path.join(tmp_path, f), "rb") as fd:
                         shutil.copyfileobj(fd, wfd)
             
-            # Convert to wav using ffmpeg
+            # Convert to wav using ffmpeg.
             audio_file = clipname + ".wav"
             wav_file_path = os.path.join(label_dir, audio_file)
             stream = ffmpeg.input(hls_file)
