@@ -65,14 +65,17 @@ def sort_by_preference(detections: List[Dict]) -> List[Dict]:
     """
     Sort detections by preference:
     1. Preferred notes (tp_machine_only, fp_machine_only) first
-    2. Then by timestamp (oldest first)
+    2. Descriptions without "faint" or "distant" preferred
+    3. Then by timestamp (oldest first)
     """
     def sort_key(det):
         has_preferred_note = det['Notes'] in PREFERRED_NOTES
+        description = det.get('Description', '').lower()
+        has_unpreferred_description = 'faint' in description or 'distant' in description
         timestamp = det['Timestamp']
-        # Return tuple: (not preferred, timestamp)
-        # This puts preferred items first (False < True), then sorts by timestamp
-        return (not has_preferred_note, timestamp)
+        # Return tuple: (not preferred note, has unpreferred description, timestamp)
+        # This puts preferred notes first, then non-faint/distant descriptions, then by timestamp
+        return (not has_preferred_note, has_unpreferred_description, timestamp)
     
     return sorted(detections, key=sort_key)
 
