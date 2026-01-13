@@ -55,7 +55,17 @@ jobs:
         run: |
           python src/make_csv.py
 
-      - name: Verify there are no changes
+      - name: Verify there are changes in detections.csv
+        if: steps.skip_check.outputs.should_skip != 'true'
+        run: |
+          git diff --exit-code
+
+      - name: Extract training samples
+        if: steps.skip_check.outputs.should_skip != 'true'
+        run: |
+          python src/extract_training_samples.py
+
+      - name: Verify there are no changes in training_samples.csv
         if: steps.skip_check.outputs.should_skip != 'true'
         run: |
           git diff --exit-code
