@@ -31,6 +31,9 @@ class CSVRow:
     description: str
     notes: str
 
+# Simple in-memory cache for S3 folder listings keyed by "bucket::prefix"
+_FOLDERS_CACHE = {}
+
 # ============================================================================
 # S3 Utilities (simplified from orca-hls-utils)
 # ============================================================================
@@ -49,7 +52,7 @@ def get_all_folders(bucket: str, prefix: str) -> List[str]:
     s3 = boto3.client("s3", config=Config(signature_version=UNSIGNED))
     paginator = s3.get_paginator("list_objects_v2")
     kwargs = {"Bucket": bucket, "Prefix": prefix, "Delimiter": "/"}
-    
+
     all_keys = []
     for page in paginator.paginate(**kwargs):
         try:
@@ -60,8 +63,18 @@ def get_all_folders(bucket: str, prefix: str) -> List[str]:
             all_keys.extend(prefixes)
         except KeyError:
             break
-    
+
     return all_keys
+
+def get_cached_folders(bucket: str, prefix: str) -> List[str]:
+    """
+    Return cached folder list for (bucket, prefix). If absent, call get_all_folders()
+    to populate the cache, then return the cached value.
+    """
+    key = f"{bucket}::{prefix}"
+    if key not in _FOLDERS_CACHE:
+        _FOLDERS_CACHE[key] = get_all_folders(bucket, prefix)
+    return _FOLDERS_CACHE[key]
 
 def get_folders_between_timestamp(bucket_list: List[str], start_time: int, end_time: int) -> List[int]:
     """
@@ -78,34 +91,15 @@ def get_folders_between_timestamp(bucket_list: List[str], start_time: int, end_t
     bucket_list = [int(bucket) for bucket in bucket_list]
     start_index = 0
     end_index = len(bucket_list) - 1
-    
+
     while start_index < len(bucket_list) and bucket_list[start_index] < start_time:
         start_index += 1
-    
+
     while end_index >= 0 and bucket_list[end_index] > end_time:
         end_index -= 1
-    
+
     # Include the folder before start_time to ensure we have data.
     return bucket_list[max(0, start_index - 1) : end_index + 1]
-
-# ============================================================================
-# DateTime Utilities (simplified from orca-hls-utils)
-# ============================================================================
-
-def get_clip_name_from_unix_time(source_guid: str, current_clip_start_time: int) -> tuple:
-    """
-    Generate a clip name from unix timestamp.
-    
-    Parameters:
-        source_guid (str): Hydrophone identifier.
-        current_clip_start_time (int): Unix timestamp.
-    
-    Returns:
-        tuple: (clipname, readable_datetime)
-    """
-    readable_datetime = datetime.fromtimestamp(int(current_clip_start_time)).strftime("%Y_%m_%d_%H_%M_%S")
-    clipname = source_guid + "_" + readable_datetime
-    return clipname, readable_datetime
 
 def get_difference_between_times_in_seconds(unix_time1: int, unix_time2: int) -> float:
     """
@@ -201,7 +195,7 @@ def parse_timestamp_pst(timestamp_str: str) -> datetime:
 def download_audio_segment(
     category: str,
     node_name: str,
-    timestamp_pst: datetime,
+    timestamp_str: str,
     output_root: Path,
 ):
     """
@@ -213,20 +207,18 @@ def download_audio_segment(
     Parameters:
         category (str): The label/category for the detection (e.g., "resident", "transient").
         node_name (str): The node name (e.g., "rpi_sunset_bay").
-        timestamp_pst (datetime): The detection timestamp in Pacific time.
+        timestamp_str (str): The detection timestamp in Pacific time.
         output_root (Path): Root directory where label subdirectories and audio files will be saved.
     """
     label_dir = output_root / category
     label_dir.mkdir(parents=True, exist_ok=True)
+    timestamp_pst = parse_timestamp_pst(timestamp_str)
     
     # Check if the file already exists.
-    duration_s = N_SECONDS
-    end_timestamp_pst = timestamp_pst + timedelta(seconds=duration_s)
-    end_timestamp_str = end_timestamp_pst.strftime("%Y_%m_%d_%H_%M_%S")
     node_name_in_filename = node_name.replace("_", "-")
-    expected_filename = f"{node_name_in_filename}_{end_timestamp_str}_PST.wav"
-    expected_path = label_dir / expected_filename
-    
+    clipname = f"{node_name_in_filename}_{timestamp_str}"
+    wav_filename = f"{clipname}.wav"
+    expected_path = label_dir / wav_filename
     if expected_path.exists():
         print(f"Skipping (already exists): {expected_path}")
         return
@@ -241,14 +233,15 @@ def download_audio_segment(
     
     # Convert timestamps to unix time.
     start_time = timestamp_pst
-    end_time = start_time + timedelta(seconds=duration_s)
+    end_time = start_time + timedelta(seconds=N_SECONDS)
     start_unix_time = int(start_time.timestamp())
     end_unix_time = int(end_time.timestamp())
     
     # Get all folders from S3 and filter by timestamp.
     try:
-        all_hydrophone_folders = get_all_folders(s3_bucket, prefix=prefix)
-        print(f"Found {len(all_hydrophone_folders)} folders in total for hydrophone")
+        # Use cached folders per node/bucket/prefix to avoid repeated S3 listing calls.
+        all_hydrophone_folders = get_cached_folders(s3_bucket, prefix=prefix)
+        print(f"Found {len(all_hydrophone_folders)} folders in total for {node_name}")
         
         valid_folders = get_folders_between_timestamp(all_hydrophone_folders, start_unix_time, end_unix_time)
         print(f"Found {len(valid_folders)} folders in date range")
@@ -267,12 +260,7 @@ def download_audio_segment(
         print(f"Start time (unix): {start_unix_time}")
         print(f"End time (unix): {end_unix_time}")
         return
-    
-    # Generate clip name.
-    clipname, clip_start_time = get_clip_name_from_unix_time(
-        folder_name.replace("_", "-"), start_unix_time
-    )
-    
+ 
     # Read the m3u8 file for the current folder.
     stream_url = f"{hydrophone_stream_url}/hls/{current_folder}/live.m3u8"
     
@@ -300,7 +288,7 @@ def download_audio_segment(
     time_since_folder_start = get_difference_between_times_in_seconds(start_unix_time, current_folder)
     time_since_folder_start -= audio_offset
     
-    segment_start_index = max(0, math.ceil(time_since_folder_start / target_duration))
+    segment_start_index = max(0, math.floor(time_since_folder_start / target_duration))
     segment_end_index = segment_start_index + num_segments_needed
     
     if segment_end_index > num_total_segments:
@@ -329,18 +317,35 @@ def download_audio_segment(
                 return
             
             # Concatenate all .ts files.
-            hls_file = os.path.join(tmp_path, clipname + ".ts")
-            with open(hls_file, "wb") as wfd:
-                for f in file_names:
-                    with open(os.path.join(tmp_path, f), "rb") as fd:
-                        shutil.copyfileobj(fd, wfd)
+            if len(file_names) > 1:
+                hls_file = os.path.join(tmp_path, clipname + ".ts")
+                with open(hls_file, "wb") as wfd:
+                    for f in file_names:
+                        with open(os.path.join(tmp_path, f), "rb") as fd:
+                            shutil.copyfileobj(fd, wfd)
+            else:
+                hls_file = os.path.join(tmp_path, file_names[0])
             
-            # Convert to wav using ffmpeg.
-            audio_file = clipname + ".wav"
-            wav_file_path = os.path.join(label_dir, audio_file)
-            stream = ffmpeg.input(hls_file)
-            stream = ffmpeg.output(stream, wav_file_path)
-            # Use overwrite_output=True since we already checked for file existence above
+            # Convert to wav using ffmpeg, but only extract N_SECONDS starting
+            # at the requested timestamp offset inside the concatenated file.
+            wav_file_path = os.path.join(label_dir, wav_filename)
+
+            # Compute offset (seconds) into the concatenated .ts where the desired start occurs.
+            # time_since_folder_start and target_duration are computed earlier in the function.
+            ss_offset = time_since_folder_start - (segment_start_index * target_duration)
+            if ss_offset < 0:
+                ss_offset = 0.0
+
+            # Use input seeking (ss on input) and limit duration with t on output.
+            stream = ffmpeg.input(hls_file, ss=ss_offset)
+            stream = ffmpeg.output(
+                stream,
+                wav_file_path,
+                t=N_SECONDS,
+                acodec="pcm_s16le",  # optional: force WAV PCM format
+                ar=44100,            # optional: sample rate
+                ac=1                 # optional: mono
+            )
             ffmpeg.run(stream, overwrite_output=True, quiet=True)
             
             print(f"Downloaded: {wav_file_path}")
@@ -364,8 +369,7 @@ def process_csv(csv_path: Path, output_root: Path):
     
     for row in rows:
         print(f"Processing: {row.category} - {row.node_name} - {row.timestamp_pst}")
-        timestamp_pst = parse_timestamp_pst(row.timestamp_pst)
-        download_audio_segment(row.category, row.node_name, timestamp_pst, output_root)
+        download_audio_segment(row.category, row.node_name, row.timestamp_pst, output_root)
 
 if __name__ == "__main__":
     csv_path = Path("output_segments/training_samples.csv")
