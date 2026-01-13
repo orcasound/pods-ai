@@ -4,7 +4,7 @@
     <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>374cfa2a-7626-4e39-a61f-20af1688caa5</ProjectGuid>
     <ProjectHome>.</ProjectHome>
-    <StartupFile>src\make_csv.py</StartupFile>
+    <StartupFile>src\download_wavs.py</StartupFile>
     <SearchPath>
     </SearchPath>
     <WorkingDirectory>.</WorkingDirectory>
@@ -14,7 +14,8 @@
     <LaunchProvider>Standard Python launcher</LaunchProvider>
     <!-- Command line arguments are intentionally left blank.
          Developers may customize this locally. -->
-    <CommandLineArguments></CommandLineArguments>
+    <CommandLineArguments>
+    </CommandLineArguments>
     <EnableNativeCodeDebugging>False</EnableNativeCodeDebugging>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
@@ -27,6 +28,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="src\download_wavs.py" />
+    <Compile Include="src\extract_training_samples.py" />
     <Compile Include="src\make_csv.py" />
   </ItemGroup>
   <ItemGroup>

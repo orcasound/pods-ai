@@ -689,10 +689,6 @@ humpback,rpi_andrews_bay,2025_12_12_02_06_26_PST,https://live.orcasound.net/bout
 humpback,rpi_andrews_bay,2025_12_12_02_16_55_PST,https://live.orcasound.net/bouts/new/andrews-bay?time=2025-12-12T10%3A16%3A55.000Z,Humpback singing continues,tp_human_only
 other,rpi_port_townsend,2025_12_13_11_01_42_PST,https://live.orcasound.net/bouts/new/port-townsend?time=2025-12-13T19%3A01%3A42.000Z,Water slosh,fp_machine_only
 humpback,rpi_andrews_bay,2025_12_13_18_33_00_PST,https://live.orcasound.net/bouts/new/andrews-bay?time=2025-12-14T02%3A33%3A00.000Z,Humpback,tp_human_only
-other,rpi_mast_center,2025_12_14_15_25_37_PST,https://live.orcasound.net/bouts/new/mast-center?time=2025-12-14T23%3A25%3A37.949Z,"Beeps, loud ambient noise",fp_machine_only
-other,rpi_mast_center,2025_12_14_15_25_47_PST,https://live.orcasound.net/bouts/new/mast-center?time=2025-12-14T23%3A25%3A47.000Z,"Beeps, loud ambient noise",fp_machine_only
-resident,rpi_mast_center,2025_12_14_19_45_41_PST,https://live.orcasound.net/bouts/new/mast-center?time=2025-12-15T03%3A45%3A41.000Z,"Faint calls, loud ship noise",tp_machine_only
-resident,rpi_mast_center,2025_12_14_19_54_46_PST,https://live.orcasound.net/bouts/new/mast-center?time=2025-12-15T03%3A54%3A46.000Z,"Faint calls, moderate ship noise",tp_machine_only
 resident,rpi_mast_center,2025_12_14_19_56_32_PST,https://live.orcasound.net/bouts/new/mast-center?time=2025-12-15T03%3A56%3A32.864Z,"Faint calls, moderate ship noise",tp_machine_only
 resident,rpi_mast_center,2025_12_14_19_57_01_PST,https://live.orcasound.net/bouts/new/mast-center?time=2025-12-15T03%3A57%3A01.000Z,"Faint calls, moderate ship noise",tp_machine_only
 resident,rpi_mast_center,2025_12_14_19_58_10_PST,https://live.orcasound.net/bouts/new/mast-center?time=2025-12-15T03%3A58%3A10.491Z,"Faint calls, moderate ship noise",tp_machine_only
