@@ -136,10 +136,10 @@ def download_audio_segment(
 
 def process_csv(csv_path: Path, output_root: Path):
     """
-    Read the detections CSV file and download corresponding WAV files.
+    Read the training samples CSV file and download corresponding WAV files.
     
     Parameters:
-        csv_path (Path): Path to the detections.csv file.
+        csv_path (Path): Path to the training_samples.csv file.
         output_root (Path): Root directory where audio files will be saved in label subdirectories.
     """
     rows = parse_csv(csv_path)
@@ -152,12 +152,12 @@ def process_csv(csv_path: Path, output_root: Path):
         download_audio_segment(row.category, row.node_name, timestamp_pst, output_root)
 
 if __name__ == "__main__":
-    csv_path = Path("output_segments/detections.csv")
+    csv_path = Path("output_segments/training_samples.csv")
     output_root = Path("output_segments")
     
     if not csv_path.exists():
         print(f"Error: CSV file not found at {csv_path}")
-        print("Please run make_csv.py first to generate the detections.csv file.")
+        print("Please run extract_training_samples.py first to generate the training_samples.csv file.")
         sys.exit(1)
     
     process_csv(csv_path, output_root)
