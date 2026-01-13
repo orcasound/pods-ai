@@ -24,10 +24,10 @@ class CSVRow:
 
 def parse_csv(csv_path: Path) -> List[CSVRow]:
     """
-    Parse the detections CSV file and return a list of CSVRow objects.
+    Parse a CSV file (detections or training samples) and return a list of CSVRow objects.
     
     Parameters:
-        csv_path (Path): Path to the detections CSV file.
+        csv_path (Path): Path to the CSV file.
     
     Returns:
         List[CSVRow]: List of parsed CSV rows.
@@ -144,7 +144,7 @@ def process_csv(csv_path: Path, output_root: Path):
     """
     rows = parse_csv(csv_path)
     
-    print(f"Found {len(rows)} detections to process")
+    print(f"Found {len(rows)} training samples to process")
     
     for row in rows:
         print(f"Processing: {row.category} - {row.node_name} - {row.timestamp_pst}")
