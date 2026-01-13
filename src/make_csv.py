@@ -239,7 +239,7 @@ def get_orcasite_detections(feed: OrcasiteFeed) -> List[OrcasiteDetection]:
     )
 
     # Build query parameters
-    limit = 500
+    limit = 250
     offset = 0
     params = {
         "page[limit]": limit,
