@@ -79,10 +79,10 @@ def get_folders_between_timestamp(bucket_list: List[str], start_time: int, end_t
     start_index = 0
     end_index = len(bucket_list) - 1
     
-    while start_index < len(bucket_list) and int(bucket_list[start_index]) < int(start_time):
+    while start_index < len(bucket_list) and bucket_list[start_index] < start_time:
         start_index += 1
     
-    while end_index >= 0 and int(bucket_list[end_index]) > int(end_time):
+    while end_index >= 0 and bucket_list[end_index] > end_time:
         end_index -= 1
     
     # Include the folder before start_time to ensure we have data
@@ -286,7 +286,7 @@ def download_audio_segment(
         return
     
     # Calculate target duration (average segment duration)
-    target_duration = sum([item.duration for item in stream_obj.segments]) / num_total_segments
+    target_duration = sum(item.duration for item in stream_obj.segments) / num_total_segments
     
     # Calculate number of segments needed for N_SECONDS
     num_segments_needed = math.ceil(N_SECONDS / target_duration)
@@ -326,7 +326,7 @@ def download_audio_segment(
                 return
             
             # Concatenate all .ts files
-            hls_file = os.path.join(tmp_path, Path(clipname + ".ts"))
+            hls_file = os.path.join(tmp_path, clipname + ".ts")
             with open(hls_file, "wb") as wfd:
                 for f in file_names:
                     with open(os.path.join(tmp_path, f), "rb") as fd:
@@ -337,7 +337,8 @@ def download_audio_segment(
             wav_file_path = os.path.join(label_dir, audio_file)
             stream = ffmpeg.input(hls_file)
             stream = ffmpeg.output(stream, wav_file_path)
-            ffmpeg.run(stream, overwrite_output=False, quiet=True)
+            # Use overwrite_output=True since we already checked for file existence above
+            ffmpeg.run(stream, overwrite_output=True, quiet=True)
             
             print(f"Downloaded: {wav_file_path}")
             
