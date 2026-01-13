@@ -1,3 +1,6 @@
 azure-cosmos
 pytz
 requests
+boto3
+m3u8
+ffmpeg-python
