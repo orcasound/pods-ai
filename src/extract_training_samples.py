@@ -20,6 +20,7 @@ from pytz import timezone
 
 PACIFIC_TZ = timezone('US/Pacific')
 PREFERRED_NOTES = {'tp_machine_only', 'fp_machine_only'}
+QUALITY_FILTER_TERMS = {'faint', 'distant'}
 MIN_SAMPLES_PER_CATEGORY = 30
 
 
@@ -65,17 +66,17 @@ def sort_by_preference(detections: List[Dict]) -> List[Dict]:
     """
     Sort detections by preference:
     1. Preferred notes (tp_machine_only, fp_machine_only) first
-    2. Descriptions without "faint" or "distant" preferred
+    2. Descriptions without quality issues (faint, distant) preferred
     3. Then by timestamp (oldest first)
     """
     def sort_key(det):
         has_preferred_note = det['Notes'] in PREFERRED_NOTES
-        description = det.get('Description', '').lower()
-        has_unpreferred_description = 'faint' in description or 'distant' in description
+        description_lower = det.get('Description', '').lower()
+        has_quality_issue = any(term in description_lower for term in QUALITY_FILTER_TERMS)
         timestamp = det['Timestamp']
-        # Return tuple: (not preferred note, has unpreferred description, timestamp)
+        # Return tuple: (not preferred note, has quality issue, timestamp)
         # This puts preferred notes first, then non-faint/distant descriptions, then by timestamp
-        return (not has_preferred_note, has_unpreferred_description, timestamp)
+        return (not has_preferred_note, has_quality_issue, timestamp)
     
     return sorted(detections, key=sort_key)
 
