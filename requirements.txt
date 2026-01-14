@@ -1,6 +1,10 @@
 azure-cosmos
 boto3
 ffmpeg-python
+librosa
 m3u8
+matplotlib
+numpy
+opencv-python
 pytz
 requests
