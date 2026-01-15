@@ -277,19 +277,23 @@ def download_audio_segment(
         return
     
     # Calculate target duration (average segment duration).
-    target_duration = sum(item.duration for item in stream_obj.segments) / num_total_segments
+    target_duration_exact = sum(item.duration for item in stream_obj.segments) / num_total_segments
+    target_duration = round(target_duration_exact, 1)
     
     # Calculate number of segments needed for N_SECONDS.
     num_segments_needed = math.ceil(N_SECONDS / target_duration)
     
-    # Calculate start index based on time since folder start.
+    # Calculate start and end indices based on time since folder start.
     # Note: there's typically a 2-second audio offset.
     audio_offset = 2
-    time_since_folder_start = get_difference_between_times_in_seconds(start_unix_time, current_folder)
-    time_since_folder_start -= audio_offset
-    
-    segment_start_index = max(0, math.floor(time_since_folder_start / target_duration))
-    segment_end_index = segment_start_index + num_segments_needed
+    time_since_folder_start_for_start = get_difference_between_times_in_seconds(start_unix_time, current_folder)
+    time_since_folder_start_for_start -= audio_offset
+
+    time_since_folder_start_for_end = get_difference_between_times_in_seconds(end_unix_time, current_folder)
+    time_since_folder_start_for_end -= audio_offset
+
+    segment_start_index = max(0, math.floor(time_since_folder_start_for_start / target_duration))
+    segment_end_index = min(num_total_segments, math.ceil(time_since_folder_start_for_end / target_duration))
     
     if segment_end_index > num_total_segments:
         print(f"ERROR: Not enough segments available. Need {segment_end_index}, but only {num_total_segments} available.")
@@ -332,7 +336,7 @@ def download_audio_segment(
 
             # Compute offset (seconds) into the concatenated .ts where the desired start occurs.
             # time_since_folder_start and target_duration are computed earlier in the function.
-            ss_offset = time_since_folder_start - (segment_start_index * target_duration)
+            ss_offset = time_since_folder_start_for_start - (segment_start_index * target_duration)
             if ss_offset < 0:
                 ss_offset = 0.0
 
