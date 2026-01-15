@@ -4,19 +4,21 @@
     <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>374cfa2a-7626-4e39-a61f-20af1688caa5</ProjectGuid>
     <ProjectHome>.</ProjectHome>
-    <StartupFile>src\download_wavs.py</StartupFile>
+    <StartupFile>src\make_csv.py</StartupFile>
     <SearchPath>
     </SearchPath>
     <WorkingDirectory>.</WorkingDirectory>
     <OutputPath>.</OutputPath>
-    <Name>pods-ai</Name>
-    <RootNamespace>pods-ai</RootNamespace>
+    <Name>ModelTraining</Name>
+    <RootNamespace>ModelTraining</RootNamespace>
     <LaunchProvider>Standard Python launcher</LaunchProvider>
     <!-- Command line arguments are intentionally left blank.
          Developers may customize this locally. -->
     <CommandLineArguments>
     </CommandLineArguments>
     <EnableNativeCodeDebugging>False</EnableNativeCodeDebugging>
+    <IsWindowsApplication>False</IsWindowsApplication>
+    <InterpreterId>MSBuild|.venv|$(MSBuildProjectFullPath)</InterpreterId>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
     <DebugSymbols>true</DebugSymbols>
@@ -30,9 +32,24 @@
     <Compile Include="src\download_wavs.py" />
     <Compile Include="src\extract_training_samples.py" />
     <Compile Include="src\make_csv.py" />
+    <Compile Include="src\make_spectrograms.py" />
   </ItemGroup>
   <ItemGroup>
     <Folder Include="src\" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="requirements.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <Interpreter Include=".venv\">
+      <Id>.venv</Id>
+      <Version>3.11</Version>
+      <Description>.venv (Python 3.11 (64-bit))</Description>
+      <InterpreterPath>Scripts\python.exe</InterpreterPath>
+      <WindowsInterpreterPath>Scripts\pythonw.exe</WindowsInterpreterPath>
+      <PathEnvironmentVariable>PYTHONPATH</PathEnvironmentVariable>
+      <Architecture>X64</Architecture>
+    </Interpreter>
   </ItemGroup>
   <Import Project="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.targets" />
   <!-- Uncomment the CoreCompile target to enable the Build command in
