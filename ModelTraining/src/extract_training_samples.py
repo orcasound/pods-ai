@@ -8,7 +8,17 @@ Extract training samples from detections.csv with the following constraints:
 - Prefer tp_machine_only or fp_machine_only notes
 - Spread samples evenly across nodes per category
 - Minimize total rows while meeting constraints
-- Subtract 2 seconds from timestamps
+- For tp_human_only detections: Run model on preceding 60 seconds to find correct timestamp
+- For other detections: Subtract 2 seconds from timestamps
+
+For tp_human_only detections, we download 60 seconds of audio preceding the detection
+timestamp, run model inference to score each 2-second segment, and use the highest
+scoring segment to determine the correct timestamp offset (between 2-60 seconds).
+
+This matches the behavior of aifororcas-livesystem's LiveInferenceOrchestrator.py
+which uses DateRangeHLSStream to download audio and returns local_confidences for
+each 2-second sample. See:
+https://github.com/orcasound/aifororcas-livesystem/blob/main/InferenceSystem/src/LiveInferenceOrchestrator.py
 """
 
 import csv
@@ -568,9 +578,27 @@ def main():
 
     # Initialize model inference for tp_human_only timestamp correction
     print("\nInitializing model inference for tp_human_only timestamp correction...")
+    
+    # Check for model configuration from environment variables
+    model_type = os.environ.get("MODEL_TYPE", "dummy")
+    model_path = os.environ.get("MODEL_PATH", "./model")
+    auto_download = os.environ.get("MODEL_AUTO_DOWNLOAD", "false").lower() == "true"
+    
+    print(f"  Model type: {model_type}")
+    if model_type == "fastai":
+        print(f"  Model path: {model_path}")
+        print(f"  Auto download: {auto_download}")
+        print(f"  Note: To use the FastAI model, set environment variables:")
+        print(f"    MODEL_TYPE=fastai")
+        print(f"    MODEL_PATH=./model")
+        print(f"    MODEL_AUTO_DOWNLOAD=true (to download model automatically)")
+    
     try:
-        # Use dummy model for now - can be replaced with actual model
-        model_inference = get_model_inference(model_type="dummy")
+        model_inference = get_model_inference(
+            model_path=model_path if model_type == "fastai" else None,
+            model_type=model_type,
+            auto_download=auto_download
+        )
     except Exception as e:
         print(f"  Warning: Failed to initialize model inference: {e}")
         print(f"  Will fall back to 2-second offset for tp_human_only samples")
