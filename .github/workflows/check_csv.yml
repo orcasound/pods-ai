@@ -57,7 +57,7 @@ jobs:
         run: |
           python src/make_csv.py
 
-      - name: Verify there are changes in detections.csv
+      - name: Verify there are no changes in detections.csv
         if: steps.skip_check.outputs.should_skip != 'true'
         run: |
           git diff --exit-code
