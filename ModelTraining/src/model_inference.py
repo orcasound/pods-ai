@@ -314,9 +314,17 @@ def download_model_if_needed(model_path: str = "./model",
         response = requests.get(model_url, timeout=120)
         response.raise_for_status()
         
-        # Extract zip file
+        # Extract zip file with path validation to prevent directory traversal attacks
         print(f"Extracting model to {model_dir}...")
         with zipfile.ZipFile(io.BytesIO(response.content)) as zip_ref:
+            # Validate all file paths before extraction
+            for member in zip_ref.namelist():
+                # Resolve the member path and ensure it's within the target directory
+                member_path = (model_dir.parent / member).resolve()
+                if not str(member_path).startswith(str(model_dir.parent.resolve())):
+                    raise ValueError(f"Zip file contains unsafe path: {member}")
+            
+            # Safe to extract after validation
             zip_ref.extractall(model_dir.parent)
         
         # Check if extraction was successful
@@ -389,6 +397,8 @@ def get_model_inference(model_path: Optional[str] = None, model_type: str = "dum
         
         return FastAIModelInference(model_path=model_path)
     else:
-        raise ValueError(f"Unknown model type: {model_type}. "
-                        f"Currently only 'dummy' is supported. "
-                        f"For production use, integrate with aifororcas-livesystem models.")
+        raise ValueError(
+            f"Unknown model type: {model_type}. "
+            f"Supported types: 'dummy' (for testing), 'fastai' (for production). "
+            f"For production use with FastAI model, set MODEL_TYPE=fastai and ensure model is available."
+        )

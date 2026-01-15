@@ -45,6 +45,7 @@ PACIFIC_TZ = timezone('US/Pacific')
 PREFERRED_NOTES = {'tp_machine_only', 'fp_machine_only'}
 QUALITY_FILTER_TERMS = {'faint', 'distant'}
 MIN_SAMPLES_PER_CATEGORY = 30
+SEGMENT_DURATION_SECONDS = 2  # Duration of each audio segment for model inference
 
 # Cache for S3 folder listings
 _FOLDERS_CACHE = {}
@@ -62,10 +63,10 @@ def format_timestamp(dt: datetime) -> str:
 
 
 def subtract_two_seconds(timestamp_str: str) -> str:
-    """Subtract 2 seconds from a PST timestamp string."""
+    """Subtract SEGMENT_DURATION_SECONDS from a PST timestamp string."""
     dt = parse_timestamp(timestamp_str)
-    dt_minus_2 = dt - timedelta(seconds=2)
-    return format_timestamp(dt_minus_2)
+    dt_minus_offset = dt - timedelta(seconds=SEGMENT_DURATION_SECONDS)
+    return format_timestamp(dt_minus_offset)
 
 
 def load_detections(csv_path: Path) -> List[Dict]:
@@ -458,20 +459,20 @@ def compute_correct_timestamp_for_tp_human_only(
             print(f"  No confidences returned, falling back to 2-second offset")
             return subtract_two_seconds(timestamp_str)
         
-        # Find the index of the highest scoring 2-second segment
+        # Find the index of the highest scoring segment
         max_confidence_idx = local_confidences.index(max(local_confidences))
         max_confidence = local_confidences[max_confidence_idx]
         
         print(f"  Highest score: {max_confidence} at segment {max_confidence_idx}")
         
-        # Each segment is 2 seconds, so the offset from the end is:
-        # (total_segments - max_confidence_idx - 1) * 2 + 2 seconds
+        # Each segment is SEGMENT_DURATION_SECONDS, so the offset from the end is:
+        # (total_segments - max_confidence_idx - 1) * SEGMENT_DURATION_SECONDS + SEGMENT_DURATION_SECONDS
         # This gives us how many seconds before the original timestamp
         num_segments = len(local_confidences)
-        seconds_before_end = (num_segments - max_confidence_idx - 1) * 2 + 2
+        seconds_before_end = (num_segments - max_confidence_idx - 1) * SEGMENT_DURATION_SECONDS + SEGMENT_DURATION_SECONDS
         
-        # Ensure offset is between 2 and 60 seconds
-        seconds_before_end = max(2, min(60, seconds_before_end))
+        # Ensure offset is between SEGMENT_DURATION_SECONDS and 60 seconds
+        seconds_before_end = max(SEGMENT_DURATION_SECONDS, min(60, seconds_before_end))
         
         print(f"  Adjusting timestamp by {seconds_before_end} seconds")
         
