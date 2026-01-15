@@ -97,16 +97,22 @@ class FastAIModelInference(ModelInference):
             from fastai.basic_train import load_learner
             import torch
             
-            # Monkey-patch torch.load to use weights_only=False for fastai compatibility
+            # Note: FastAI models require weights_only=False to load functools.partial and other objects
+            # We temporarily patch torch.load only for this specific load_learner call
+            # This is required because PyTorch 2.6+ changed the default to weights_only=True for security
             _original_torch_load = torch.load
-            def _patched_torch_load(*args, **kwargs):
-                if 'weights_only' not in kwargs:
-                    kwargs['weights_only'] = False
-                return _original_torch_load(*args, **kwargs)
-            torch.load = _patched_torch_load
-            
-            self.model = load_learner(model_path, model_name)
-            print(f"Loaded FastAI model from {model_file}")
+            try:
+                def _patched_torch_load(*args, **kwargs):
+                    if 'weights_only' not in kwargs:
+                        kwargs['weights_only'] = False
+                    return _original_torch_load(*args, **kwargs)
+                torch.load = _patched_torch_load
+                
+                self.model = load_learner(model_path, model_name)
+                print(f"Loaded FastAI model from {model_file}")
+            finally:
+                # Restore original torch.load to minimize security impact
+                torch.load = _original_torch_load
             
         except ImportError as e:
             raise ImportError(
@@ -315,17 +321,19 @@ def download_model_if_needed(model_path: str = "./model",
         response.raise_for_status()
         
         # Extract zip file with path validation to prevent directory traversal attacks
-        print(f"Extracting model to {model_dir}...")
+        # The zip file contains a "model" directory, so we extract to model_dir.parent
+        print(f"Extracting model to {model_dir.parent}...")
+        extract_target = model_dir.parent.resolve()
         with zipfile.ZipFile(io.BytesIO(response.content)) as zip_ref:
-            # Validate all file paths before extraction
+            # Validate all file paths before extraction to prevent zip slip attacks
             for member in zip_ref.namelist():
                 # Resolve the member path and ensure it's within the target directory
-                member_path = (model_dir.parent / member).resolve()
-                if not str(member_path).startswith(str(model_dir.parent.resolve())):
+                member_path = (extract_target / member).resolve()
+                if not str(member_path).startswith(str(extract_target)):
                     raise ValueError(f"Zip file contains unsafe path: {member}")
             
             # Safe to extract after validation
-            zip_ref.extractall(model_dir.parent)
+            zip_ref.extractall(extract_target)
         
         # Check if extraction was successful
         if model_file.exists():

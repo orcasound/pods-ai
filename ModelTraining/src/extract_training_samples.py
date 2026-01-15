@@ -465,11 +465,11 @@ def compute_correct_timestamp_for_tp_human_only(
         
         print(f"  Highest score: {max_confidence} at segment {max_confidence_idx}")
         
-        # Each segment is SEGMENT_DURATION_SECONDS, so the offset from the end is:
-        # (total_segments - max_confidence_idx - 1) * SEGMENT_DURATION_SECONDS + SEGMENT_DURATION_SECONDS
-        # This gives us how many seconds before the original timestamp
+        # Each segment is SEGMENT_DURATION_SECONDS
+        # The offset is calculated as (num_segments - max_confidence_idx) * SEGMENT_DURATION_SECONDS
+        # This gives us how many seconds before the original timestamp the highest scoring segment starts
         num_segments = len(local_confidences)
-        seconds_before_end = (num_segments - max_confidence_idx - 1) * SEGMENT_DURATION_SECONDS + SEGMENT_DURATION_SECONDS
+        seconds_before_end = (num_segments - max_confidence_idx) * SEGMENT_DURATION_SECONDS
         
         # Ensure offset is between SEGMENT_DURATION_SECONDS and 60 seconds
         seconds_before_end = max(SEGMENT_DURATION_SECONDS, min(60, seconds_before_end))
@@ -490,7 +490,8 @@ def compute_correct_timestamp_for_tp_human_only(
         if wav_path and os.path.exists(wav_path):
             try:
                 os.remove(wav_path)
-            except:
+            except (OSError, PermissionError) as e:
+                # Ignore cleanup errors - file may already be deleted or inaccessible
                 pass
 
 
