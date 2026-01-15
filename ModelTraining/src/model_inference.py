@@ -269,15 +269,18 @@ class DummyModelInference(ModelInference):
         }
 
 
-def download_model_if_needed(model_path: str = "./model") -> bool:
+def download_model_if_needed(model_path: str = "./model", 
+                            model_url: Optional[str] = None) -> bool:
     """
     Download the FastAI model from Azure Blob Storage if it doesn't exist.
     
-    The model is downloaded from:
+    The default model is downloaded from:
     https://trainedproductionmodels.blob.core.windows.net/dnnmodel/11-15-20.FastAI.R1-12.zip
     
     Args:
         model_path: Directory where the model should be stored
+        model_url: Optional custom URL for the model zip file. If not provided, uses the default model.
+                  Can also be set via MODEL_URL environment variable.
         
     Returns:
         True if model is available (existed or downloaded successfully), False otherwise
@@ -297,8 +300,14 @@ def download_model_if_needed(model_path: str = "./model") -> bool:
     # Create model directory
     model_dir.mkdir(parents=True, exist_ok=True)
     
-    # Download model
-    model_url = "https://trainedproductionmodels.blob.core.windows.net/dnnmodel/11-15-20.FastAI.R1-12.zip"
+    # Determine model URL
+    if model_url is None:
+        # Check environment variable
+        model_url = os.environ.get(
+            "MODEL_URL",
+            "https://trainedproductionmodels.blob.core.windows.net/dnnmodel/11-15-20.FastAI.R1-12.zip"
+        )
+    
     print(f"Downloading model from {model_url}...")
     
     try:
@@ -324,7 +333,7 @@ def download_model_if_needed(model_path: str = "./model") -> bool:
 
 
 def get_model_inference(model_path: Optional[str] = None, model_type: str = "dummy", 
-                       auto_download: bool = False) -> ModelInference:
+                       auto_download: bool = False, model_url: Optional[str] = None) -> ModelInference:
     """
     Factory function to create a model inference instance.
     
@@ -334,13 +343,18 @@ def get_model_inference(model_path: Optional[str] = None, model_type: str = "dum
             - "dummy": DummyModelInference for testing (default)
             - "fastai": FastAI model from aifororcas-livesystem
         auto_download: If True and model_type is "fastai", automatically download model if not found
+        model_url: Optional custom URL for downloading the model. If not provided, uses default model.
+                  Can also be set via MODEL_URL environment variable.
             
     Returns:
         ModelInference instance
         
     Note:
-        The FastAI model can be downloaded from:
+        The FastAI model can be downloaded from (default):
         https://trainedproductionmodels.blob.core.windows.net/dnnmodel/11-15-20.FastAI.R1-12.zip
+        
+        To use a different model version, set the MODEL_URL environment variable:
+        export MODEL_URL=https://trainedproductionmodels.blob.core.windows.net/dnnmodel/YOUR-MODEL.zip
         
         Example usage:
             # Use dummy model for testing
@@ -348,6 +362,14 @@ def get_model_inference(model_path: Optional[str] = None, model_type: str = "dum
             
             # Use FastAI model (will try to download if auto_download=True)
             model = get_model_inference(model_path="./model", model_type="fastai", auto_download=True)
+            
+            # Use specific model version
+            model = get_model_inference(
+                model_path="./model", 
+                model_type="fastai", 
+                auto_download=True,
+                model_url="https://trainedproductionmodels.blob.core.windows.net/dnnmodel/NEW-MODEL.zip"
+            )
     """
     if model_type == "dummy":
         return DummyModelInference(model_path)
@@ -358,10 +380,10 @@ def get_model_inference(model_path: Optional[str] = None, model_type: str = "dum
         # Check if model exists, download if requested
         model_file = Path(model_path) / "model.pkl"
         if not model_file.exists() and auto_download:
-            if not download_model_if_needed(model_path):
+            if not download_model_if_needed(model_path, model_url):
                 raise FileNotFoundError(
                     f"Failed to download model. Please manually download from:\n"
-                    f"https://trainedproductionmodels.blob.core.windows.net/dnnmodel/11-15-20.FastAI.R1-12.zip\n"
+                    f"{model_url or os.environ.get('MODEL_URL', 'https://trainedproductionmodels.blob.core.windows.net/dnnmodel/11-15-20.FastAI.R1-12.zip')}\n"
                     f"and extract to {model_path}"
                 )
         

@@ -582,22 +582,27 @@ def main():
     # Check for model configuration from environment variables
     model_type = os.environ.get("MODEL_TYPE", "dummy")
     model_path = os.environ.get("MODEL_PATH", "./model")
+    model_url = os.environ.get("MODEL_URL", None)
     auto_download = os.environ.get("MODEL_AUTO_DOWNLOAD", "false").lower() == "true"
     
     print(f"  Model type: {model_type}")
     if model_type == "fastai":
         print(f"  Model path: {model_path}")
         print(f"  Auto download: {auto_download}")
+        if model_url:
+            print(f"  Model URL: {model_url}")
         print(f"  Note: To use the FastAI model, set environment variables:")
         print(f"    MODEL_TYPE=fastai")
         print(f"    MODEL_PATH=./model")
         print(f"    MODEL_AUTO_DOWNLOAD=true (to download model automatically)")
+        print(f"    MODEL_URL=<custom-url> (optional, to use a specific model version)")
     
     try:
         model_inference = get_model_inference(
             model_path=model_path if model_type == "fastai" else None,
             model_type=model_type,
-            auto_download=auto_download
+            auto_download=auto_download,
+            model_url=model_url
         )
     except Exception as e:
         print(f"  Warning: Failed to initialize model inference: {e}")
