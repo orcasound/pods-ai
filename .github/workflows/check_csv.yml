@@ -16,7 +16,7 @@ permissions:
   contents: read
 
 jobs:
-  make_csv:
+  make_csv_ubuntu:
     permissions:
       actions: write  # for fkirc/skip-duplicate-actions to skip or stop workflow runs
       contents: read  # for actions/checkout to fetch code
@@ -61,6 +61,73 @@ jobs:
         if: steps.skip_check.outputs.should_skip != 'true'
         working-directory: ModelTraining
         run: bash patch_fastai_audio.sh
+
+      - name: Make CSV
+        if: steps.skip_check.outputs.should_skip != 'true'
+        working-directory: ModelTraining
+        run: |
+          python src/make_csv.py
+
+      - name: Verify there are no changes in detections.csv
+        if: steps.skip_check.outputs.should_skip != 'true'
+        run: |
+          git diff --exit-code
+
+      - name: Extract training samples
+        if: steps.skip_check.outputs.should_skip != 'true'
+        working-directory: ModelTraining
+        run: |
+          python src/extract_training_samples.py
+
+      - name: Verify there are no changes in training_samples.csv
+        if: steps.skip_check.outputs.should_skip != 'true'
+        run: |
+          git diff --exit-code
+
+  make_csv_windows:
+    permissions:
+      actions: write  # for fkirc/skip-duplicate-actions to skip or stop workflow runs
+      contents: read  # for actions/checkout to fetch code
+    runs-on: windows-latest
+    env:
+      COSMOS_KEY: ${{ secrets.COSMOS_KEY }}
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@20cf305ff2072d973412fa9b1e3a4f227bda3c76  # v2.14.0
+        with:
+          egress-policy: audit
+
+      - id: skip_check
+        uses: fkirc/skip-duplicate-actions@f75f66ce1886f00957d99748a42c724f4330bdcf  # v5.3.1
+        with:
+          cancel_others: 'false'
+          paths_ignore: '["**.md"]'
+
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8  # v6.0.1
+        if: steps.skip_check.outputs.should_skip != 'true'
+        with:
+          submodules: 'recursive'
+
+      - uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548  # v6.1.0
+        if: steps.skip_check.outputs.should_skip != 'true'
+        with:
+          python-version: '3.11'
+
+      - name: Install FFmpeg
+        if: steps.skip_check.outputs.should_skip != 'true'
+        run: choco install ffmpeg -y
+
+      - name: Install Python dependencies
+        if: steps.skip_check.outputs.should_skip != 'true'
+        working-directory: ModelTraining
+        run: pip install -r requirements.txt
+
+      - name: Patch fastai_audio for Python 3.11+ compatibility
+        if: steps.skip_check.outputs.should_skip != 'true'
+        working-directory: ModelTraining
+        shell: cmd
+        run: patch_fastai_audio.bat
 
       - name: Make CSV
         if: steps.skip_check.outputs.should_skip != 'true'
