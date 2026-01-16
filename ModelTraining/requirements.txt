@@ -12,6 +12,7 @@ pydub==0.24.1
 pytz
 requests
 soundfile
+spacy>=3.5.4
 fastai==1.0.61
 torch>=2.1.0
 torchvision>=0.16.0
