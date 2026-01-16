@@ -94,6 +94,16 @@ class FastAIModelInference(ModelInference):
         # Try to load the FastAI model
         try:
             # Import FastAI dependencies
+            # Import audio module first to ensure patch was applied correctly
+            try:
+                from audio.data import AudioConfig, SpectrogramConfig, AudioList
+            except ImportError as audio_import_error:
+                raise ImportError(
+                    f"Failed to import audio module: {audio_import_error}\n"
+                    f"The fastai_audio package may need to be patched for Python 3.11+.\n"
+                    f"Run: bash patch_fastai_audio.sh"
+                )
+            
             from fastai.basic_train import load_learner
             import torch
             
@@ -122,6 +132,7 @@ class FastAIModelInference(ModelInference):
             )
         except Exception as e:
             raise RuntimeError(f"Failed to load FastAI model: {e}")
+
     
     def predict(self, wav_file_path: str) -> Dict:
         """
