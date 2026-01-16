@@ -33,10 +33,10 @@ By default, `extract_training_samples.py` uses the FastAI model with automatic d
 
 #### Option 1: Default behavior (recommended)
 
-Install FastAI dependencies and run the script:
+Install dependencies and run the script:
 
 ```bash
-pip install -r requirements-fastai.txt
+pip install -r requirements.txt
 cd ModelTraining/src
 python extract_training_samples.py
 ```
@@ -51,7 +51,7 @@ The model will be cached in `./model` directory for future runs.
 To use a different model version, set the `MODEL_URL` environment variable:
 
 ```bash
-pip install -r requirements-fastai.txt
+pip install -r requirements.txt
 export MODEL_URL=https://trainedproductionmodels.blob.core.windows.net/dnnmodel/YOUR-MODEL-VERSION.zip
 cd ModelTraining/src
 python extract_training_samples.py
@@ -62,7 +62,7 @@ python extract_training_samples.py
 If you've already downloaded the model manually:
 
 ```bash
-pip install -r requirements-fastai.txt
+pip install -r requirements.txt
 # Download and extract model
 mkdir -p ModelTraining/model
 curl -o ModelTraining/model.zip https://trainedproductionmodels.blob.core.windows.net/dnnmodel/11-15-20.FastAI.R1-12.zip
@@ -110,22 +110,11 @@ Key dependencies:
 - `librosa`: For audio analysis
 - `m3u8`: For HLS stream parsing
 - `pytz`: For timezone handling
-
-### Optional: FastAI Model Support
-
-For FastAI model support (when using `MODEL_TYPE=fastai`), install additional dependencies:
-
-```bash
-pip install -r requirements-fastai.txt
-```
-
-This installs:
-- `fastai`
-- `torch`
-- `torchaudio`
-- `soundfile`
-
-Note: The script works with the dummy model by default without these dependencies.
+- `fastai==1.0.61`: For FastAI model support
+- `torch>=2.1.0`: PyTorch deep learning framework
+- `torchvision>=0.16.0`: Computer vision models and utilities
+- `torchaudio`: Audio processing for PyTorch
+- `soundfile`: Audio file I/O
 
 ## Helper Scripts
 
