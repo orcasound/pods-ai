@@ -37,7 +37,11 @@ Install dependencies and run the script:
 
 ```bash
 pip install -r requirements.txt
-cd ModelTraining/src
+
+# For Python 3.11+, apply compatibility patch
+bash patch_fastai_audio.sh
+
+cd src
 python extract_training_samples.py
 ```
 
@@ -46,14 +50,17 @@ https://trainedproductionmodels.blob.core.windows.net/dnnmodel/11-15-20.FastAI.R
 
 The model will be cached in `./model` directory for future runs.
 
+**Note**: Python 3.11+ requires a patch to fastai_audio for compatibility. The `patch_fastai_audio.sh` script applies this fix automatically.
+
 #### Option 2: Customize model version
 
 To use a different model version, set the `MODEL_URL` environment variable:
 
 ```bash
 pip install -r requirements.txt
+bash patch_fastai_audio.sh  # For Python 3.11+
 export MODEL_URL=https://trainedproductionmodels.blob.core.windows.net/dnnmodel/YOUR-MODEL-VERSION.zip
-cd ModelTraining/src
+cd src
 python extract_training_samples.py
 ```
 
@@ -63,15 +70,22 @@ If you've already downloaded the model manually:
 
 ```bash
 pip install -r requirements.txt
+bash patch_fastai_audio.sh  # For Python 3.11+
+
 # Download and extract model
-mkdir -p ModelTraining/model
-curl -o ModelTraining/model.zip https://trainedproductionmodels.blob.core.windows.net/dnnmodel/11-15-20.FastAI.R1-12.zip
-unzip ModelTraining/model.zip -d ModelTraining
+mkdir -p model
+curl -o model.zip https://trainedproductionmodels.blob.core.windows.net/dnnmodel/11-15-20.FastAI.R1-12.zip
+unzip model.zip -d .
 
 # Run with pre-downloaded model (no auto-download needed)
-cd ModelTraining/src
+cd src
 export MODEL_AUTO_DOWNLOAD=false
 export MODEL_PATH=../model
+python extract_training_samples.py
+```
+
+#### Option 4: Use dummy model (for testing)
+
 python extract_training_samples.py
 ```
 

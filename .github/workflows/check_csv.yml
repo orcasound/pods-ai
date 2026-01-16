@@ -51,6 +51,11 @@ jobs:
         working-directory: ModelTraining
         run: pip install -r requirements.txt
 
+      - name: Patch fastai_audio for Python 3.11+ compatibility
+        if: steps.skip_check.outputs.should_skip != 'true'
+        working-directory: ModelTraining
+        run: bash patch_fastai_audio.sh
+
       - name: Make CSV
         if: steps.skip_check.outputs.should_skip != 'true'
         working-directory: ModelTraining
