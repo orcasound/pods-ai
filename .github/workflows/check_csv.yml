@@ -46,6 +46,12 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Install FFmpeg
+        if: steps.skip_check.outputs.should_skip != 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
       - name: Install Python dependencies
         if: steps.skip_check.outputs.should_skip != 'true'
         working-directory: ModelTraining
