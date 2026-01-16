@@ -1,12 +1,13 @@
 azure-cosmos
 boto3
 ffmpeg-python
-IPython
 librosa>=0.10.0
 m3u8
 matplotlib
 numpy>=1.21.0,<2.0
 opencv-python
+pandas>=1.1.0,<2.0
+pydub==0.24.1
 pytz
 requests
 soundfile
@@ -14,4 +15,4 @@ fastai==1.0.61
 torch>=2.1.0
 torchvision>=0.16.0
 torchaudio>=2.1.0
-torchvision>=0.16.0
+git+https://github.com/fastaudio/fastai_audio@0.1

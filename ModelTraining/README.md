@@ -107,14 +107,16 @@ pip install -r requirements.txt
 Key dependencies:
 - `boto3`: For accessing S3 audio files
 - `ffmpeg-python`: For audio processing
-- `librosa`: For audio analysis
+- `librosa>=0.10.0`: For audio analysis
 - `m3u8`: For HLS stream parsing
 - `pytz`: For timezone handling
 - `fastai==1.0.61`: For FastAI model support
 - `torch>=2.1.0`: PyTorch deep learning framework
 - `torchvision>=0.16.0`: Computer vision models and utilities
-- `torchaudio`: Audio processing for PyTorch
+- `torchaudio>=2.1.0`: Audio processing for PyTorch
 - `soundfile`: Audio file I/O
+- `fastai_audio`: FastAI audio extensions (from GitHub)
+- `pandas`, `pydub`: Data processing and audio manipulation
 
 ## Helper Scripts
 
