@@ -11,13 +11,16 @@ import shutil
 import sys
 from tempfile import TemporaryDirectory
 
-import boto3
-from botocore import UNSIGNED
-from botocore.config import Config
 import ffmpeg
 import m3u8
 from pytz import timezone
-import requests
+
+from audio_utils import (
+    get_cached_folders,
+    get_folders_between_timestamp,
+    get_difference_between_times_in_seconds,
+    download_from_url
+)
 
 PACIFIC_TZ = timezone('US/Pacific')
 N_SECONDS = 2  # Create 2-second wav files.
@@ -31,118 +34,11 @@ class CSVRow:
     description: str
     notes: str
 
-# Simple in-memory cache for S3 folder listings keyed by "bucket::prefix"
-_FOLDERS_CACHE = {}
-
-# ============================================================================
-# S3 Utilities (simplified from orca-hls-utils)
-# ============================================================================
-
-def get_all_folders(bucket: str, prefix: str) -> List[str]:
-    """
-    Get all folder names from an S3 bucket with the given prefix.
-    
-    Parameters:
-        bucket (str): Name of the S3 bucket.
-        prefix (str): Prefix to filter objects.
-    
-    Returns:
-        List[str]: List of folder names (without the prefix).
-    """
-    s3 = boto3.client("s3", config=Config(signature_version=UNSIGNED))
-    paginator = s3.get_paginator("list_objects_v2")
-    kwargs = {"Bucket": bucket, "Prefix": prefix, "Delimiter": "/"}
-
-    all_keys = []
-    for page in paginator.paginate(**kwargs):
-        try:
-            common_prefixes = page["CommonPrefixes"]
-            prefixes = [
-                prefix["Prefix"].split("/")[-2] for prefix in common_prefixes
-            ]
-            all_keys.extend(prefixes)
-        except KeyError:
-            break
-
-    return all_keys
-
-def get_cached_folders(bucket: str, prefix: str) -> List[str]:
-    """
-    Return cached folder list for (bucket, prefix). If absent, call get_all_folders()
-    to populate the cache, then return the cached value.
-    """
-    key = f"{bucket}::{prefix}"
-    if key not in _FOLDERS_CACHE:
-        _FOLDERS_CACHE[key] = get_all_folders(bucket, prefix)
-    return _FOLDERS_CACHE[key]
-
-def get_folders_between_timestamp(bucket_list: List[str], start_time: int, end_time: int) -> List[int]:
-    """
-    Filter bucket list to only include folders between start_time and end_time.
-    
-    Parameters:
-        bucket_list (List[str]): List of folder names (as strings).
-        start_time (int): Start unix timestamp.
-        end_time (int): End unix timestamp.
-    
-    Returns:
-        List[int]: Filtered list of folder names as integers.
-    """
-    bucket_list = [int(bucket) for bucket in bucket_list]
-    start_index = 0
-    end_index = len(bucket_list) - 1
-
-    while start_index < len(bucket_list) and bucket_list[start_index] < start_time:
-        start_index += 1
-
-    while end_index >= 0 and bucket_list[end_index] > end_time:
-        end_index -= 1
-
-    # Include the folder before start_time to ensure we have data.
-    return bucket_list[max(0, start_index - 1) : end_index + 1]
-
-def get_difference_between_times_in_seconds(unix_time1: int, unix_time2: int) -> float:
-    """
-    Calculate the difference between two unix timestamps in seconds.
-    
-    Parameters:
-        unix_time1 (int): First unix timestamp.
-        unix_time2 (int): Second unix timestamp.
-    
-    Returns:
-        float: Difference in seconds.
-    """
-    dt1 = datetime.fromtimestamp(int(unix_time1))
-    dt2 = datetime.fromtimestamp(int(unix_time2))
-    return (dt1 - dt2).total_seconds()
-
-# ============================================================================
-# Download Utilities (simplified from orca-hls-utils)
-# ============================================================================
-
-def download_from_url(dl_url: str, dl_dir: str):
-    """
-    Download a file from URL to a directory.
-    
-    Parameters:
-        dl_url (str): URL to download from.
-        dl_dir (str): Directory to save the file.
-    """
-    file_name = os.path.basename(dl_url)
-    dl_path = os.path.join(dl_dir, file_name)
-    
-    if os.path.isfile(dl_path):
-        return
-    
-    response = requests.get(dl_url, timeout=30)
-    response.raise_for_status()
-    
-    with open(dl_path, 'wb') as f:
-        f.write(response.content)
-
 # ============================================================================
 # CSV Parsing
 # ============================================================================
+
+
 
 def parse_csv(csv_path: Path) -> List[CSVRow]:
     """
