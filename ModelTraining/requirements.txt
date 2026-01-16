@@ -1,6 +1,7 @@
 azure-cosmos
 boto3
 ffmpeg-python
+ipython
 librosa>=0.10.0
 m3u8
 matplotlib
