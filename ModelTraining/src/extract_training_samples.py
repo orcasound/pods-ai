@@ -30,6 +30,7 @@ from pytz import timezone
 import os
 import math
 import shutil
+import sys
 from tempfile import TemporaryDirectory
 
 import ffmpeg
@@ -507,9 +508,9 @@ def main():
             model_url=model_url
         )
     except Exception as e:
-        print(f"  Warning: Failed to initialize model inference: {e}")
-        print(f"  Will fall back to 2-second offset for tp_human_only samples")
-        model_inference = None
+        print(f"  Error: Failed to initialize model inference: {e}", file=sys.stderr)
+        print(f"  Cannot proceed without model for tp_human_only timestamp correction.", file=sys.stderr)
+        sys.exit(1)
 
     print(f"\nWriting training samples to {output_path}...")
     write_training_samples(samples, output_path, model_inference)
