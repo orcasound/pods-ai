@@ -479,10 +479,12 @@ def main():
     print("\nInitializing model inference for tp_human_only timestamp correction...")
     
     # Check for model configuration from environment variables
-    model_type = os.environ.get("MODEL_TYPE", "dummy")
+    model_type = os.environ.get("MODEL_TYPE", "fastai")
     model_path = os.environ.get("MODEL_PATH", "./model")
     model_url = os.environ.get("MODEL_URL", None)
-    auto_download = os.environ.get("MODEL_AUTO_DOWNLOAD", "false").lower() == "true"
+    # Default to auto-download for fastai, false for dummy
+    auto_download_default = "true" if model_type == "fastai" else "false"
+    auto_download = os.environ.get("MODEL_AUTO_DOWNLOAD", auto_download_default).lower() == "true"
     
     print(f"  Model type: {model_type}")
     if model_type == "fastai":
@@ -490,10 +492,11 @@ def main():
         print(f"  Auto download: {auto_download}")
         if model_url:
             print(f"  Model URL: {model_url}")
-        print(f"  Note: To use the FastAI model, set environment variables:")
-        print(f"    MODEL_TYPE=fastai")
-        print(f"    MODEL_PATH=./model")
-        print(f"    MODEL_AUTO_DOWNLOAD=true (to download model automatically)")
+        print(f"  Note: FastAI is the default model type.")
+        print(f"  To customize, set environment variables:")
+        print(f"    MODEL_TYPE=fastai (default)")
+        print(f"    MODEL_PATH=./model (default)")
+        print(f"    MODEL_AUTO_DOWNLOAD=true (default for fastai)")
         print(f"    MODEL_URL=<custom-url> (optional, to use a specific model version)")
     
     try:

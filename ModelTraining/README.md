@@ -29,22 +29,14 @@ This matches the behavior described in the issue and follows the approach used i
 
 ### Using the FastAI Model
 
-By default, `extract_training_samples.py` uses a dummy model for testing. To use the real FastAI model:
+By default, `extract_training_samples.py` uses the FastAI model with automatic download enabled.
 
-#### Option 1: Auto-download the model
+#### Option 1: Default behavior (recommended)
 
-First, install FastAI dependencies:
+Install FastAI dependencies and run the script:
 
 ```bash
 pip install -r requirements-fastai.txt
-```
-
-Then set environment variables before running the script:
-
-```bash
-export MODEL_TYPE=fastai
-export MODEL_PATH=./model
-export MODEL_AUTO_DOWNLOAD=true
 cd ModelTraining/src
 python extract_training_samples.py
 ```
@@ -52,48 +44,44 @@ python extract_training_samples.py
 This will automatically download the default model from:
 https://trainedproductionmodels.blob.core.windows.net/dnnmodel/11-15-20.FastAI.R1-12.zip
 
+The model will be cached in `./model` directory for future runs.
+
+#### Option 2: Customize model version
+
 To use a different model version, set the `MODEL_URL` environment variable:
 
 ```bash
-export MODEL_TYPE=fastai
-export MODEL_PATH=./model
-export MODEL_AUTO_DOWNLOAD=true
+pip install -r requirements-fastai.txt
 export MODEL_URL=https://trainedproductionmodels.blob.core.windows.net/dnnmodel/YOUR-MODEL-VERSION.zip
 cd ModelTraining/src
 python extract_training_samples.py
 ```
 
-#### Option 2: Manually download the model
+#### Option 3: Use pre-downloaded model
 
-First, install FastAI dependencies:
+If you've already downloaded the model manually:
 
 ```bash
 pip install -r requirements-fastai.txt
-```
-
-Then download and set up the model:
-
-```bash
-# Create model directory
-mkdir -p ModelTraining/model
-
 # Download and extract model
+mkdir -p ModelTraining/model
 curl -o ModelTraining/model.zip https://trainedproductionmodels.blob.core.windows.net/dnnmodel/11-15-20.FastAI.R1-12.zip
 unzip ModelTraining/model.zip -d ModelTraining
 
-# Run with FastAI model
+# Run with pre-downloaded model (no auto-download needed)
 cd ModelTraining/src
-export MODEL_TYPE=fastai
+export MODEL_AUTO_DOWNLOAD=false
 export MODEL_PATH=../model
 python extract_training_samples.py
 ```
 
-#### Option 3: Use dummy model (default)
+#### Option 4: Use dummy model (for testing)
 
-For testing without downloading the model:
+For testing without FastAI dependencies or model download:
 
 ```bash
 cd ModelTraining/src
+export MODEL_TYPE=dummy
 python extract_training_samples.py
 ```
 
@@ -103,10 +91,10 @@ The dummy model will generate mock predictions suitable for testing the timestam
 
 The model behavior can be configured using environment variables:
 
-- `MODEL_TYPE`: Type of model to use (`dummy` or `fastai`, default: `dummy`)
+- `MODEL_TYPE`: Type of model to use (`dummy` or `fastai`, default: `fastai`)
 - `MODEL_PATH`: Path to the model directory (default: `./model`)
-- `MODEL_AUTO_DOWNLOAD`: Whether to auto-download the model if not found (`true` or `false`, default: `false`)
-- `MODEL_URL`: Custom URL for model zip file (optional, allows using different model versions)
+- `MODEL_AUTO_DOWNLOAD`: Whether to auto-download the model if not found (default: `true` for fastai, `false` for dummy)
+- `MODEL_URL`: Custom URL for model zip file (optional, default: `https://trainedproductionmodels.blob.core.windows.net/dnnmodel/11-15-20.FastAI.R1-12.zip`)
 
 ## Requirements
 
