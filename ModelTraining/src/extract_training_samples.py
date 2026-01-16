@@ -32,6 +32,7 @@ import math
 import shutil
 import sys
 from tempfile import TemporaryDirectory
+from urllib.parse import quote
 
 import ffmpeg
 import m3u8
@@ -45,6 +46,7 @@ from audio_utils import (
 )
 
 PACIFIC_TZ = timezone('US/Pacific')
+UTC_TZ = timezone('UTC')
 PREFERRED_NOTES = {'tp_machine_only', 'fp_machine_only'}
 QUALITY_FILTER_TERMS = {'faint', 'distant'}
 MIN_SAMPLES_PER_CATEGORY = 30
@@ -68,6 +70,27 @@ def subtract_two_seconds(timestamp_str: str) -> str:
     dt = parse_timestamp(timestamp_str)
     dt_minus_offset = dt - timedelta(seconds=SEGMENT_DURATION_SECONDS)
     return format_timestamp(dt_minus_offset)
+
+
+def generate_uri(node: str, timestamp_str: str) -> str:
+    """
+    Generate a URI for the Orcasound bouts interface from a PST timestamp.
+    
+    Args:
+        node: The node name (e.g., "andrews-bay")
+        timestamp_str: PST timestamp string in format 'YYYY_MM_DD_HH_MM_SS_PST'
+    
+    Returns:
+        URI in format "https://live.orcasound.net/bouts/new/{node}?time={utc_time}"
+    """
+    # Parse PST timestamp and convert to UTC
+    dt = parse_timestamp(timestamp_str)
+    utc_dt = dt.astimezone(UTC_TZ)
+    # Format as ISO 8601 with milliseconds and Z suffix
+    time_str = utc_dt.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+    # URL encode the time parameter
+    time_encoded = quote(time_str, safe='')
+    return f"https://live.orcasound.net/bouts/new/{node}?time={time_encoded}"
 
 
 def load_detections(csv_path: Path) -> List[Dict]:
@@ -414,7 +437,7 @@ def write_training_samples(samples: List[Dict], output_path: Path, model_inferen
             writer.writeheader()
             
             for sample in samples:
-                # Create a copy and adjust timestamp
+                # Create a copy and adjust timestamp and URI
                 output_row = sample.copy()
                 
                 # For tp_human_only detections, use model-based timestamp correction
@@ -425,6 +448,9 @@ def write_training_samples(samples: List[Dict], output_path: Path, model_inferen
                 else:
                     # For all other detections, subtract 2 seconds
                     output_row['Timestamp'] = subtract_two_seconds(sample['Timestamp'])
+                
+                # Update URI to match the new timestamp
+                output_row['URI'] = generate_uri(sample['NodeName'], output_row['Timestamp'])
                 
                 writer.writerow(output_row)
 
