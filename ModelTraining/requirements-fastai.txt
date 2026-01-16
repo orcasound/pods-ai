@@ -1,0 +1,8 @@
+# Optional requirements for FastAI model support
+# Install these if you want to use MODEL_TYPE=fastai
+# pip install -r requirements-fastai.txt
+
+fastai
+torch
+torchaudio
+soundfile

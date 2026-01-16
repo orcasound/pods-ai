@@ -33,7 +33,13 @@ By default, `extract_training_samples.py` uses a dummy model for testing. To use
 
 #### Option 1: Auto-download the model
 
-Set environment variables before running the script:
+First, install FastAI dependencies:
+
+```bash
+pip install -r requirements-fastai.txt
+```
+
+Then set environment variables before running the script:
 
 ```bash
 export MODEL_TYPE=fastai
@@ -58,6 +64,14 @@ python extract_training_samples.py
 ```
 
 #### Option 2: Manually download the model
+
+First, install FastAI dependencies:
+
+```bash
+pip install -r requirements-fastai.txt
+```
+
+Then download and set up the model:
 
 ```bash
 # Create model directory
@@ -109,11 +123,21 @@ Key dependencies:
 - `m3u8`: For HLS stream parsing
 - `pytz`: For timezone handling
 
-For FastAI model support, you may also need:
+### Optional: FastAI Model Support
+
+For FastAI model support (when using `MODEL_TYPE=fastai`), install additional dependencies:
+
+```bash
+pip install -r requirements-fastai.txt
+```
+
+This installs:
 - `fastai`
 - `torch`
 - `torchaudio`
 - `soundfile`
+
+Note: The script works with the dummy model by default without these dependencies.
 
 ## Helper Scripts
 
