@@ -21,6 +21,7 @@ each 2-second sample. See:
 https://github.com/orcasound/aifororcas-livesystem/blob/main/InferenceSystem/src/LiveInferenceOrchestrator.py
 """
 
+import argparse
 import csv
 from collections import defaultdict
 from datetime import datetime, timedelta
@@ -72,12 +73,12 @@ def subtract_two_seconds(timestamp_str: str) -> str:
     return format_timestamp(dt_minus_offset)
 
 
-def generate_uri(node: str, timestamp_str: str) -> str:
+def generate_uri(original_uri: str, timestamp_str: str) -> str:
     """
     Generate a URI for the Orcasound bouts interface from a PST timestamp.
     
     Args:
-        node: The node name (e.g., "andrews-bay")
+        original_uri: The original URI
         timestamp_str: PST timestamp string in format 'YYYY_MM_DD_HH_MM_SS_PST'
     
     Returns:
@@ -90,7 +91,9 @@ def generate_uri(node: str, timestamp_str: str) -> str:
     time_str = utc_dt.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
     # URL encode the time parameter
     time_encoded = quote(time_str, safe='')
-    return f"https://live.orcasound.net/bouts/new/{node}?time={time_encoded}"
+
+    base_uri = original_uri.split("?", 1)[0] # keep everything before the first "?"
+    return f"{base_uri}?time={time_encoded}"
 
 
 def load_detections(csv_path: Path) -> List[Dict]:
@@ -196,9 +199,23 @@ def select_training_samples(organized_data: Dict[str, Dict[str, List[Dict]]]) ->
     return selected
 
 
+def get_aligned_end_time(timestamp_str: str) -> datetime:
+    timestamp_pst = parse_timestamp(timestamp_str)
+    
+    # We need 60 seconds of audio ending at or shortly after the given timestamp
+    raw_end = timestamp_pst
+    snapped_sec = ((raw_end.second + 9) // 10) * 10
+    if snapped_sec == 60:
+       # roll over to next minute
+       raw_end = raw_end + timedelta(minutes=1)
+       snapped_sec = 0
+    end_time = raw_end.replace(second=snapped_sec, microsecond=0)
+    return end_time
+
+
 def download_60s_audio(node_name: str, timestamp_str: str, tmp_dir: str) -> Optional[str]:
     """
-    Download 60 seconds of audio preceding the given timestamp.
+    Download 60 seconds of audio, starting 51-60 seconds preceding the given timestamp.
     
     Args:
         node_name: The node name (e.g., "rpi_sunset_bay").
@@ -208,10 +225,7 @@ def download_60s_audio(node_name: str, timestamp_str: str, tmp_dir: str) -> Opti
     Returns:
         Path to the downloaded wav file, or None if download failed.
     """
-    timestamp_pst = parse_timestamp(timestamp_str)
-    
-    # We need 60 seconds of audio ending at the given timestamp
-    end_time = timestamp_pst
+    end_time = get_aligned_end_time(timestamp_str)
     start_time = end_time - timedelta(seconds=60)
     
     # Set up S3 bucket and folder information
@@ -344,7 +358,7 @@ def compute_correct_timestamp_for_tp_human_only(
     """
     Compute the correct timestamp for a tp_human_only detection.
     
-    For tp_human_only detections, we download the preceding 60 seconds of audio,
+    For tp_human_only detections, we download the preceding 50-60 seconds of audio,
     run the model on it to score each 2-second segment, find the highest scoring
     segment, and adjust the timestamp accordingly.
     
@@ -374,7 +388,7 @@ def compute_correct_timestamp_for_tp_human_only(
         prediction_results = model_inference.predict(wav_path)
         
         local_confidences = prediction_results["local_confidences"]
-        print(f"  Model returned {len(local_confidences)} segments")
+        print(f"  Model returned {len(local_confidences)} segments: {local_confidences}")
         
         if not local_confidences:
             print(f"  No confidences returned, falling back to 2-second offset")
@@ -384,23 +398,15 @@ def compute_correct_timestamp_for_tp_human_only(
         max_confidence_idx = local_confidences.index(max(local_confidences))
         max_confidence = local_confidences[max_confidence_idx]
         
-        print(f"  Highest score: {max_confidence} at segment {max_confidence_idx}")
+        print(f"  Highest score: {max_confidence} at second {max_confidence_idx}")
         
-        # Each segment is SEGMENT_DURATION_SECONDS
-        # The offset is calculated as (num_segments - max_confidence_idx) * SEGMENT_DURATION_SECONDS
+        # The offset is calculated as (num_segments - max_confidence_idx)
         # This gives us how many seconds before the original timestamp the highest scoring segment starts
-        num_segments = len(local_confidences)
-        seconds_before_end = (num_segments - max_confidence_idx) * SEGMENT_DURATION_SECONDS
-        
-        # Ensure offset is between SEGMENT_DURATION_SECONDS and 60 seconds
-        seconds_before_end = max(SEGMENT_DURATION_SECONDS, min(60, seconds_before_end))
-        
-        print(f"  Adjusting timestamp by {seconds_before_end} seconds")
-        
-        # Subtract the offset from the original timestamp
-        dt = parse_timestamp(timestamp_str)
-        dt_adjusted = dt - timedelta(seconds=seconds_before_end)
-        return format_timestamp(dt_adjusted)
+        end_time = get_aligned_end_time(timestamp_str)
+        start_time = end_time - timedelta(seconds=60 - max_confidence_idx)
+        print(f"  Timestamp: {start_time}")
+
+        return format_timestamp(start_time)
         
     except Exception as e:
         print(f"  Error during inference: {e}")
@@ -445,20 +451,32 @@ def write_training_samples(samples: List[Dict], output_path: Path, model_inferen
                     output_row['Timestamp'] = compute_correct_timestamp_for_tp_human_only(
                         sample, model_inference, tmp_dir
                     )
-                else:
-                    # For all other detections, subtract 2 seconds
-                    output_row['Timestamp'] = subtract_two_seconds(sample['Timestamp'])
+
+                # Subtract 2 seconds to get correct offset. Not sure why.
+                output_row['Timestamp'] = subtract_two_seconds(output_row['Timestamp'])
                 
                 # Update URI to match the new timestamp
-                output_row['URI'] = generate_uri(sample['NodeName'], output_row['Timestamp'])
+                output_row['URI'] = generate_uri(sample['URI'], output_row['Timestamp'])
                 
                 writer.writerow(output_row)
 
 
 def main():
     """Main function to extract training samples."""
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(
+        description="Extract training samples from detections CSV with intelligent selection criteria"
+    )
+    parser.add_argument(
+        '--input',
+        type=str,
+        default='output_segments/detections.csv',
+        help='Path to input detections CSV file (default: output_segments/detections.csv)'
+    )
+    args = parser.parse_args()
+    
     # Paths
-    input_path = Path('output_segments/detections.csv')
+    input_path = Path(args.input)
     output_path = Path('output_segments/training_samples.csv')
     
     print(f"Loading detections from {input_path}...")
