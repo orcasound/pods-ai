@@ -49,7 +49,7 @@ from audio_utils import (
 PACIFIC_TZ = timezone('US/Pacific')
 UTC_TZ = timezone('UTC')
 PREFERRED_NOTES = {'tp_machine_only', 'fp_machine_only'}
-QUALITY_FILTER_TERMS = {'faint', 'distant'}
+QUALITY_FILTER_TERMS = {'faint', 'distant', 'quiet', 'noise'}
 MIN_SAMPLES_PER_CATEGORY = 30
 SEGMENT_DURATION_SECONDS = 2  # Duration of each audio segment for model inference
 
@@ -120,7 +120,7 @@ def sort_by_preference(detections: List[Dict]) -> List[Dict]:
     """
     Sort detections by preference:
     1. Preferred notes (tp_machine_only, fp_machine_only) first
-    2. Descriptions without quality issues (faint, distant) preferred
+    2. Descriptions without quality issues (e.g., faint, distant) preferred
     3. Then by timestamp (oldest first)
     """
     def sort_key(det):
@@ -388,7 +388,8 @@ def compute_correct_timestamp_for_tp_human_only(
         prediction_results = model_inference.predict(wav_path)
         
         local_confidences = prediction_results["local_confidences"]
-        print(f"  Model returned {len(local_confidences)} segments: {local_confidences}")
+        for (i, score) in enumerate(local_confidences):
+            print(f"    Second {i}: Probability {score * 100}")
         
         if not local_confidences:
             print(f"  No confidences returned, falling back to 2-second offset")
@@ -397,8 +398,16 @@ def compute_correct_timestamp_for_tp_human_only(
         # Find the index of the highest scoring segment
         max_confidence_idx = local_confidences.index(max(local_confidences))
         max_confidence = local_confidences[max_confidence_idx]
-        
+
         print(f"  Highest score: {max_confidence} at second {max_confidence_idx}")
+
+        # Find whether it's better here or 1 second earlier
+        previous_confidence = local_confidences[max(0, max_confidence_idx - 1)]
+        next_confidence = local_confidences[min(len(local_confidences) - 1, max_confidence_idx + 1)]
+        if previous_confidence > next_confidence:
+            max_confidence_idx = max(0, max_confidence_idx - 1)
+            max_confidence = previous_confidence
+            print(f"  Adjusted to previous second: {max_confidence} at second {max_confidence_idx}")
         
         # The offset is calculated as (num_segments - max_confidence_idx)
         # This gives us how many seconds before the original timestamp the highest scoring segment starts
