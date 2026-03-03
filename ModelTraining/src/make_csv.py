@@ -481,7 +481,7 @@ def process_all_feeds(output_root: Path, feed_filter: Optional[str] = None):
     csv_path = output_root / "detections.csv"
     output_root.mkdir(parents=True, exist_ok=True)
     
-    with open(csv_path, 'w', newline='', encoding='utf-8') as csvfile:
+    with open(csv_path, 'w', newline='\n', encoding='utf-8') as csvfile:
         csv_writer = csv.writer(csvfile)
         # Write header
         csv_writer.writerow(['Category', 'NodeName', 'Timestamp', 'URI', 'Description', 'Notes', 'Confidence'])
