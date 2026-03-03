@@ -354,7 +354,7 @@ def compute_correct_timestamp_for_tp_human_only(
     sample: Dict, 
     model_inference,
     tmp_dir: str
-) -> str:
+) -> Tuple[str, float]:
     """
     Compute the correct timestamp for a tp_human_only detection.
     
@@ -368,7 +368,7 @@ def compute_correct_timestamp_for_tp_human_only(
         tmp_dir: Temporary directory for audio files
     
     Returns:
-        Corrected timestamp string
+        Tuple of (corrected timestamp string, max confidence score)
     """
     node_name = sample['NodeName']
     timestamp_str = sample['Timestamp']
@@ -380,7 +380,7 @@ def compute_correct_timestamp_for_tp_human_only(
     
     if wav_path is None:
         print(f"  Failed to download audio, falling back to 2-second offset")
-        return subtract_two_seconds(timestamp_str)
+        return subtract_two_seconds(timestamp_str), 0.0
     
     try:
         # Run model inference
@@ -393,7 +393,7 @@ def compute_correct_timestamp_for_tp_human_only(
         
         if not local_confidences:
             print(f"  No confidences returned, falling back to 2-second offset")
-            return subtract_two_seconds(timestamp_str)
+            return subtract_two_seconds(timestamp_str), 0.0
         
         # Find the index of the highest scoring segment
         max_confidence_idx = local_confidences.index(max(local_confidences))
@@ -415,12 +415,12 @@ def compute_correct_timestamp_for_tp_human_only(
         start_time = end_time - timedelta(seconds=60 - max_confidence_idx)
         print(f"  Timestamp: {start_time}")
 
-        return format_timestamp(start_time)
+        return format_timestamp(start_time), max_confidence * 100  # Convert to percentage
         
     except Exception as e:
         print(f"  Error during inference: {e}")
         print(f"  Falling back to 2-second offset")
-        return subtract_two_seconds(timestamp_str)
+        return subtract_two_seconds(timestamp_str), 0.0
     finally:
         # Clean up the downloaded audio file
         if wav_path and os.path.exists(wav_path):
@@ -457,27 +457,36 @@ def write_training_samples(samples: List[Dict], output_path: Path, model_inferen
     with TemporaryDirectory() as tmp_dir:
         with open(output_path, 'w', newline='', encoding='utf-8') as f:
             # Use same columns as detections.csv
-            fieldnames = ['Category', 'NodeName', 'Timestamp', 'URI', 'Description', 'Notes']
+            fieldnames = ['Category', 'NodeName', 'Timestamp', 'URI', 'Description', 'Notes', 'Confidence']
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             
             writer.writeheader()
             
-            for sample in samples:
+            total_samples = len(samples)
+            print(f"\nProcessing {total_samples} samples...")
+            
+            for idx, sample in enumerate(samples, start=1):
+                print(f"\n[{idx}/{total_samples}] Processing: {sample['Category']} - {sample['NodeName']} - {sample['Timestamp']}")
+                
                 # Create a copy and adjust timestamp and URI
                 output_row = sample.copy()
                 
                 # Check if there's a manual timestamp correction for this sample
                 if sample['URI'] in manual_timestamps:
-                    print(f"Using manual timestamp for {sample['URI']}")
+                    print(f"  Using manual timestamp for {sample['URI']}")
                     output_row['Timestamp'] = manual_timestamps[sample['URI']]
+                    output_row['Confidence'] = ''  # No confidence for manual timestamps
                 # For tp_human_only detections, use model-based timestamp correction
                 elif sample['Notes'] == 'tp_human_only' and model_inference is not None:
-                    output_row['Timestamp'] = compute_correct_timestamp_for_tp_human_only(
+                    timestamp, confidence = compute_correct_timestamp_for_tp_human_only(
                         sample, model_inference, tmp_dir
                     )
+                    output_row['Timestamp'] = timestamp
+                    output_row['Confidence'] = f"{confidence:.4f}"
                 else:
                     # For all other detections, subtract 2 seconds
                     output_row['Timestamp'] = subtract_two_seconds(sample['Timestamp'])
+                    output_row['Confidence'] = sample['Confidence']
                 
                 # Update URI to match the new timestamp
                 output_row['URI'] = generate_uri(sample['URI'], output_row['Timestamp'])

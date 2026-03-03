@@ -50,6 +50,7 @@ class OrcaHelloDetection:
     feed: OrcasiteFeed
     timestamp: datetime
     status: str                  # e.g., "confirmed", "rejected", etc.
+    confidence: Optional[float] = None  # Confidence score from model inference
 
 def get_label(
     orcasite_det: OrcasiteDetection,
@@ -358,11 +359,20 @@ def get_orcahello_detections(feed: OrcasiteFeed) -> List[OrcaHelloDetection]:
         except Exception:
             ts = None
 
+        # Extract confidence if available
+        confidence = item.get("whaleFoundConfidence")
+        if confidence is not None:
+            try:
+                confidence = float(confidence)
+            except (ValueError, TypeError):
+                confidence = None
+
         det = OrcaHelloDetection(
             id=item.get("id"),
             feed=feed,
             timestamp=ts,
             status=status,
+            confidence=confidence,
         )
 
         results.append(det)
@@ -456,7 +466,13 @@ def process_all_feeds(output_root: Path, feed_filter: Optional[str] = None):
             node_name = det.feed.node_name  # e.g., "rpi_sunset_bay"
             timestamp_pst = format_timestamp_pst(det.timestamp)
             uri = generate_uri(det.feed.slug, det.timestamp)
-            all_rows.append((det.timestamp, category, node_name, timestamp_pst, uri, det.description, classification.kind))
+
+            # Get confidence from orcahello_match if available
+            confidence = ""
+            if orcahello_match and orcahello_match.confidence is not None:
+                confidence = f"{orcahello_match.confidence:.4f}"
+
+            all_rows.append((det.timestamp, category, node_name, timestamp_pst, uri, det.description, classification.kind, confidence))
     
     # Sort all rows by timestamp (first element of tuple) - oldest first, newest last
     all_rows.sort(key=lambda row: row[0])
@@ -468,11 +484,11 @@ def process_all_feeds(output_root: Path, feed_filter: Optional[str] = None):
     with open(csv_path, 'w', newline='', encoding='utf-8') as csvfile:
         csv_writer = csv.writer(csvfile)
         # Write header
-        csv_writer.writerow(['Category', 'NodeName', 'Timestamp', 'URI', 'Description', 'Notes'])
+        csv_writer.writerow(['Category', 'NodeName', 'Timestamp', 'URI', 'Description', 'Notes', 'Confidence'])
         
         # Write sorted rows (exclude the timestamp used for sorting)
         for row in all_rows:
-            csv_writer.writerow([row[1], row[2], row[3], row[4], row[5], row[6]])
+            csv_writer.writerow([row[1], row[2], row[3], row[4], row[5], row[6], row[7]])
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(

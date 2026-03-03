@@ -6,8 +6,11 @@ This directory contains scripts for preparing training data for orca detection m
 
 The `ModelTraining/src` directory has the following scripts for different steps meant to be run in the order listed:
 
-1. **make_csv.py**: Create `output_segments/detections.csv` with a set of detections
-2. **extract_training_samples.py**: Use `output_segments/detections.csv` to create `output_segments/training_samples.csv`
+1. **make_csv.py**: Create a CSV file (`output_segments/detections.csv`) with a set of detections.
+   The CSV file has the following columns: Category, NodeName, Timestamp, URI, Description, and Notes.
+2. **extract_training_samples.py**: Use an input CSV file (`output_segments/detections.csv` by default)
+   to create `output_segments/training_samples.csv`. An alternate input filename can be specified with
+   `--input _filename_`.
    - For `tp_human_only` detections, runs model inference on preceding 60 seconds to find correct timestamp
    - For other detections, subtracts 2 seconds from timestamp
 3. **download_wavs.py**: Use `output_segments/training_samples.csv` and download wav files into subdirectories under `output_segments`
