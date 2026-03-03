@@ -492,6 +492,18 @@ def write_training_samples(samples: List[Dict], output_path: Path, model_inferen
                 output_row['URI'] = generate_uri(sample['URI'], output_row['Timestamp'])
                 
                 writer.writerow(output_row)
+        
+        # Normalize line endings to LF to ensure consistency across platforms
+        # Read the file content
+        with open(output_path, 'rb') as f:
+            content = f.read()
+        
+        # Replace CRLF with LF
+        content = content.replace(b'\r\n', b'\n')
+        
+        # Write back with normalized line endings
+        with open(output_path, 'wb') as f:
+            f.write(content)
 
 
 def main():
