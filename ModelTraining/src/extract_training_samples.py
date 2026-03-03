@@ -455,7 +455,8 @@ def write_training_samples(samples: List[Dict], output_path: Path, model_inferen
     
     # Create a temporary directory for audio downloads
     with TemporaryDirectory() as tmp_dir:
-        with open(output_path, 'w', newline='', encoding='utf-8') as f:
+        # Use newline='\n' to force LF line endings on all platforms for consistency
+        with open(output_path, 'w', newline='\n', encoding='utf-8') as f:
             # Use same columns as detections.csv
             fieldnames = ['Category', 'NodeName', 'Timestamp', 'URI', 'Description', 'Notes', 'Confidence']
             writer = csv.DictWriter(f, fieldnames=fieldnames)
@@ -492,18 +493,6 @@ def write_training_samples(samples: List[Dict], output_path: Path, model_inferen
                 output_row['URI'] = generate_uri(sample['URI'], output_row['Timestamp'])
                 
                 writer.writerow(output_row)
-        
-        # Normalize line endings to LF to ensure consistency across platforms
-        # Read the file content
-        with open(output_path, 'rb') as f:
-            content = f.read()
-        
-        # Replace CRLF with LF
-        content = content.replace(b'\r\n', b'\n')
-        
-        # Write back with normalized line endings
-        with open(output_path, 'wb') as f:
-            f.write(content)
 
 
 def main():
