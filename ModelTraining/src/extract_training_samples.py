@@ -442,6 +442,17 @@ def write_training_samples(samples: List[Dict], output_path: Path, model_inferen
     """
     output_path.parent.mkdir(parents=True, exist_ok=True)
     
+    # Load manual timestamp corrections if available
+    manual_timestamps = {}
+    manual_corrections_path = Path('output_segments/manual_timestamps.csv')
+    if manual_corrections_path.exists():
+        print(f"\nLoading manual timestamp corrections from {manual_corrections_path}...")
+        with open(manual_corrections_path, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                manual_timestamps[row['SampleURI']] = row['Timestamp']
+        print(f"  Loaded {len(manual_timestamps)} manual timestamp corrections")
+    
     # Create a temporary directory for audio downloads
     with TemporaryDirectory() as tmp_dir:
         with open(output_path, 'w', newline='', encoding='utf-8') as f:
@@ -455,14 +466,18 @@ def write_training_samples(samples: List[Dict], output_path: Path, model_inferen
                 # Create a copy and adjust timestamp and URI
                 output_row = sample.copy()
                 
+                # Check if there's a manual timestamp correction for this sample
+                if sample['URI'] in manual_timestamps:
+                    print(f"Using manual timestamp for {sample['URI']}")
+                    output_row['Timestamp'] = manual_timestamps[sample['URI']]
                 # For tp_human_only detections, use model-based timestamp correction
-                if sample['Notes'] == 'tp_human_only' and model_inference is not None:
+                elif sample['Notes'] == 'tp_human_only' and model_inference is not None:
                     output_row['Timestamp'] = compute_correct_timestamp_for_tp_human_only(
                         sample, model_inference, tmp_dir
                     )
-
-                # Subtract 2 seconds to get correct offset. Not sure why.
-                output_row['Timestamp'] = subtract_two_seconds(output_row['Timestamp'])
+                else:
+                    # For all other detections, subtract 2 seconds
+                    output_row['Timestamp'] = subtract_two_seconds(sample['Timestamp'])
                 
                 # Update URI to match the new timestamp
                 output_row['URI'] = generate_uri(sample['URI'], output_row['Timestamp'])
