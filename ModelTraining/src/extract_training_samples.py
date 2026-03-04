@@ -415,9 +415,7 @@ def compute_correct_timestamp_for_tp_human_only(
         start_time = end_time - timedelta(seconds=60 - max_confidence_idx)
         print(f"  Timestamp: {start_time}")
 
-        # Round to 2 decimal places on percentage to avoid platform-specific floating-point differences
-        confidence_percentage = round(max_confidence * 100, 2)
-        return format_timestamp(start_time), confidence_percentage
+        return format_timestamp(start_time), max_confidence * 100
         
     except Exception as e:
         print(f"  Error during inference: {e}")
