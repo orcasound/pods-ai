@@ -455,8 +455,7 @@ def write_training_samples(samples: List[Dict], output_path: Path, model_inferen
     
     # Create a temporary directory for audio downloads
     with TemporaryDirectory() as tmp_dir:
-        # Use newline='\n' to force LF line endings on all platforms for consistency
-        with open(output_path, 'w', newline='\n', encoding='utf-8') as f:
+        with open(output_path, 'w', newline='', encoding='utf-8') as f:
             # Use same columns as detections.csv
             fieldnames = ['Category', 'NodeName', 'Timestamp', 'URI', 'Description', 'Notes', 'Confidence']
             writer = csv.DictWriter(f, fieldnames=fieldnames)
@@ -483,18 +482,11 @@ def write_training_samples(samples: List[Dict], output_path: Path, model_inferen
                         sample, model_inference, tmp_dir
                     )
                     output_row['Timestamp'] = timestamp
-                    output_row['Confidence'] = f"{confidence:.4f}"
+                    output_row['Confidence'] = confidence
                 else:
                     # For all other detections, subtract 2 seconds
                     output_row['Timestamp'] = subtract_two_seconds(sample['Timestamp'])
-                    # Round confidence to 4 decimal places for consistency across platforms
-                    if sample['Confidence']:
-                        try:
-                            output_row['Confidence'] = f"{float(sample['Confidence']):.4f}"
-                        except (ValueError, TypeError):
-                            output_row['Confidence'] = sample['Confidence']
-                    else:
-                        output_row['Confidence'] = sample['Confidence']
+                    output_row['Confidence'] = sample['Confidence']
                 
                 # Update URI to match the new timestamp
                 output_row['URI'] = generate_uri(sample['URI'], output_row['Timestamp'])
