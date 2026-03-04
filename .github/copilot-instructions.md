@@ -61,6 +61,7 @@ pods-ai/
 - **Docstrings**: All public functions and classes must have Google-style or plain docstrings describing parameters and return values.
 - **Error handling**: Catch exceptions at I/O boundaries (network, file), print a descriptive error message, and return an empty list or `None` as appropriate—do not let exceptions propagate silently.
 - **Constants**: Define module-level constants for magic values (e.g., `NEAR_MIN`, `MAX_DETECTION_PAGES`).
+- **Comments**: Comments should end in punctuation (typically a period).
 
 ## ModelTraining Pipeline
 
