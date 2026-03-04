@@ -11,6 +11,9 @@ name: Validate-YAML
 
 on:
   pull_request:
+    paths:
+      - '**.yml'
+      - '**.yaml'
 
 permissions:
   contents: read
