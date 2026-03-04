@@ -5,8 +5,6 @@ name: Check CSV
 
 on:
   pull_request:
-    paths-ignore:
-      - '**.md'
 
 concurrency:
   # Cancel any CI/CD workflow currently in progress for the same PR.
