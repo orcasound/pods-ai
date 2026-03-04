@@ -487,7 +487,14 @@ def write_training_samples(samples: List[Dict], output_path: Path, model_inferen
                 else:
                     # For all other detections, subtract 2 seconds
                     output_row['Timestamp'] = subtract_two_seconds(sample['Timestamp'])
-                    output_row['Confidence'] = sample['Confidence']
+                    # Round confidence to 4 decimal places for consistency across platforms
+                    if sample['Confidence']:
+                        try:
+                            output_row['Confidence'] = f"{float(sample['Confidence']):.4f}"
+                        except (ValueError, TypeError):
+                            output_row['Confidence'] = sample['Confidence']
+                    else:
+                        output_row['Confidence'] = sample['Confidence']
                 
                 # Update URI to match the new timestamp
                 output_row['URI'] = generate_uri(sample['URI'], output_row['Timestamp'])
