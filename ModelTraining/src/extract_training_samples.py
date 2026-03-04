@@ -482,7 +482,7 @@ def write_training_samples(samples: List[Dict], output_path: Path, model_inferen
                         sample, model_inference, tmp_dir
                     )
                     output_row['Timestamp'] = timestamp
-                    output_row['Confidence'] = confidence
+                    output_row['Confidence'] = f"{confidence:.4f}"
                 else:
                     # For all other detections, subtract 2 seconds
                     output_row['Timestamp'] = subtract_two_seconds(sample['Timestamp'])
