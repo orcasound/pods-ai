@@ -17,6 +17,9 @@ permissions:
 
 jobs:
   validate-yaml:
+    permissions:
+      actions: write  # for fkirc/skip-duplicate-actions to skip or stop workflow runs
+      contents: read  # for actions/checkout to fetch code
     runs-on: ubuntu-latest
 
     steps:
@@ -25,11 +28,20 @@ jobs:
         with:
           egress-policy: audit
 
+      - id: skip_check
+        uses: fkirc/skip-duplicate-actions@f75f66ce1886f00957d99748a42c724f4330bdcf  # v5.3.1
+        with:
+          cancel_others: 'false'
+          paths: '["**.yml", "**.yaml"]'
+
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        if: steps.skip_check.outputs.should_skip != 'true'
 
       - name: Install yamllint
+        if: steps.skip_check.outputs.should_skip != 'true'
         run: pip install yamllint
 
       - name: Validate YAML
+        if: steps.skip_check.outputs.should_skip != 'true'
         run: yamllint .
