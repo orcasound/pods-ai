@@ -415,8 +415,9 @@ def compute_correct_timestamp_for_tp_human_only(
         start_time = end_time - timedelta(seconds=60 - max_confidence_idx)
         print(f"  Timestamp: {start_time}")
 
-        # Round confidence to 4 decimal places to ensure consistency across platforms
-        return format_timestamp(start_time), round(max_confidence * 100, 4)
+        # Round confidence first, then multiply to avoid platform-specific floating-point differences
+        rounded_confidence = round(max_confidence, 6)  # Round to 6 decimal places first
+        return format_timestamp(start_time), round(rounded_confidence * 100, 4)
         
     except Exception as e:
         print(f"  Error during inference: {e}")
