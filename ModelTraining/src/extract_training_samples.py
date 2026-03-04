@@ -458,7 +458,7 @@ def write_training_samples(samples: List[Dict], output_path: Path, model_inferen
         with open(output_path, 'w', newline='', encoding='utf-8') as f:
             # Use same columns as detections.csv
             fieldnames = ['Category', 'NodeName', 'Timestamp', 'URI', 'Description', 'Notes', 'Confidence']
-            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer = csv.DictWriter(f, fieldnames=fieldnames, lineterminator='\n')
             
             writer.writeheader()
             
