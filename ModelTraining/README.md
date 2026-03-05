@@ -14,7 +14,8 @@ The `ModelTraining/src` directory has the following scripts for different steps 
    - For `tp_human_only` detections, runs model inference on preceding 60 seconds to find correct timestamp
    - For other detections, subtracts 2 seconds from timestamp
 3. **download_wavs.py**: Use `output_segments/training_samples.csv` and download wav files into subdirectories under `output_segments`
-4. **make_spectrograms.py**: Create a png file alongside each wav file in a subdirectory of `output_segments`
+4. **process_humpback_wavs.py**: Process files from the humpback submodule into the humpback subdirectory under `output_segments`
+5. **make_spectrograms.py**: Create a png file alongside each wav file in a subdirectory of `output_segments`
 
 ## Model-Based Timestamp Correction for tp_human_only
 
