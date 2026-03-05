@@ -4,7 +4,7 @@
     <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>374cfa2a-7626-4e39-a61f-20af1688caa5</ProjectGuid>
     <ProjectHome>.</ProjectHome>
-    <StartupFile>src\make_csv.py</StartupFile>
+    <StartupFile>src\extract_training_samples.py</StartupFile>
     <SearchPath>
     </SearchPath>
     <WorkingDirectory>.</WorkingDirectory>
@@ -14,11 +14,13 @@
     <LaunchProvider>Standard Python launcher</LaunchProvider>
     <!-- Command line arguments are intentionally left blank.
          Developers may customize this locally. -->
-    <CommandLineArguments>
-    </CommandLineArguments>
+    <CommandLineArguments>--input output_segments/debug.csv</CommandLineArguments>
     <EnableNativeCodeDebugging>False</EnableNativeCodeDebugging>
     <IsWindowsApplication>False</IsWindowsApplication>
     <InterpreterId>MSBuild|.venv|$(MSBuildProjectFullPath)</InterpreterId>
+    <Environment>MODEL_TYPE=fastai
+MODEL_AUTO_DOWNLOAD=true
+MODEL_URL=https://trainedproductionmodels.blob.core.windows.net/dnnmodel/11-15-20.FastAI.R1-12.zip</Environment>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
     <DebugSymbols>true</DebugSymbols>

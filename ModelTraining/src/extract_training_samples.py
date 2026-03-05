@@ -8,20 +8,51 @@ Extract training samples from detections.csv with the following constraints:
 - Prefer tp_machine_only or fp_machine_only notes
 - Spread samples evenly across nodes per category
 - Minimize total rows while meeting constraints
-- Subtract 2 seconds from timestamps
+- For tp_human_only detections: Run model on preceding 60 seconds to find correct timestamp
+- For other detections: Subtract 2 seconds from timestamps
+
+For tp_human_only detections, we download 60 seconds of audio preceding the detection
+timestamp, run model inference to score each 2-second segment, and use the highest
+scoring segment to determine the correct timestamp offset (between 2-60 seconds).
+
+This matches the behavior of aifororcas-livesystem's LiveInferenceOrchestrator.py
+which uses DateRangeHLSStream to download audio and returns local_confidences for
+each 2-second sample. See:
+https://github.com/orcasound/aifororcas-livesystem/blob/main/InferenceSystem/src/LiveInferenceOrchestrator.py
 """
 
+import argparse
 import csv
 from collections import defaultdict
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import List, Dict, Tuple
+from typing import List, Dict, Tuple, Optional
 from pytz import timezone
+import os
+import math
+import shutil
+import sys
+from tempfile import TemporaryDirectory
+from urllib.parse import quote
+
+import ffmpeg
+import m3u8
+
+from model_inference import get_model_inference
+from audio_utils import (
+    get_cached_folders,
+    get_folders_between_timestamp,
+    get_difference_between_times_in_seconds,
+    download_from_url
+)
 
 PACIFIC_TZ = timezone('US/Pacific')
+UTC_TZ = timezone('UTC')
 PREFERRED_NOTES = {'tp_machine_only', 'fp_machine_only'}
-QUALITY_FILTER_TERMS = {'faint', 'distant'}
+QUALITY_FILTER_TERMS = {'faint', 'distant', 'quiet', 'noise'}
 MIN_SAMPLES_PER_CATEGORY = 30
+SEGMENT_DURATION_SECONDS = 2  # Duration of each audio segment for model inference
+
 
 
 def parse_timestamp(timestamp_str: str) -> datetime:
@@ -36,10 +67,33 @@ def format_timestamp(dt: datetime) -> str:
 
 
 def subtract_two_seconds(timestamp_str: str) -> str:
-    """Subtract 2 seconds from a PST timestamp string."""
+    """Subtract SEGMENT_DURATION_SECONDS from a PST timestamp string."""
     dt = parse_timestamp(timestamp_str)
-    dt_minus_2 = dt - timedelta(seconds=2)
-    return format_timestamp(dt_minus_2)
+    dt_minus_offset = dt - timedelta(seconds=SEGMENT_DURATION_SECONDS)
+    return format_timestamp(dt_minus_offset)
+
+
+def generate_uri(original_uri: str, timestamp_str: str) -> str:
+    """
+    Generate a URI for the Orcasound bouts interface from a PST timestamp.
+    
+    Args:
+        original_uri: The original URI
+        timestamp_str: PST timestamp string in format 'YYYY_MM_DD_HH_MM_SS_PST'
+    
+    Returns:
+        URI in format "https://live.orcasound.net/bouts/new/{node}?time={utc_time}"
+    """
+    # Parse PST timestamp and convert to UTC
+    dt = parse_timestamp(timestamp_str)
+    utc_dt = dt.astimezone(UTC_TZ)
+    # Format as ISO 8601 with milliseconds and Z suffix
+    time_str = utc_dt.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+    # URL encode the time parameter
+    time_encoded = quote(time_str, safe='')
+
+    base_uri = original_uri.split("?", 1)[0] # keep everything before the first "?"
+    return f"{base_uri}?time={time_encoded}"
 
 
 def load_detections(csv_path: Path) -> List[Dict]:
@@ -66,7 +120,7 @@ def sort_by_preference(detections: List[Dict]) -> List[Dict]:
     """
     Sort detections by preference:
     1. Preferred notes (tp_machine_only, fp_machine_only) first
-    2. Descriptions without quality issues (faint, distant) preferred
+    2. Descriptions without quality issues (e.g., faint, distant) preferred
     3. Then by timestamp (oldest first)
     """
     def sort_key(det):
@@ -145,28 +199,325 @@ def select_training_samples(organized_data: Dict[str, Dict[str, List[Dict]]]) ->
     return selected
 
 
-def write_training_samples(samples: List[Dict], output_path: Path):
-    """Write selected samples to CSV with timestamps adjusted."""
+def get_aligned_end_time(timestamp_str: str) -> datetime:
+    timestamp_pst = parse_timestamp(timestamp_str)
+    
+    # We need 60 seconds of audio ending at or shortly after the given timestamp
+    raw_end = timestamp_pst
+    snapped_sec = ((raw_end.second + 9) // 10) * 10
+    if snapped_sec == 60:
+       # roll over to next minute
+       raw_end = raw_end + timedelta(minutes=1)
+       snapped_sec = 0
+    end_time = raw_end.replace(second=snapped_sec, microsecond=0)
+    return end_time
+
+
+def download_60s_audio(node_name: str, timestamp_str: str, tmp_dir: str) -> Optional[str]:
+    """
+    Download 60 seconds of audio, starting 51-60 seconds preceding the given timestamp.
+    
+    Args:
+        node_name: The node name (e.g., "rpi_sunset_bay").
+        timestamp_str: The detection timestamp in Pacific time.
+        tmp_dir: Temporary directory to save the audio file.
+    
+    Returns:
+        Path to the downloaded wav file, or None if download failed.
+    """
+    end_time = get_aligned_end_time(timestamp_str)
+    start_time = end_time - timedelta(seconds=60)
+    
+    # Set up S3 bucket and folder information
+    hydrophone_stream_url = 'https://s3-us-west-2.amazonaws.com/audio-orcasound-net/' + node_name
+    bucket_folder = hydrophone_stream_url.split("https://s3-us-west-2.amazonaws.com/")[1]
+    tokens = bucket_folder.split("/")
+    s3_bucket = tokens[0]
+    folder_name = tokens[1]
+    prefix = folder_name + "/hls/"
+    
+    # Convert timestamps to unix time
+    start_unix_time = int(start_time.timestamp())
+    end_unix_time = int(end_time.timestamp())
+    
+    try:
+        # Use cached folders per node/bucket/prefix
+        all_hydrophone_folders = get_cached_folders(s3_bucket, prefix=prefix)
+        print(f"  Found {len(all_hydrophone_folders)} folders in total for {node_name}")
+        
+        valid_folders = get_folders_between_timestamp(all_hydrophone_folders, start_unix_time, end_unix_time)
+        print(f"  Found {len(valid_folders)} folders in date range")
+        
+        if not valid_folders:
+            print(f"  Warning: No folders found for timestamp {start_time}")
+            return None
+        
+        # Use the first valid folder
+        current_folder = int(valid_folders[0])
+        
+    except Exception as e:
+        print(f"  ERROR: Failed to query S3 bucket: {e}")
+        return None
+    
+    # Read the m3u8 file for the current folder
+    stream_url = f"{hydrophone_stream_url}/hls/{current_folder}/live.m3u8"
+    
+    try:
+        stream_obj = m3u8.load(stream_url)
+    except Exception as e:
+        print(f"  ERROR: Failed to load m3u8 file: {e}")
+        return None
+    
+    num_total_segments = len(stream_obj.segments)
+    if num_total_segments == 0:
+        print(f"  ERROR: No segments found in m3u8 file")
+        return None
+    
+    # Calculate target duration (average segment duration)
+    target_duration_exact = sum(item.duration for item in stream_obj.segments) / num_total_segments
+    target_duration = round(target_duration_exact, 1)
+    
+    # Calculate start and end indices based on time since folder start
+    # Note: there's typically a 2-second audio offset
+    audio_offset = 2
+    time_since_folder_start_for_start = get_difference_between_times_in_seconds(start_unix_time, current_folder)
+    time_since_folder_start_for_start -= audio_offset
+
+    time_since_folder_start_for_end = get_difference_between_times_in_seconds(end_unix_time, current_folder)
+    time_since_folder_start_for_end -= audio_offset
+
+    segment_start_index = max(0, math.floor(time_since_folder_start_for_start / target_duration))
+    segment_end_index = min(num_total_segments, math.ceil(time_since_folder_start_for_end / target_duration))
+    
+    if segment_end_index > num_total_segments:
+        print(f"  ERROR: Not enough segments available")
+        return None
+    
+    # Download and process segments
+    try:
+        file_names = []
+        for i in range(segment_start_index, segment_end_index):
+            audio_segment = stream_obj.segments[i]
+            base_path = audio_segment.base_uri
+            file_name = audio_segment.uri
+            audio_url = base_path + file_name
+            try:
+                download_from_url(audio_url, tmp_dir)
+                file_names.append(file_name)
+            except Exception as e:
+                print(f"  Warning: Skipping {audio_url}: {e}")
+        
+        if not file_names:
+            print("  ERROR: No segments were successfully downloaded")
+            return None
+        
+        # Concatenate all .ts files
+        clipname = f"temp_60s_{node_name}_{timestamp_str}"
+        if len(file_names) > 1:
+            hls_file = os.path.join(tmp_dir, clipname + ".ts")
+            with open(hls_file, "wb") as wfd:
+                for f in file_names:
+                    with open(os.path.join(tmp_dir, f), "rb") as fd:
+                        shutil.copyfileobj(fd, wfd)
+        else:
+            hls_file = os.path.join(tmp_dir, file_names[0])
+        
+        # Convert to wav using ffmpeg
+        wav_file_path = os.path.join(tmp_dir, f"{clipname}.wav")
+
+        # Compute offset (seconds) into the concatenated .ts where the desired start occurs
+        ss_offset = time_since_folder_start_for_start - (segment_start_index * target_duration)
+        if ss_offset < 0:
+            ss_offset = 0.0
+
+        # Use input seeking and limit duration to 60 seconds
+        stream = ffmpeg.input(hls_file, ss=ss_offset)
+        stream = ffmpeg.output(
+            stream,
+            wav_file_path,
+            t=60,  # 60 seconds
+            acodec="pcm_s16le",
+            ar=44100,
+            ac=1
+        )
+        ffmpeg.run(stream, overwrite_output=True, quiet=True)
+        
+        print(f"  Downloaded 60s audio: {wav_file_path}")
+        return wav_file_path
+        
+    except Exception as e:
+        print(f"  Warning: Unable to retrieve audio clip: {e}")
+        return None
+
+
+def compute_correct_timestamp_for_tp_human_only(
+    sample: Dict, 
+    model_inference,
+    tmp_dir: str
+) -> Tuple[str, float]:
+    """
+    Compute the correct timestamp for a tp_human_only detection.
+    
+    For tp_human_only detections, we download the preceding 50-60 seconds of audio,
+    run the model on it to score each 2-second segment, find the highest scoring
+    segment, and adjust the timestamp accordingly.
+    
+    Args:
+        sample: Detection sample dictionary
+        model_inference: Model inference instance
+        tmp_dir: Temporary directory for audio files
+    
+    Returns:
+        Tuple of (corrected timestamp string, max confidence score)
+    """
+    node_name = sample['NodeName']
+    timestamp_str = sample['Timestamp']
+    
+    print(f"Computing correct timestamp for tp_human_only: {node_name} - {timestamp_str}")
+    
+    # Download 60 seconds of audio
+    wav_path = download_60s_audio(node_name, timestamp_str, tmp_dir)
+    
+    if wav_path is None:
+        print(f"  Failed to download audio, falling back to 2-second offset")
+        return subtract_two_seconds(timestamp_str), 0.0
+    
+    try:
+        # Run model inference
+        print(f"  Running model inference...")
+        prediction_results = model_inference.predict(wav_path)
+        
+        local_confidences = prediction_results["local_confidences"]
+        for (i, score) in enumerate(local_confidences):
+            print(f"    Second {i}: Probability {score * 100}")
+        
+        if not local_confidences:
+            print(f"  No confidences returned, falling back to 2-second offset")
+            return subtract_two_seconds(timestamp_str), 0.0
+        
+        # Find the index of the highest scoring segment
+        max_confidence_idx = local_confidences.index(max(local_confidences))
+        max_confidence = local_confidences[max_confidence_idx]
+
+        print(f"  Highest score: {max_confidence} at second {max_confidence_idx}")
+
+        # Find whether it's better here or 1 second earlier
+        previous_confidence = local_confidences[max(0, max_confidence_idx - 1)]
+        next_confidence = local_confidences[min(len(local_confidences) - 1, max_confidence_idx + 1)]
+        if previous_confidence > next_confidence:
+            max_confidence_idx = max(0, max_confidence_idx - 1)
+            max_confidence = previous_confidence
+            print(f"  Adjusted to previous second: {max_confidence} at second {max_confidence_idx}")
+        
+        # The offset is calculated as (num_segments - max_confidence_idx)
+        # This gives us how many seconds before the original timestamp the highest scoring segment starts
+        end_time = get_aligned_end_time(timestamp_str)
+        start_time = end_time - timedelta(seconds=60 - max_confidence_idx)
+        print(f"  Timestamp: {start_time}")
+
+        return format_timestamp(start_time), max_confidence * 100
+        
+    except Exception as e:
+        print(f"  Error during inference: {e}")
+        print(f"  Falling back to 2-second offset")
+        return subtract_two_seconds(timestamp_str), 0.0
+    finally:
+        # Clean up the downloaded audio file
+        if wav_path and os.path.exists(wav_path):
+            try:
+                os.remove(wav_path)
+            except (OSError, PermissionError) as e:
+                # Ignore cleanup errors - file may already be deleted or inaccessible
+                pass
+
+
+def write_training_samples(samples: List[Dict], output_path: Path, model_inference=None):
+    """
+    Write selected samples to CSV with timestamps adjusted.
+    
+    Args:
+        samples: List of sample dictionaries
+        output_path: Path to output CSV file
+        model_inference: Optional model inference instance for tp_human_only timestamp correction
+    """
     output_path.parent.mkdir(parents=True, exist_ok=True)
     
-    with open(output_path, 'w', newline='', encoding='utf-8') as f:
-        # Use same columns as detections.csv
-        fieldnames = ['Category', 'NodeName', 'Timestamp', 'URI', 'Description', 'Notes']
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
-        
-        writer.writeheader()
-        
-        for sample in samples:
-            # Create a copy and adjust timestamp
-            output_row = sample.copy()
-            output_row['Timestamp'] = subtract_two_seconds(sample['Timestamp'])
-            writer.writerow(output_row)
+    # Load manual timestamp corrections if available
+    manual_timestamps = {}
+    manual_corrections_path = Path('output_segments/manual_timestamps.csv')
+    if manual_corrections_path.exists():
+        print(f"\nLoading manual timestamp corrections from {manual_corrections_path}...")
+        with open(manual_corrections_path, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                manual_timestamps[row['SampleURI']] = row['Timestamp']
+        print(f"  Loaded {len(manual_timestamps)} manual timestamp corrections")
+    
+    # Create a temporary directory for audio downloads
+    with TemporaryDirectory() as tmp_dir:
+        with open(output_path, 'w', newline='', encoding='utf-8') as f:
+            # Use same columns as detections.csv
+            fieldnames = ['Category', 'NodeName', 'Timestamp', 'URI', 'Description', 'Notes', 'Confidence']
+            writer = csv.DictWriter(f, fieldnames=fieldnames, lineterminator='\n')
+            
+            writer.writeheader()
+            
+            total_samples = len(samples)
+            print(f"\nProcessing {total_samples} samples...")
+            
+            for idx, sample in enumerate(samples, start=1):
+                print(f"\n[{idx}/{total_samples}] Processing: {sample['Category']} - {sample['NodeName']} - {sample['Timestamp']}")
+                
+                # Create a copy and adjust timestamp and URI
+                output_row = sample.copy()
+                
+                # Check if there's a manual timestamp correction for this sample
+                if sample['URI'] in manual_timestamps:
+                    print(f"  Using manual timestamp for {sample['URI']}")
+                    output_row['Timestamp'] = manual_timestamps[sample['URI']]
+                    output_row['Confidence'] = ''  # No confidence for manual timestamps
+                # For tp_human_only detections, use model-based timestamp correction
+                elif sample['Notes'] == 'tp_human_only' and model_inference is not None:
+                    timestamp, confidence = compute_correct_timestamp_for_tp_human_only(
+                        sample, model_inference, tmp_dir
+                    )
+                    output_row['Timestamp'] = timestamp
+                    output_row['Confidence'] = f"{confidence:.1f}"
+                else:
+                    # For all other detections, subtract 2 seconds
+                    output_row['Timestamp'] = subtract_two_seconds(sample['Timestamp'])
+                    confidence_str = sample.get('Confidence', '')
+                    if confidence_str:
+                        try:
+                            confidence = float(confidence_str)
+                            output_row['Confidence'] = f"{confidence:.1f}"
+                        except (ValueError, TypeError):
+                            output_row['Confidence'] = confidence_str  # Keep as-is if not a valid number
+                    else:
+                        output_row['Confidence'] = ''
+                
+                # Update URI to match the new timestamp
+                output_row['URI'] = generate_uri(sample['URI'], output_row['Timestamp'])
+                
+                writer.writerow(output_row)
 
 
 def main():
     """Main function to extract training samples."""
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(
+        description="Extract training samples from detections CSV with intelligent selection criteria"
+    )
+    parser.add_argument(
+        '--input',
+        type=str,
+        default='output_segments/detections.csv',
+        help='Path to input detections CSV file (default: output_segments/detections.csv)'
+    )
+    args = parser.parse_args()
+    
     # Paths
-    input_path = Path('output_segments/detections.csv')
+    input_path = Path(args.input)
     output_path = Path('output_segments/training_samples.csv')
     
     print(f"Loading detections from {input_path}...")
@@ -210,8 +561,44 @@ def main():
         for node in sorted(type_node_counts[type].keys()):
             print(f"    {node}: {type_node_counts[type][node]}")
 
+    # Initialize model inference for tp_human_only timestamp correction
+    print("\nInitializing model inference for tp_human_only timestamp correction...")
+    
+    # Check for model configuration from environment variables
+    model_type = os.environ.get("MODEL_TYPE", "fastai")
+    model_path = os.environ.get("MODEL_PATH", "./model")
+    model_url = os.environ.get("MODEL_URL", None)
+    # Default to auto-download for fastai, false for dummy
+    auto_download_default = "true" if model_type == "fastai" else "false"
+    auto_download = os.environ.get("MODEL_AUTO_DOWNLOAD", auto_download_default).lower() == "true"
+    
+    print(f"  Model type: {model_type}")
+    if model_type == "fastai":
+        print(f"  Model path: {model_path}")
+        print(f"  Auto download: {auto_download}")
+        if model_url:
+            print(f"  Model URL: {model_url}")
+        print(f"  Note: FastAI is the default model type.")
+        print(f"  To customize, set environment variables:")
+        print(f"    MODEL_TYPE=fastai (default)")
+        print(f"    MODEL_PATH=./model (default)")
+        print(f"    MODEL_AUTO_DOWNLOAD=true (default for fastai)")
+        print(f"    MODEL_URL=<custom-url> (optional, to use a specific model version)")
+    
+    try:
+        model_inference = get_model_inference(
+            model_path=model_path if model_type == "fastai" else None,
+            model_type=model_type,
+            auto_download=auto_download,
+            model_url=model_url
+        )
+    except Exception as e:
+        print(f"  Error: Failed to initialize model inference: {e}", file=sys.stderr)
+        print(f"  Cannot proceed without model for tp_human_only timestamp correction.", file=sys.stderr)
+        sys.exit(1)
+
     print(f"\nWriting training samples to {output_path}...")
-    write_training_samples(samples, output_path)
+    write_training_samples(samples, output_path, model_inference)
     print("Done!")
 
 
