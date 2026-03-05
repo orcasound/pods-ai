@@ -7,6 +7,7 @@ from typing import List
 import csv
 import math
 import os
+import re
 import shutil
 import sys
 from tempfile import TemporaryDirectory
@@ -24,6 +25,8 @@ from audio_utils import (
 
 PACIFIC_TZ = timezone('US/Pacific')
 N_SECONDS = 2  # Create 2-second wav files.
+FILENAME_SAFE_PATTERN = r"[^A-Za-z0-9_-]"  # Characters to replace when sanitizing filenames.
+EXTERNAL_HUMPBACK_DIR = Path(__file__).parent.parent.parent / "external" / "signals-humpback"
 
 @dataclass
 class CSVRow:
@@ -271,6 +274,69 @@ def process_csv(csv_path: Path, output_root: Path):
         print(f"Processing: {row.category} - {row.node_name} - {row.timestamp_pst}")
         download_audio_segment(row.category, row.node_name, row.timestamp_pst, output_root)
 
+def process_external_humpback_wavs(external_dir: Path, output_root: Path):
+    """
+    Process WAV files from an external signals-humpback directory and add 2-second
+    segments to the humpback training samples.
+
+    Skips files shorter than 2 seconds. For longer files, extracts each full 2-second
+    segment (ignoring any remainder shorter than 2 seconds) and saves to the humpback
+    label directory under output_root.
+
+    Parameters:
+        external_dir (Path): Root of the external signals-humpback directory.
+        output_root (Path): Root directory where label subdirectories will be created.
+    """
+    label_dir = output_root / "humpback"
+    label_dir.mkdir(parents=True, exist_ok=True)
+
+    wav_files = sorted(external_dir.rglob("*.wav"))
+    if not wav_files:
+        print(f"No WAV files found in {external_dir}")
+        return
+
+    print(f"Found {len(wav_files)} WAV files in {external_dir}")
+
+    for wav_file in wav_files:
+        try:
+            probe = ffmpeg.probe(str(wav_file))
+            duration = float(probe["format"]["duration"])
+        except Exception as e:
+            print(f"Warning: Could not probe {wav_file}: {e}")
+            continue
+
+        if duration < N_SECONDS:
+            print(f"Skipping (too short, {duration:.2f}s): {wav_file.name}")
+            continue
+
+        num_segments = int(duration // N_SECONDS)
+        # Sanitize the stem for use in output filenames.
+        safe_stem = re.sub(FILENAME_SAFE_PATTERN, "_", wav_file.stem)
+
+        for i in range(num_segments):
+            offset = i * N_SECONDS
+            out_filename = f"signals-humpback_{safe_stem}_{offset:04d}s.wav"
+            out_path = label_dir / out_filename
+
+            if out_path.exists():
+                print(f"Skipping (already exists): {out_path}")
+                continue
+
+            try:
+                stream = ffmpeg.input(str(wav_file), ss=offset)
+                stream = ffmpeg.output(
+                    stream,
+                    str(out_path),
+                    t=N_SECONDS,
+                    acodec="pcm_s16le",
+                    ar=44100,
+                    ac=1
+                )
+                ffmpeg.run(stream, overwrite_output=True, quiet=True)
+                print(f"Created: {out_path}")
+            except Exception as e:
+                print(f"Warning: Failed to extract segment from {wav_file.name} at offset {offset}s: {e}")
+
 if __name__ == "__main__":
     csv_path = Path("output_segments/training_samples.csv")
     output_root = Path("output_segments")
@@ -281,3 +347,10 @@ if __name__ == "__main__":
         sys.exit(1)
     
     process_csv(csv_path, output_root)
+
+    external_dir = EXTERNAL_HUMPBACK_DIR
+    if external_dir.exists():
+        process_external_humpback_wavs(external_dir, output_root)
+    else:
+        print(f"Skipping external humpback wavs: {external_dir} not found.")
+        print("Run 'git submodule update --init' to initialize the submodule.")
