@@ -272,8 +272,8 @@ def process_csv(csv_path: Path, output_root: Path):
         download_audio_segment(row.category, row.node_name, row.timestamp_pst, output_root)
 
 if __name__ == "__main__":
-    csv_path = Path("output_segments/training_samples.csv")
-    output_root = Path("output_segments")
+    csv_path = Path("output/csv/training_samples.csv")
+    output_root = Path("output/wav")
     
     if not csv_path.exists():
         print(f"Error: CSV file not found at {csv_path}")

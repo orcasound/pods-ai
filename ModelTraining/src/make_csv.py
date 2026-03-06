@@ -501,5 +501,5 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    output_root = Path("output_segments")
+    output_root = Path("output/csv")
     process_all_feeds(output_root, feed_filter=args.feed)

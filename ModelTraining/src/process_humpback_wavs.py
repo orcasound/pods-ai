@@ -10,7 +10,7 @@ Usage:
 Reads WAV files from the external/signals-humpback submodule, skips any files
 shorter than 2 seconds, and for the rest splits them into 2-second segments
 (ignoring any remainder shorter than 2 seconds). The resulting segments are
-saved under output_segments/humpback/.
+saved under output/wav/humpback/.
 """
 from pathlib import Path
 import re
@@ -88,7 +88,7 @@ def process_external_humpback_wavs(external_dir: Path, output_root: Path):
 
 
 if __name__ == "__main__":
-    output_root = Path("output_segments")
+    output_root = Path("output/wav")
 
     external_dir = EXTERNAL_HUMPBACK_DIR
     if not external_dir.exists():

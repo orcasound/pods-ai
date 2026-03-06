@@ -3,9 +3,9 @@
 """
 Script to generate spectrograms from .wav files.
 
-This script traverses the output_segments directory (and its subdirectories),
+This script traverses the output/wav directory (and its subdirectories),
 finds all .wav files saved by download_wavs.py, and creates a spectrogram
-(.png file) alongside each .wav file.
+(.png file) in the corresponding output/png subdirectory.
 
 Usage:
     python src/make_spectrograms.py
@@ -34,18 +34,22 @@ def find_wav_files(root_dir: Path) -> List[Path]:
     return wav_files
 
 
-def process_wav_files(output_root: Path, skip_existing: bool = True):
+def process_wav_files(wav_root: Path, png_root: Path, skip_existing: bool = True):
     """
-    Process all .wav files in the output_root directory and generate spectrograms.
-    
+    Process all .wav files in wav_root and generate spectrograms under png_root.
+
+    For each .wav file found under wav_root, the corresponding .png spectrogram
+    is saved under png_root in the same relative subdirectory.
+
     Parameters:
-        output_root: Root directory containing .wav files in subdirectories.
+        wav_root: Root directory containing .wav files in subdirectories.
+        png_root: Root directory where .png spectrograms will be saved.
         skip_existing: If True, skip .wav files that already have a .png spectrogram.
     """
-    wav_files = find_wav_files(output_root)
+    wav_files = find_wav_files(wav_root)
     
     if not wav_files:
-        print(f"No .wav files found in {output_root}")
+        print(f"No .wav files found in {wav_root}")
         return
     
     print(f"Found {len(wav_files)} .wav file(s) to process")
@@ -55,16 +59,18 @@ def process_wav_files(output_root: Path, skip_existing: bool = True):
     error_count = 0
     
     for wav_path in wav_files:
-        # Check if spectrogram already exists
-        png_path = wav_path.with_suffix('.png')
+        # Compute the corresponding PNG path under png_root.
+        relative = wav_path.relative_to(wav_root)
+        png_path = png_root / relative.with_suffix('.png')
         if skip_existing and png_path.exists():
             print(f"Skipping (spectrogram already exists): {wav_path}")
             skipped_count += 1
             continue
         
+        png_path.parent.mkdir(parents=True, exist_ok=True)
         try:
             print(f"Processing: {wav_path}")
-            spec_path = spectrogram_visualizer.write_spectrogram(wav_path)
+            spec_path = spectrogram_visualizer.write_spectrogram(wav_path, output_path=png_path)
             print(f"  -> Created spectrogram: {spec_path}")
             processed_count += 1
         except Exception as e:
@@ -78,11 +84,12 @@ def process_wav_files(output_root: Path, skip_existing: bool = True):
 
 
 if __name__ == "__main__":
-    output_root = Path("output_segments")
+    wav_root = Path("output/wav")
+    png_root = Path("output/png")
     
-    if not output_root.exists():
-        print(f"Error: Directory not found: {output_root}")
-        print("Please ensure the output_segments directory exists.")
+    if not wav_root.exists():
+        print(f"Error: Directory not found: {wav_root}")
+        print("Please ensure the output/wav directory exists.")
         sys.exit(1)
     
-    process_wav_files(output_root)
+    process_wav_files(wav_root, png_root)
