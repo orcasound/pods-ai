@@ -444,7 +444,7 @@ def write_training_samples(samples: List[Dict], output_path: Path, model_inferen
     
     # Load manual timestamp corrections if available
     manual_timestamps = {}
-    manual_corrections_path = Path('output_segments/manual_timestamps.csv')
+    manual_corrections_path = Path('output/csv/manual_timestamps.csv')
     if manual_corrections_path.exists():
         print(f"\nLoading manual timestamp corrections from {manual_corrections_path}...")
         with open(manual_corrections_path, 'r', encoding='utf-8') as f:
@@ -511,14 +511,14 @@ def main():
     parser.add_argument(
         '--input',
         type=str,
-        default='output_segments/detections.csv',
-        help='Path to input detections CSV file (default: output_segments/detections.csv)'
+        default='output/csv/detections.csv',
+        help='Path to input detections CSV file (default: output/csv/detections.csv)'
     )
     args = parser.parse_args()
     
     # Paths
     input_path = Path(args.input)
-    output_path = Path('output_segments/training_samples.csv')
+    output_path = Path('output/csv/training_samples.csv')
     
     print(f"Loading detections from {input_path}...")
     detections = load_detections(input_path)

@@ -37,9 +37,12 @@ def _create_spectrogram_figure(specshow_data, sr, output_path, x_axis='time', y_
     plt.close(fig)
 
 
-def write_spectrogram(wav_file_path):
+def write_spectrogram(wav_file_path, output_path=None):
     """
-
+    Parameters:
+        wav_file_path: Path to the input WAV file.
+        output_path: Optional path for the output PNG file. If not provided,
+            the PNG is saved alongside the WAV file with the same base name.
     """
     
     # get wav_file_path without extension
@@ -54,7 +57,10 @@ def write_spectrogram(wav_file_path):
     spec_second_half = os.path.join(directory_name, "secondHalf.png")
 
     # final spec file
-    spec_output_path = os.path.join(directory_name, spectogram_name)
+    if output_path is not None:
+        spec_output_path = str(output_path)
+    else:
+        spec_output_path = os.path.join(directory_name, spectogram_name)
 
     # Here, we divide the audio into spectrogram into 2 parts and calculate spectrograms for each half
     y, sr = librosa.load(wav_file_path)
