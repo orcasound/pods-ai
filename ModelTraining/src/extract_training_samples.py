@@ -49,7 +49,7 @@ from audio_utils import (
 PACIFIC_TZ = timezone('US/Pacific')
 UTC_TZ = timezone('UTC')
 PREFERRED_NOTES = {'tp_machine_only', 'fp_machine_only'}
-QUALITY_FILTER_TERMS = {'faint', 'distant', 'quiet', 'noise'}
+QUALITY_FILTER_TERMS = {'faint', 'distant', 'quiet', 'noise', '?', 'not sure', 'unsure', 'possibl'}
 MIN_SAMPLES_PER_CATEGORY = 30
 SEGMENT_DURATION_SECONDS = 2  # Duration of each audio segment for model inference
 
