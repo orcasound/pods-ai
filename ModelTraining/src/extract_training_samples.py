@@ -60,8 +60,6 @@ MIN_SAMPLES_PER_CATEGORY = 30
 OTHER_HUMPBACK_SAMPLES = len(glob.glob(str(REPO_ROOT / 'output' / 'wav' / 'humpback' / 'signals-humpback_*.wav')))
 SEGMENT_DURATION_SECONDS = 2  # Duration of each audio segment for model inference.
 
-
-
 def parse_timestamp(timestamp_str: str) -> datetime:
     """Parse a PST timestamp string to datetime object."""
     dt = datetime.strptime(timestamp_str, '%Y_%m_%d_%H_%M_%S_PST')
@@ -450,7 +448,7 @@ def compute_correct_timestamp_for_tp_human_only(
         if wav_path and os.path.exists(wav_path):
             try:
                 os.remove(wav_path)
-            except (OSError, PermissionError) as e:
+            except (OSError, PermissionError):
                 # Ignore cleanup errors - file may already be deleted or inaccessible.
                 pass
 
@@ -596,7 +594,9 @@ def main():
     
     # Paths.
     input_path = Path(args.input)
-    output_path = Path('output/csv/training_samples.csv')
+    if not input_path.is_absolute():
+        input_path = REPO_ROOT / input_path
+    output_path = REPO_ROOT / 'output' / 'csv' / 'training_samples.csv'
 
     # Load manual confidences for sorting.
     manual_corrections_path = REPO_ROOT / 'output' / 'csv' / 'manual_timestamps.csv'
@@ -609,26 +609,13 @@ def main():
     print("\nOrganizing detections by category and node...")
     organized_data = organize_by_category_node(detections)
     
-    # Load manual confidences for sorting.
-    manual_confidences = {}
-    manual_corrections_path = Path('output/csv/manual_timestamps.csv')
-    if manual_corrections_path.exists():
-        print("\nLoading manual timestamp corrections for preference sorting...")
-        with open(manual_corrections_path, 'r', encoding='utf-8') as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                uri = row['SampleURI']
-                confidence = row.get('Confidence', '').strip()
-                manual_confidences[uri] = confidence if confidence else '100.0'
-        print(f"  Loaded {len(manual_confidences)} confidence values")
-    
     # Print summary.
     for category in sorted(organized_data.keys()):
         total = sum(len(nodes) for nodes in organized_data[category].values())
         print(f"  {category}: {total} detections across {len(organized_data[category])} nodes")
     
     print("\nSelecting training samples...")
-    samples = select_training_samples(organized_data, manual_confidences)  # ? Now passes manual_confidences
+    samples = select_training_samples(organized_data, manual_confidences)
     
     print(f"\nSelected {len(samples)} training samples")
     
