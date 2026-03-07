@@ -47,14 +47,18 @@ from audio_utils import (
     download_from_url
 )
 
+# Get repository root (ModelTraining directory).
+REPO_ROOT = Path(__file__).resolve().parents[1]
+
 PACIFIC_TZ = timezone('US/Pacific')
 UTC_TZ = timezone('UTC')
 PREFERRED_NOTES = {'tp_machine_only', 'fp_machine_only'}
 QUALITY_FILTER_TERMS = {'faint', 'distant', 'quiet', 'noise', '?', 'not sure', 'unsure', 'possibl', 'sounds like'}
 MIN_SAMPLES_PER_CATEGORY = 30
-# Count existing humpback signal files
-OTHER_HUMPBACK_SAMPLES = len(glob.glob('output/wav/humpback/signals-humpback_*.wav'))
-SEGMENT_DURATION_SECONDS = 2  # Duration of each audio segment for model inference
+
+# Count existing humpback signal files.
+OTHER_HUMPBACK_SAMPLES = len(glob.glob(str(REPO_ROOT / 'output' / 'wav' / 'humpback' / 'signals-humpback_*.wav')))
+SEGMENT_DURATION_SECONDS = 2  # Duration of each audio segment for model inference.
 
 
 
@@ -87,15 +91,17 @@ def generate_uri(original_uri: str, timestamp_str: str) -> str:
     Returns:
         URI in format "https://live.orcasound.net/bouts/new/{node}?time={utc_time}"
     """
-    # Parse PST timestamp and convert to UTC
+    # Parse PST timestamp and convert to UTC.
     dt = parse_timestamp(timestamp_str)
     utc_dt = dt.astimezone(UTC_TZ)
-    # Format as ISO 8601 with milliseconds and Z suffix
+
+    # Format as ISO 8601 with milliseconds and Z suffix.
     time_str = utc_dt.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
-    # URL encode the time parameter
+
+    # URL encode the time parameter.
     time_encoded = quote(time_str, safe='')
 
-    base_uri = original_uri.split("?", 1)[0] # keep everything before the first "?"
+    base_uri = original_uri.split("?", 1)[0] # keep everything before the first "?".
     return f"{base_uri}?time={time_encoded}"
 
 
@@ -132,7 +138,7 @@ def sort_by_preference(detections: List[Dict], manual_confidences: Dict[str, str
         description_lower = det.get('Description', '').lower()
         has_quality_issue = any(term in description_lower for term in QUALITY_FILTER_TERMS)
         
-        # Check if this detection has a manual override with 0.0 confidence
+        # Check if this detection has a manual override with 0.0 confidence.
         has_zero_confidence = False
         if det['URI'] in manual_confidences:
             try:
@@ -142,8 +148,8 @@ def sort_by_preference(detections: List[Dict], manual_confidences: Dict[str, str
                 pass
         
         timestamp = det['Timestamp']
-        # Return tuple: (not preferred note, has quality issue or zero confidence, timestamp)
-        # This puts preferred notes first, then non-problematic descriptions, then by timestamp
+        # Return tuple: (not preferred note, has quality issue or zero confidence, timestamp).
+        # This puts preferred notes first, then non-problematic descriptions, then by timestamp.
         return (not has_preferred_note, has_quality_issue or has_zero_confidence, timestamp)
     
     return sorted(detections, key=sort_key)
@@ -163,37 +169,37 @@ def select_training_samples(organized_data: Dict[str, Dict[str, List[Dict]]], ma
     for category in sorted(organized_data.keys()):
         nodes_data = organized_data[category]
         
-        # Sort and prepare detections for each node
+        # Sort and prepare detections for each node.
         node_detections = {}
         for node in nodes_data.keys():
             node_detections[node] = sort_by_preference(nodes_data[node], manual_confidences)
         
-        # Calculate target count for this category
+        # Calculate target count for this category.
         total_available = sum(len(node_detections[node]) for node in node_detections)
         target_count = min(MIN_SAMPLES_PER_CATEGORY, total_available)
 
-        # For humpback category, subtract the number of existing signal files
+        # For humpback category, subtract the number of existing signal files.
         if category == 'humpback':
             target_count = max(0, target_count - OTHER_HUMPBACK_SAMPLES)
             print(f"  Adjusting humpback target: {target_count} (after subtracting {OTHER_HUMPBACK_SAMPLES} existing signal files)")
         
-        # Track how many samples selected per node
+        # Track how many samples selected per node.
         node_counts = defaultdict(int)
         category_samples = []
         
-        # Round-robin selection across nodes to ensure even distribution
-        # First, ensure at least one sample per node
+        # Round-robin selection across nodes to ensure even distribution.
+        # First, ensure at least one sample per node.
         for node in sorted(node_detections.keys()):
             if node_detections[node]:
                 category_samples.append(node_detections[node][0])
                 node_counts[node] = 1
         
-        # Continue round-robin to reach target count
+        # Continue round-robin to reach target count.
         while len(category_samples) < target_count:
             added_this_round = False
             
-            # Sort nodes by how many samples they've contributed (fewest first)
-            # This ensures even distribution
+            # Sort nodes by how many samples they've contributed (fewest first).
+            # This ensures even distribution.
             nodes_by_count = sorted(node_detections.keys(), 
                                    key=lambda n: node_counts[n])
             
@@ -201,18 +207,18 @@ def select_training_samples(organized_data: Dict[str, Dict[str, List[Dict]]], ma
                 if len(category_samples) >= target_count:
                     break
                     
-                # Check if this node has more samples to give
+                # Check if this node has more samples to give.
                 if node_counts[node] < len(node_detections[node]):
                     idx = node_counts[node]
                     category_samples.append(node_detections[node][idx])
                     node_counts[node] += 1
                     added_this_round = True
             
-            # If no node could contribute, we've exhausted all samples
+            # If no node could contribute, we've exhausted all samples.
             if not added_this_round:
                 break
         
-        # Add all selected samples for this category
+        # Add all selected samples for this category.
         selected.extend(category_samples)
     
     return selected
@@ -221,11 +227,11 @@ def select_training_samples(organized_data: Dict[str, Dict[str, List[Dict]]], ma
 def get_aligned_end_time(timestamp_str: str) -> datetime:
     timestamp_pst = parse_timestamp(timestamp_str)
     
-    # We need 60 seconds of audio ending at or shortly after the given timestamp
+    # We need 60 seconds of audio ending at or shortly after the given timestamp.
     raw_end = timestamp_pst
     snapped_sec = ((raw_end.second + 9) // 10) * 10
     if snapped_sec == 60:
-       # roll over to next minute
+       # roll over to next minute.
        raw_end = raw_end + timedelta(minutes=1)
        snapped_sec = 0
     end_time = raw_end.replace(second=snapped_sec, microsecond=0)
@@ -247,7 +253,7 @@ def download_60s_audio(node_name: str, timestamp_str: str, tmp_dir: str) -> Opti
     end_time = get_aligned_end_time(timestamp_str)
     start_time = end_time - timedelta(seconds=60)
     
-    # Set up S3 bucket and folder information
+    # Set up S3 bucket and folder information.
     hydrophone_stream_url = 'https://s3-us-west-2.amazonaws.com/audio-orcasound-net/' + node_name
     bucket_folder = hydrophone_stream_url.split("https://s3-us-west-2.amazonaws.com/")[1]
     tokens = bucket_folder.split("/")
@@ -255,12 +261,12 @@ def download_60s_audio(node_name: str, timestamp_str: str, tmp_dir: str) -> Opti
     folder_name = tokens[1]
     prefix = folder_name + "/hls/"
     
-    # Convert timestamps to unix time
+    # Convert timestamps to unix time.
     start_unix_time = int(start_time.timestamp())
     end_unix_time = int(end_time.timestamp())
     
     try:
-        # Use cached folders per node/bucket/prefix
+        # Use cached folders per node/bucket/prefix.
         all_hydrophone_folders = get_cached_folders(s3_bucket, prefix=prefix)
         print(f"  Found {len(all_hydrophone_folders)} folders in total for {node_name}")
         
@@ -271,14 +277,14 @@ def download_60s_audio(node_name: str, timestamp_str: str, tmp_dir: str) -> Opti
             print(f"  Warning: No folders found for timestamp {start_time}")
             return None
         
-        # Use the first valid folder
+        # Use the first valid folder.
         current_folder = int(valid_folders[0])
         
     except Exception as e:
         print(f"  ERROR: Failed to query S3 bucket: {e}")
         return None
     
-    # Read the m3u8 file for the current folder
+    # Read the m3u8 file for the current folder.
     stream_url = f"{hydrophone_stream_url}/hls/{current_folder}/live.m3u8"
     
     try:
@@ -292,12 +298,12 @@ def download_60s_audio(node_name: str, timestamp_str: str, tmp_dir: str) -> Opti
         print(f"  ERROR: No segments found in m3u8 file")
         return None
     
-    # Calculate target duration (average segment duration)
+    # Calculate target duration (average segment duration).
     target_duration_exact = sum(item.duration for item in stream_obj.segments) / num_total_segments
     target_duration = round(target_duration_exact, 1)
     
-    # Calculate start and end indices based on time since folder start
-    # Note: there's typically a 2-second audio offset
+    # Calculate start and end indices based on time since folder start.
+    # Note: there's typically a 2-second audio offset.
     audio_offset = 2
     time_since_folder_start_for_start = get_difference_between_times_in_seconds(start_unix_time, current_folder)
     time_since_folder_start_for_start -= audio_offset
@@ -312,7 +318,7 @@ def download_60s_audio(node_name: str, timestamp_str: str, tmp_dir: str) -> Opti
         print(f"  ERROR: Not enough segments available")
         return None
     
-    # Download and process segments
+    # Download and process segments.
     try:
         file_names = []
         for i in range(segment_start_index, segment_end_index):
@@ -330,7 +336,7 @@ def download_60s_audio(node_name: str, timestamp_str: str, tmp_dir: str) -> Opti
             print("  ERROR: No segments were successfully downloaded")
             return None
         
-        # Concatenate all .ts files
+        # Concatenate all .ts files.
         clipname = f"temp_60s_{node_name}_{timestamp_str}"
         if len(file_names) > 1:
             hls_file = os.path.join(tmp_dir, clipname + ".ts")
@@ -341,20 +347,20 @@ def download_60s_audio(node_name: str, timestamp_str: str, tmp_dir: str) -> Opti
         else:
             hls_file = os.path.join(tmp_dir, file_names[0])
         
-        # Convert to wav using ffmpeg
+        # Convert to wav using ffmpeg.
         wav_file_path = os.path.join(tmp_dir, f"{clipname}.wav")
 
-        # Compute offset (seconds) into the concatenated .ts where the desired start occurs
+        # Compute offset (seconds) into the concatenated .ts where the desired start occurs.
         ss_offset = time_since_folder_start_for_start - (segment_start_index * target_duration)
         if ss_offset < 0:
             ss_offset = 0.0
 
-        # Use input seeking and limit duration to 60 seconds
+        # Use input seeking and limit duration to 60 seconds.
         stream = ffmpeg.input(hls_file, ss=ss_offset)
         stream = ffmpeg.output(
             stream,
             wav_file_path,
-            t=60,  # 60 seconds
+            t=60,  # 60 seconds.
             acodec="pcm_s16le",
             ar=44100,
             ac=1
@@ -394,7 +400,7 @@ def compute_correct_timestamp_for_tp_human_only(
     
     print(f"Computing correct timestamp for tp_human_only: {node_name} - {timestamp_str}")
     
-    # Download 60 seconds of audio
+    # Download 60 seconds of audio.
     wav_path = download_60s_audio(node_name, timestamp_str, tmp_dir)
     
     if wav_path is None:
@@ -413,13 +419,13 @@ def compute_correct_timestamp_for_tp_human_only(
             print(f"  No confidences returned, falling back to 2-second offset")
             return subtract_two_seconds(timestamp_str), 0.0
         
-        # Find the index of the highest scoring segment
+        # Find the index of the highest scoring segment.
         max_confidence_idx = local_confidences.index(max(local_confidences))
         max_confidence = local_confidences[max_confidence_idx]
 
         print(f"  Highest score: {max_confidence} at second {max_confidence_idx}")
 
-        # Find whether it's better here or 1 second earlier
+        # Find whether it's better here or 1 second earlier.
         previous_confidence = local_confidences[max(0, max_confidence_idx - 1)]
         next_confidence = local_confidences[min(len(local_confidences) - 1, max_confidence_idx + 1)]
         if previous_confidence > next_confidence:
@@ -427,8 +433,8 @@ def compute_correct_timestamp_for_tp_human_only(
             max_confidence = previous_confidence
             print(f"  Adjusted to previous second: {max_confidence} at second {max_confidence_idx}")
         
-        # The offset is calculated as (num_segments - max_confidence_idx)
-        # This gives us how many seconds before the original timestamp the highest scoring segment starts
+        # The offset is calculated as (num_segments - max_confidence_idx).
+        # This gives us how many seconds before the original timestamp the highest scoring segment starts.
         end_time = get_aligned_end_time(timestamp_str)
         start_time = end_time - timedelta(seconds=60 - max_confidence_idx)
         print(f"  Timestamp: {start_time}")
@@ -440,12 +446,12 @@ def compute_correct_timestamp_for_tp_human_only(
         print(f"  Falling back to 2-second offset")
         return subtract_two_seconds(timestamp_str), 0.0
     finally:
-        # Clean up the downloaded audio file
+        # Clean up the downloaded audio file.
         if wav_path and os.path.exists(wav_path):
             try:
                 os.remove(wav_path)
             except (OSError, PermissionError) as e:
-                # Ignore cleanup errors - file may already be deleted or inaccessible
+                # Ignore cleanup errors - file may already be deleted or inaccessible.
                 pass
 
 
@@ -460,29 +466,14 @@ def write_training_samples(samples: List[Dict], output_path: Path, model_inferen
     """
     output_path.parent.mkdir(parents=True, exist_ok=True)
     
-    # Load manual timestamp corrections if available
-    manual_timestamps = {}
-    manual_confidences = {}
-    manual_corrections_path = Path('output/csv/manual_timestamps.csv')
-    if manual_corrections_path.exists():
-        print(f"\nLoading manual timestamp corrections from {manual_corrections_path}...")
-        with open(manual_corrections_path, 'r', encoding='utf-8') as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                uri = row['SampleURI']
-                timestamp = row.get('Timestamp', '').strip()
-                confidence = row.get('Confidence', '').strip()
-                
-                # Only store if timestamp is provided
-                if timestamp:
-                    manual_timestamps[uri] = timestamp
-                    manual_confidences[uri] = confidence if confidence else '100.0'
-        print(f"  Loaded {len(manual_timestamps)} manual timestamp corrections")
+    # Load manual timestamp corrections if available.
+    manual_corrections_path = REPO_ROOT / 'output' / 'csv' / 'manual_timestamps.csv'
+    manual_timestamps, manual_confidences = load_manual_corrections(manual_corrections_path)
     
-    # Create a temporary directory for audio downloads
+    # Create a temporary directory for audio downloads.
     with TemporaryDirectory() as tmp_dir:
         with open(output_path, 'w', newline='', encoding='utf-8') as f:
-            # Use same columns as detections.csv
+            # Use same columns as detections.csv.
             fieldnames = ['Category', 'NodeName', 'Timestamp', 'URI', 'Description', 'Notes', 'Confidence']
             writer = csv.DictWriter(f, fieldnames=fieldnames, lineterminator='\n')
             
@@ -494,15 +485,16 @@ def write_training_samples(samples: List[Dict], output_path: Path, model_inferen
             for idx, sample in enumerate(samples, start=1):
                 print(f"\n[{idx}/{total_samples}] Processing: {sample['Category']} - {sample['NodeName']} - {sample['Timestamp']}")
                 
-                # Create a copy and adjust timestamp and URI
+                # Create a copy and adjust timestamp and URI.
                 output_row = sample.copy()
                 
-                # Check if there's a manual timestamp correction for this sample
+                # Check if there's a manual timestamp correction for this sample.
                 if sample['URI'] in manual_timestamps:
                     print(f"  Using manual timestamp for {sample['URI']}")
                     output_row['Timestamp'] = manual_timestamps[sample['URI']]
                     output_row['Confidence'] = manual_confidences[sample['URI']]
-                # For tp_human_only detections, use model-based timestamp correction
+
+                # For tp_human_only detections, use model-based timestamp correction.
                 elif sample['Notes'] == 'tp_human_only' and model_inference is not None:
                     timestamp, confidence = compute_correct_timestamp_for_tp_human_only(
                         sample, model_inference, tmp_dir
@@ -510,7 +502,7 @@ def write_training_samples(samples: List[Dict], output_path: Path, model_inferen
                     output_row['Timestamp'] = timestamp
                     output_row['Confidence'] = f"{confidence:.1f}"
                 else:
-                    # For all other detections, subtract 2 seconds
+                    # For all other detections, subtract 2 seconds.
                     output_row['Timestamp'] = subtract_two_seconds(sample['Timestamp'])
                     confidence_str = sample.get('Confidence', '')
                     if confidence_str:
@@ -518,19 +510,79 @@ def write_training_samples(samples: List[Dict], output_path: Path, model_inferen
                             confidence = float(confidence_str)
                             output_row['Confidence'] = f"{confidence:.1f}"
                         except (ValueError, TypeError):
-                            output_row['Confidence'] = confidence_str  # Keep as-is if not a valid number
+                            output_row['Confidence'] = confidence_str  # Keep as-is if not a valid number.
                     else:
                         output_row['Confidence'] = ''
                 
-                # Update URI to match the new timestamp
+                # Update URI to match the new timestamp.
                 output_row['URI'] = generate_uri(sample['URI'], output_row['Timestamp'])
                 
                 writer.writerow(output_row)
 
 
+def load_manual_corrections(corrections_path: Path) -> Tuple[Dict[str, str], Dict[str, str]]:
+    """
+    Load manual timestamp corrections and confidence values from CSV file.
+    
+    Args:
+        corrections_path: Path to manual_timestamps.csv file
+        
+    Returns:
+        Tuple of (manual_timestamps dict, manual_confidences dict)
+        Returns empty dicts if file doesn't exist or has errors
+    """
+    manual_timestamps = {}
+    manual_confidences = {}
+    
+    if not corrections_path.exists():
+        return manual_timestamps, manual_confidences
+    
+    try:
+        print(f"\nLoading manual timestamp corrections from {corrections_path}...")
+        with open(corrections_path, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            
+            # Validate required column.
+            if 'SampleURI' not in reader.fieldnames:
+                print(f"  Warning: 'SampleURI' column not found in {corrections_path}. Skipping manual corrections.")
+                return {}, {}
+            
+            for row_num, row in enumerate(reader, start=2):  # start=2 accounts for header.
+                try:
+                    uri = row.get('SampleURI', '').strip()
+                    if not uri:
+                        continue  # Skip rows without URI.
+                    
+                    timestamp = row.get('Timestamp', '').strip()
+                    confidence = row.get('Confidence', '').strip()
+                    
+                    # Only store timestamp if provided.
+                    if timestamp:
+                        manual_timestamps[uri] = timestamp
+                    
+                    # Store confidence (use provided value or default to 100.0).
+                    manual_confidences[uri] = confidence if confidence else '100.0'
+                    
+                except Exception as e:
+                    print(f"  Warning: Skipping row {row_num} due to error: {e}")
+                    continue
+        
+        if manual_timestamps:
+            print(f"  Loaded {len(manual_timestamps)} manual timestamp corrections")
+        if manual_confidences:
+            print(f"  Loaded {len(manual_confidences)} confidence values")
+            
+    except Exception as e:
+        print(f"  Warning: Failed to load manual corrections from {corrections_path}: {e}")
+        return {}, {}
+    
+    return manual_timestamps, manual_confidences
+    
+
+
 def main():
     """Main function to extract training samples."""
-    # Parse command line arguments
+    # Parse command line arguments.
     parser = argparse.ArgumentParser(
         description="Extract training samples from detections CSV with intelligent selection criteria"
     )
@@ -542,9 +594,13 @@ def main():
     )
     args = parser.parse_args()
     
-    # Paths
+    # Paths.
     input_path = Path(args.input)
     output_path = Path('output/csv/training_samples.csv')
+
+    # Load manual confidences for sorting.
+    manual_corrections_path = REPO_ROOT / 'output' / 'csv' / 'manual_timestamps.csv'
+    manual_timestamps, manual_confidences = load_manual_corrections(manual_corrections_path)
     
     print(f"Loading detections from {input_path}...")
     detections = load_detections(input_path)
@@ -553,7 +609,7 @@ def main():
     print("\nOrganizing detections by category and node...")
     organized_data = organize_by_category_node(detections)
     
-    # Load manual confidences for sorting
+    # Load manual confidences for sorting.
     manual_confidences = {}
     manual_corrections_path = Path('output/csv/manual_timestamps.csv')
     if manual_corrections_path.exists():
@@ -566,7 +622,7 @@ def main():
                 manual_confidences[uri] = confidence if confidence else '100.0'
         print(f"  Loaded {len(manual_confidences)} confidence values")
     
-    # Print summary
+    # Print summary.
     for category in sorted(organized_data.keys()):
         total = sum(len(nodes) for nodes in organized_data[category].values())
         print(f"  {category}: {total} detections across {len(organized_data[category])} nodes")
@@ -576,7 +632,7 @@ def main():
     
     print(f"\nSelected {len(samples)} training samples")
     
-    # Print breakdown by category
+    # Print breakdown by category.
     category_counts = defaultdict(int)
     category_node_counts = defaultdict(lambda: defaultdict(int))
     for sample in samples:
@@ -588,7 +644,7 @@ def main():
         for node in sorted(category_node_counts[category].keys()):
             print(f"    {node}: {category_node_counts[category][node]}")
 
-    # Print breakdown by type
+    # Print breakdown by type.
     type_counts = defaultdict(int)
     type_node_counts = defaultdict(lambda: defaultdict(int))
     for sample in samples:
@@ -600,14 +656,15 @@ def main():
         for node in sorted(type_node_counts[type].keys()):
             print(f"    {node}: {type_node_counts[type][node]}")
 
-    # Initialize model inference for tp_human_only timestamp correction
+    # Initialize model inference for tp_human_only timestamp correction.
     print("\nInitializing model inference for tp_human_only timestamp correction...")
     
-    # Check for model configuration from environment variables
+    # Check for model configuration from environment variables.
     model_type = os.environ.get("MODEL_TYPE", "fastai")
     model_path = os.environ.get("MODEL_PATH", "./model")
     model_url = os.environ.get("MODEL_URL", None)
-    # Default to auto-download for fastai, false for dummy
+
+    # Default to auto-download for fastai, false for dummy.
     auto_download_default = "true" if model_type == "fastai" else "false"
     auto_download = os.environ.get("MODEL_AUTO_DOWNLOAD", auto_download_default).lower() == "true"
     
