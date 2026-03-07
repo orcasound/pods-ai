@@ -34,6 +34,7 @@ import shutil
 import sys
 from tempfile import TemporaryDirectory
 from urllib.parse import quote
+import glob
 
 import ffmpeg
 import m3u8
@@ -49,8 +50,10 @@ from audio_utils import (
 PACIFIC_TZ = timezone('US/Pacific')
 UTC_TZ = timezone('UTC')
 PREFERRED_NOTES = {'tp_machine_only', 'fp_machine_only'}
-QUALITY_FILTER_TERMS = {'faint', 'distant', 'quiet', 'noise', '?', 'not sure', 'unsure', 'possibl'}
+QUALITY_FILTER_TERMS = {'faint', 'distant', 'quiet', 'noise', '?', 'not sure', 'unsure', 'possibl', 'sounds like'}
 MIN_SAMPLES_PER_CATEGORY = 30
+# Count existing humpback signal files
+OTHER_HUMPBACK_SAMPLES = len(glob.glob('output/wav/humpback/signals-humpback_*.wav'))
 SEGMENT_DURATION_SECONDS = 2  # Duration of each audio segment for model inference
 
 
@@ -116,26 +119,37 @@ def organize_by_category_node(detections: List[Dict]) -> Dict[str, Dict[str, Lis
     return organized
 
 
-def sort_by_preference(detections: List[Dict]) -> List[Dict]:
+def sort_by_preference(detections: List[Dict], manual_confidences: Dict[str, str]) -> List[Dict]:
     """
     Sort detections by preference:
     1. Preferred notes (tp_machine_only, fp_machine_only) first
     2. Descriptions without quality issues (e.g., faint, distant) preferred
-    3. Then by timestamp (oldest first)
+    3. Manual timestamps with 0.0 confidence are deprioritized
+    4. Then by timestamp (oldest first)
     """
     def sort_key(det):
         has_preferred_note = det['Notes'] in PREFERRED_NOTES
         description_lower = det.get('Description', '').lower()
         has_quality_issue = any(term in description_lower for term in QUALITY_FILTER_TERMS)
+        
+        # Check if this detection has a manual override with 0.0 confidence
+        has_zero_confidence = False
+        if det['URI'] in manual_confidences:
+            try:
+                conf = float(manual_confidences[det['URI']])
+                has_zero_confidence = (conf == 0.0)
+            except (ValueError, TypeError):
+                pass
+        
         timestamp = det['Timestamp']
-        # Return tuple: (not preferred note, has quality issue, timestamp)
-        # This puts preferred notes first, then non-faint/distant descriptions, then by timestamp
-        return (not has_preferred_note, has_quality_issue, timestamp)
+        # Return tuple: (not preferred note, has quality issue or zero confidence, timestamp)
+        # This puts preferred notes first, then non-problematic descriptions, then by timestamp
+        return (not has_preferred_note, has_quality_issue or has_zero_confidence, timestamp)
     
     return sorted(detections, key=sort_key)
 
 
-def select_training_samples(organized_data: Dict[str, Dict[str, List[Dict]]]) -> List[Dict]:
+def select_training_samples(organized_data: Dict[str, Dict[str, List[Dict]]], manual_confidences: Dict[str, str]) -> List[Dict]:
     """
     Select training samples according to requirements:
     - At least 30 samples per category (or all if < 30)
@@ -152,11 +166,16 @@ def select_training_samples(organized_data: Dict[str, Dict[str, List[Dict]]]) ->
         # Sort and prepare detections for each node
         node_detections = {}
         for node in nodes_data.keys():
-            node_detections[node] = sort_by_preference(nodes_data[node])
+            node_detections[node] = sort_by_preference(nodes_data[node], manual_confidences)
         
         # Calculate target count for this category
         total_available = sum(len(node_detections[node]) for node in node_detections)
         target_count = min(MIN_SAMPLES_PER_CATEGORY, total_available)
+
+        # For humpback category, subtract the number of existing signal files
+        if category == 'humpback':
+            target_count = max(0, target_count - OTHER_HUMPBACK_SAMPLES)
+            print(f"  Adjusting humpback target: {target_count} (after subtracting {OTHER_HUMPBACK_SAMPLES} existing signal files)")
         
         # Track how many samples selected per node
         node_counts = defaultdict(int)
@@ -381,7 +400,6 @@ def compute_correct_timestamp_for_tp_human_only(
     if wav_path is None:
         print(f"  Failed to download audio, falling back to 2-second offset")
         return subtract_two_seconds(timestamp_str), 0.0
-    
     try:
         # Run model inference
         print(f"  Running model inference...")
@@ -444,13 +462,21 @@ def write_training_samples(samples: List[Dict], output_path: Path, model_inferen
     
     # Load manual timestamp corrections if available
     manual_timestamps = {}
+    manual_confidences = {}
     manual_corrections_path = Path('output/csv/manual_timestamps.csv')
     if manual_corrections_path.exists():
         print(f"\nLoading manual timestamp corrections from {manual_corrections_path}...")
         with open(manual_corrections_path, 'r', encoding='utf-8') as f:
             reader = csv.DictReader(f)
             for row in reader:
-                manual_timestamps[row['SampleURI']] = row['Timestamp']
+                uri = row['SampleURI']
+                timestamp = row.get('Timestamp', '').strip()
+                confidence = row.get('Confidence', '').strip()
+                
+                # Only store if timestamp is provided
+                if timestamp:
+                    manual_timestamps[uri] = timestamp
+                    manual_confidences[uri] = confidence if confidence else '100.0'
         print(f"  Loaded {len(manual_timestamps)} manual timestamp corrections")
     
     # Create a temporary directory for audio downloads
@@ -475,7 +501,7 @@ def write_training_samples(samples: List[Dict], output_path: Path, model_inferen
                 if sample['URI'] in manual_timestamps:
                     print(f"  Using manual timestamp for {sample['URI']}")
                     output_row['Timestamp'] = manual_timestamps[sample['URI']]
-                    output_row['Confidence'] = ''  # No confidence for manual timestamps
+                    output_row['Confidence'] = manual_confidences[sample['URI']]
                 # For tp_human_only detections, use model-based timestamp correction
                 elif sample['Notes'] == 'tp_human_only' and model_inference is not None:
                     timestamp, confidence = compute_correct_timestamp_for_tp_human_only(
@@ -527,13 +553,26 @@ def main():
     print("\nOrganizing detections by category and node...")
     organized_data = organize_by_category_node(detections)
     
+    # Load manual confidences for sorting
+    manual_confidences = {}
+    manual_corrections_path = Path('output/csv/manual_timestamps.csv')
+    if manual_corrections_path.exists():
+        print(f"\nLoading manual timestamp corrections for preference sorting...")
+        with open(manual_corrections_path, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                uri = row['SampleURI']
+                confidence = row.get('Confidence', '').strip()
+                manual_confidences[uri] = confidence if confidence else '100.0'
+        print(f"  Loaded {len(manual_confidences)} confidence values")
+    
     # Print summary
     for category in sorted(organized_data.keys()):
         total = sum(len(nodes) for nodes in organized_data[category].values())
         print(f"  {category}: {total} detections across {len(organized_data[category])} nodes")
     
     print("\nSelecting training samples...")
-    samples = select_training_samples(organized_data)
+    samples = select_training_samples(organized_data, manual_confidences)  # ? Now passes manual_confidences
     
     print(f"\nSelected {len(samples)} training samples")
     

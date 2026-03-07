@@ -8,13 +8,13 @@ The `ModelTraining/src` directory has the following scripts for different steps 
 
 1. **make_csv.py**: Create a CSV file (`output/csv/detections.csv`) with a set of detections.
    The CSV file has the following columns: Category, NodeName, Timestamp, URI, Description, and Notes.
-2. **extract_training_samples.py**: Use an input CSV file (`output/csv/detections.csv` by default)
+2. **process_humpback_wavs.py**: Process files from the humpback submodule into the humpback subdirectory under `output/wav`
+3. **extract_training_samples.py**: Use an input CSV file (`output/csv/detections.csv` by default)
    to create `output/csv/training_samples.csv`. An alternate input filename can be specified with
    `--input _filename_`.
    - For `tp_human_only` detections, runs model inference on preceding 60 seconds to find correct timestamp
    - For other detections, subtracts 2 seconds from timestamp
-3. **download_wavs.py**: Use `output/csv/training_samples.csv` and download wav files into subdirectories under `output/wav`
-4. **process_humpback_wavs.py**: Process files from the humpback submodule into the humpback subdirectory under `output/wav`
+4. **download_wavs.py**: Use `output/csv/training_samples.csv` and download wav files into subdirectories under `output/wav`
 5. **make_spectrograms.py**: Create a png file for each wav file in a subdirectory of `output/png`
 
 ## Model-Based Timestamp Correction for tp_human_only
