@@ -130,6 +130,15 @@ def sort_by_preference(detections: List[Dict], manual_confidences: Dict[str, str
     2. Descriptions without quality issues (e.g., faint, distant) preferred
     3. Manual timestamps with 0.0 confidence are deprioritized
     4. Then by timestamp (oldest first)
+    
+    Args:
+        detections: List of detection dictionaries to sort
+        manual_confidences: Dictionary mapping URIs to confidence strings (0.0-100.0).
+            Detections with 0.0 confidence are deprioritized.
+    
+    Returns:
+        List[Dict]: Sorted list of detection dictionaries, ordered by preference
+            (preferred notes first, quality issues last, oldest timestamps first)
     """
     def sort_key(det):
         has_preferred_note = det['Notes'] in PREFERRED_NOTES
@@ -161,6 +170,23 @@ def select_training_samples(organized_data: Dict[str, Dict[str, List[Dict]]], ma
     - Spread evenly across nodes
     - Prefer certain note types
     - Minimize total rows
+    
+    Args:
+        organized_data: Nested dictionary with structure {category: {node: [detections]}}.
+            Each detection is a dictionary with keys: Category, NodeName, Timestamp, URI, etc.
+        manual_confidences: Dictionary mapping URIs to confidence strings (0.0-100.0).
+            Used to deprioritize detections with 0.0 confidence during sorting.
+    
+    Returns:
+        List[Dict]: Selected training sample dictionaries, each containing:
+            - Category: Detection category (resident, transient, humpback, other)
+            - NodeName: Hydrophone node name
+            - Timestamp: Detection timestamp (PST format)
+            - URI: Orcasound bouts interface URI
+            - Description: Human-readable description
+            - Notes: Detection type (tp_machine_only, tp_human_only, etc.)
+            - Confidence: Confidence score (if available)
+        Samples are distributed evenly across nodes per category and sorted by preference.
     """
     selected = []
     
@@ -184,10 +210,12 @@ def select_training_samples(organized_data: Dict[str, Dict[str, List[Dict]]], ma
         # Track how many samples selected per node.
         node_counts = defaultdict(int)
         category_samples = []
-        
+
         # Round-robin selection across nodes to ensure even distribution.
-        # First, ensure at least one sample per node.
+        # First, ensure at least one sample per node (respecting target_count).
         for node in sorted(node_detections.keys()):
+            if len(category_samples) >= target_count:
+                break  # Stop if we've already reached the target.
             if node_detections[node]:
                 category_samples.append(node_detections[node][0])
                 node_counts[node] = 1
@@ -453,20 +481,24 @@ def compute_correct_timestamp_for_tp_human_only(
                 pass
 
 
-def write_training_samples(samples: List[Dict], output_path: Path, model_inference=None):
+def write_training_samples(
+    samples: List[Dict], 
+    output_path: Path, 
+    manual_timestamps: Dict[str, str],
+    manual_confidences: Dict[str, str],
+    model_inference=None
+):
     """
     Write selected samples to CSV with timestamps adjusted.
     
     Args:
         samples: List of sample dictionaries
         output_path: Path to output CSV file
+        manual_timestamps: Dictionary mapping URIs to corrected timestamp strings
+        manual_confidences: Dictionary mapping URIs to confidence strings (0.0-100.0)
         model_inference: Optional model inference instance for tp_human_only timestamp correction
     """
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    
-    # Load manual timestamp corrections if available.
-    manual_corrections_path = REPO_ROOT / 'output' / 'csv' / 'manual_timestamps.csv'
-    manual_timestamps, manual_confidences = load_manual_corrections(manual_corrections_path)
     
     # Create a temporary directory for audio downloads.
     with TemporaryDirectory() as tmp_dir:
@@ -577,7 +609,6 @@ def load_manual_corrections(corrections_path: Path) -> Tuple[Dict[str, str], Dic
     return manual_timestamps, manual_confidences
     
 
-
 def main():
     """Main function to extract training samples."""
     # Parse command line arguments.
@@ -681,7 +712,7 @@ def main():
         sys.exit(1)
 
     print(f"\nWriting training samples to {output_path}...")
-    write_training_samples(samples, output_path, model_inference)
+    write_training_samples(samples, output_path, manual_timestamps, manual_confidences, model_inference)
     print("Done!")
 
 
