@@ -613,7 +613,7 @@ def main():
     manual_confidences = {}
     manual_corrections_path = Path('output/csv/manual_timestamps.csv')
     if manual_corrections_path.exists():
-        print(f"\nLoading manual timestamp corrections for preference sorting...")
+        print("\nLoading manual timestamp corrections for preference sorting...")
         with open(manual_corrections_path, 'r', encoding='utf-8') as f:
             reader = csv.DictReader(f)
             for row in reader:
