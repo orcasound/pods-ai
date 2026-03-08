@@ -26,7 +26,7 @@ import csv
 from collections import defaultdict
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import List, Dict, Tuple, Optional
+from typing import Optional
 from pytz import timezone
 import os
 import math
@@ -103,14 +103,14 @@ def generate_uri(original_uri: str, timestamp_str: str) -> str:
     return f"{base_uri}?time={time_encoded}"
 
 
-def load_detections(csv_path: Path) -> List[Dict]:
+def load_detections(csv_path: Path) -> list[dict]:
     """Load all detections from CSV file."""
     with open(csv_path, 'r', encoding='utf-8') as f:
         reader = csv.DictReader(f)
         return list(reader)
 
 
-def organize_by_category_node(detections: List[Dict]) -> Dict[str, Dict[str, List[Dict]]]:
+def organize_by_category_node(detections: list[dict]) -> dict[str, dict[str, list[dict]]]:
     """
     Organize detections by category and node.
     Returns: {category: {node: [list of detections]}}
@@ -123,7 +123,7 @@ def organize_by_category_node(detections: List[Dict]) -> Dict[str, Dict[str, Lis
     return organized
 
 
-def sort_by_preference(detections: List[Dict], manual_confidences: Dict[str, str]) -> List[Dict]:
+def sort_by_preference(detections: list[dict], manual_confidences: dict[str, str]) -> list[dict]:
     """
     Sort detections by preference:
     1. Preferred notes (tp_machine_only, fp_machine_only) first
@@ -162,7 +162,7 @@ def sort_by_preference(detections: List[Dict], manual_confidences: Dict[str, str
     return sorted(detections, key=sort_key)
 
 
-def select_training_samples(organized_data: Dict[str, Dict[str, List[Dict]]], manual_confidences: Dict[str, str]) -> List[Dict]:
+def select_training_samples(organized_data: dict[str, dict[str, list[dict]]], manual_confidences: dict[str, str]) -> list[dict]:
     """
     Select training samples according to requirements:
     - At least 30 samples per category (or all if < 30)
@@ -226,7 +226,7 @@ def select_training_samples(organized_data: Dict[str, Dict[str, List[Dict]]], ma
             
             # Sort nodes by how many samples they've contributed (fewest first).
             # This ensures even distribution.
-            nodes_by_count = sorted(node_detections.keys(), 
+            nodes_by_count = sorted(node_detections.keys(),
                                    key=lambda n: node_counts[n])
             
             for node in nodes_by_count:
@@ -251,6 +251,20 @@ def select_training_samples(organized_data: Dict[str, Dict[str, List[Dict]]], ma
 
 
 def get_aligned_end_time(timestamp_str: str) -> datetime:
+    """
+    Calculate the aligned end time for 60-second audio download window.
+    
+    Snaps the given timestamp to the next 10-second boundary to align with
+    HLS segment boundaries. This ensures we can download complete segments
+    that cover the detection time.
+    
+    Args:
+        timestamp_str: PST timestamp string in format 'YYYY_MM_DD_HH_MM_SS_PST'
+    
+    Returns:
+        datetime: Aligned end time snapped to next 10-second boundary
+            (rolls over to next minute if seconds become 60)
+    """
     timestamp_pst = parse_timestamp(timestamp_str)
     
     # We need 60 seconds of audio ending at or shortly after the given timestamp.
@@ -402,7 +416,7 @@ def download_60s_audio(node_name: str, timestamp_str: str, tmp_dir: str) -> Opti
 
 
 def compute_correct_timestamp_for_tp_human_only(
-    sample: Dict, 
+    sample: Dict,
     model_inference,
     tmp_dir: str
 ) -> Tuple[str, float]:
@@ -482,10 +496,10 @@ def compute_correct_timestamp_for_tp_human_only(
 
 
 def write_training_samples(
-    samples: List[Dict], 
-    output_path: Path, 
-    manual_timestamps: Dict[str, str],
-    manual_confidences: Dict[str, str],
+    samples: list[dict],
+    output_path: Path,
+    manual_timestamps: dict[str, str],
+    manual_confidences: dict[str, str],
     model_inference=None
 ):
     """
@@ -549,8 +563,7 @@ def write_training_samples(
                 
                 writer.writerow(output_row)
 
-
-def load_manual_corrections(corrections_path: Path) -> Tuple[Dict[str, str], Dict[str, str]]:
+def load_manual_corrections(corrections_path: Path) -> tuple[dict[str, str], dict[str, str]]:
     """
     Load manual timestamp corrections and confidence values from CSV file.
     
