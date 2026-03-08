@@ -146,6 +146,12 @@ jobs:
         run: |
           git diff --exit-code
 
+      - name: Process humpback wavs
+        if: steps.skip_check.outputs.should_skip != 'true'
+        working-directory: ModelTraining
+        run: |
+          python src/process_humpback_wavs.py
+
       - name: Extract training samples
         if: steps.skip_check.outputs.should_skip != 'true'
         working-directory: ModelTraining
