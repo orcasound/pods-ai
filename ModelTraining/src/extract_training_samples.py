@@ -137,7 +137,7 @@ def sort_by_preference(detections: list[dict], manual_confidences: dict[str, str
             Detections with 0.0 confidence are deprioritized.
     
     Returns:
-        List[Dict]: Sorted list of detection dictionaries, ordered by preference
+        list[dict]: Sorted list of detection dictionaries, ordered by preference
             (preferred notes first, quality issues last, oldest timestamps first)
     """
     def sort_key(det):
@@ -416,10 +416,10 @@ def download_60s_audio(node_name: str, timestamp_str: str, tmp_dir: str) -> Opti
 
 
 def compute_correct_timestamp_for_tp_human_only(
-    sample: Dict,
+    sample: dict,
     model_inference,
     tmp_dir: str
-) -> Tuple[str, float]:
+) -> tuple[str, float]:
     """
     Compute the correct timestamp for a tp_human_only detection.
     

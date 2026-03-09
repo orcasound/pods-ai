@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Optional, List, Tuple
+from typing import Optional, List
 import csv
 from urllib.parse import quote
 
@@ -30,7 +30,7 @@ class OrcasiteFeed:
     bucket: str                 # "audio-orcasound-net"
     bucket_region: str          # "us-west-2"
     visible: bool               # True/False
-    location: Tuple[float, float]  # (lat, lng)
+    location: tuple[float, float]  # (lat, lng)
     image_url: Optional[str] = None
     cloudfront_url: Optional[str] = None
 
