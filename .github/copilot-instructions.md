@@ -67,10 +67,11 @@ pods-ai/
 
 The scripts in `ModelTraining/src/` are meant to be run in order:
 
-1. `make_csv.py` – Queries Orcasite and OrcaHello APIs; writes `output_segments/detections.csv`.
-2. `extract_training_samples.py` – Reads `detections.csv`; writes `output_segments/training_samples.csv`.
-3. `download_wavs.py` – Reads `training_samples.csv`; downloads wav files into subdirectories under `output_segments/`.
-4. `make_spectrograms.py` – Generates a PNG spectrogram alongside each wav file.
+1. `make_csv.py` – Queries Orcasite and OrcaHello APIs; writes `output/csv/detections.csv`.
+2. `process_humpback_wavs.py` – Processes humpback signal files from `signals-humpback_*.wav`; extracts 2-second segments.
+3. `extract_training_samples.py` – Reads `detections.csv`; writes `output/csv/training_samples.csv` (adjusts humpback count based on existing signal files).
+4. `download_wavs.py` – Reads `training_samples.csv`; downloads wav files into subdirectories under `output/wav/`.
+5. `make_spectrograms.py` – Generates a PNG spectrogram alongside each wav file.
 
 Detection labels: `resident`, `transient`, `humpback`, `other`.  
 Classification kinds: `tp_human_only`, `tp_machine_only`, `fp_machine_only`, `tp_both`, `skip`.

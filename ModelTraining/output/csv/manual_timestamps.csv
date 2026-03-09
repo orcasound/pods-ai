@@ -1,1 +1,13 @@
-SampleURI,Timestamp
+SampleURI,Timestamp,Confidence
+https://live.orcasound.net/bouts/new/andrews-bay?time=2025-11-25T04%3A13%3A43.000Z,2025_11_24_20_14_00_PST,100.0
+https://live.orcasound.net/bouts/new/andrews-bay?time=2025-12-12T10%3A06%3A09.000Z,2025_12_12_02_06_07_PST,100.0
+https://live.orcasound.net/bouts/new/andrews-bay?time=2025-12-14T02%3A33%3A00.000Z,,0.0
+https://live.orcasound.net/bouts/new/north-sjc?time=2024-09-23T17%3A50%3A51.000Z,,0.0
+https://live.orcasound.net/bouts/new/orcasound-lab?time=2025-11-14T09%3A41%3A25.000Z,2025_11_14_01_41_23_PST,100.0
+https://live.orcasound.net/bouts/new/orcasound-lab?time=2025-12-04T09%3A41%3A06.000Z,2025_12_04_01_41_03_PST,100.0
+https://live.orcasound.net/bouts/new/orcasound-lab?time=2025-12-18T06%3A12%3A03.000Z,2025_12_17_22_12_01_PST,100.0
+https://live.orcasound.net/bouts/new/port-townsend?time=2025-11-04T15%3A13%3A59.000Z,,0.0
+https://live.orcasound.net/bouts/new/port-townsend?time=2025-12-17T03%3A29%3A19.000Z,,0.0
+https://live.orcasound.net/bouts/new/sunset-bay?time=2024-11-09T21%3A57%3A37.000Z,,0.0
+https://live.orcasound.net/bouts/new/sunset-bay?time=2024-11-26T05%3A06%3A05.000Z,,0.0
+https://live.orcasound.net/bouts/new/sunset-bay?time=2025-11-10T21%3A55%3A25.000Z,2025_11_10_13_55_20_PST,100.0
