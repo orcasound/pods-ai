@@ -563,6 +563,7 @@ def write_training_samples(
                 
                 writer.writerow(output_row)
 
+
 def load_manual_corrections(corrections_path: Path) -> tuple[dict[str, str], dict[str, str]]:
     """
     Load manual timestamp corrections and confidence values from CSV file.
