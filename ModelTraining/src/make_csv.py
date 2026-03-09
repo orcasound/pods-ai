@@ -52,6 +52,9 @@ class OrcaHelloDetection:
     status: str                  # e.g., "confirmed", "rejected", etc.
     confidence: Optional[float] = None  # Confidence score from model inference
 
+# Terms in a detection description that indicate the label cannot be determined with confidence.
+SKIP_TERMS = {'?', 'not sure', 'unsure', 'possibl', 'sounds like'}
+
 def get_label(
     orcasite_det: OrcasiteDetection,
     orcahello_det: Optional[OrcaHelloDetection],
@@ -68,6 +71,10 @@ def get_label(
     """
     desc = (orcasite_det.description or "").lower()
     cat = (orcasite_det.category or "").lower()
+
+    # Skip detections whose description indicates the label cannot be determined.
+    if any(term in desc for term in SKIP_TERMS):
+        return None
 
     # 1. Resident
     if cat == "whale":
