@@ -53,7 +53,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 PACIFIC_TZ = timezone('US/Pacific')
 UTC_TZ = timezone('UTC')
 PREFERRED_NOTES = {'tp_machine_only', 'fp_machine_only'}
-QUALITY_FILTER_TERMS = {'faint', 'distant', 'quiet', 'noise', '?', 'not sure', 'unsure', 'possibl', 'sounds like'}
+QUALITY_FILTER_TERMS = {'faint', 'distant', 'quiet', 'noise'}
 MIN_SAMPLES_PER_CATEGORY = 30
 
 # Count existing humpback signal files.
@@ -562,6 +562,7 @@ def write_training_samples(
                 output_row['URI'] = generate_uri(sample['URI'], output_row['Timestamp'])
                 
                 writer.writerow(output_row)
+
 
 def load_manual_corrections(corrections_path: Path) -> tuple[dict[str, str], dict[str, str]]:
     """
