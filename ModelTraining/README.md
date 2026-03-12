@@ -8,12 +8,13 @@ The `ModelTraining/src` directory has the following scripts for different steps 
 
 1. **make_csv.py**: Create a CSV file (`output/csv/detections.csv`) with a set of detections.
    The CSV file has the following columns: Category, NodeName, Timestamp, URI, Description, and Notes.
-2. **process_humpback_wavs.py**: Process files from the humpback submodule into the humpback subdirectory under `output/wav`
+2. **process_humpback_wavs.py**: Process files from the humpback submodule into the humpback subdirectory under `output/wav`.
+   A custom segment duration can be specified with `--duration _seconds_` (default: 3 seconds).
 3. **extract_training_samples.py**: Use an input CSV file (`output/csv/detections.csv` by default)
    to create `output/csv/training_samples.csv`. An alternate input filename can be specified with
-   `--input _filename_`.
+   `--input _filename_`. A custom segment duration can be specified with `--duration _seconds_` (default: 3 seconds).
    - For `tp_human_only` detections, runs model inference on preceding 60 seconds to find correct timestamp
-   - For other detections, subtracts 2 seconds from timestamp
+   - For other detections, subtracts the segment duration from the timestamp
 4. **download_wavs.py**: Use `output/csv/training_samples.csv` and download wav files into subdirectories under `output/wav`
 5. **make_spectrograms.py**: Create a png file for each wav file in a subdirectory of `output/png`
 
@@ -25,11 +26,11 @@ The `extract_training_samples.py` script now implements intelligent timestamp co
 
 For detections marked as `tp_human_only`:
 1. Downloads 60 seconds of audio preceding the detection timestamp
-2. Runs model inference to score each 2-second segment
+2. Runs model inference to score each segment
 3. Finds the highest scoring segment
-4. Adjusts the timestamp based on the offset of the highest scoring segment (between 2-60 seconds)
+4. Adjusts the timestamp based on the offset of the highest scoring segment
 
-This matches the behavior described in the issue and follows the approach used in [aifororcas-livesystem's LiveInferenceOrchestrator.py](https://github.com/orcasound/aifororcas-livesystem/blob/main/InferenceSystem/src/LiveInferenceOrchestrator.py).
+This matches the behavior described in the issue and follows the approach used in [aifororcas-livesystem's LiveInferenceOrchestratorV1.py](https://github.com/orcasound/aifororcas-livesystem/blob/main/InferenceSystem/src/LiveInferenceOrchestratorV1.py).
 
 ### Using the FastAI Model
 
@@ -149,7 +150,7 @@ The timestamp correction implementation follows the architecture described in th
 - Downloads from Orcasound S3 buckets: `s3-us-west-2.amazonaws.com/audio-orcasound-net/`
 - Processes HLS streams with m3u8 playlists
 - Uses FFmpeg for audio format conversion
-- Returns `local_confidences` array with scores for each 2-second segment
+- Returns `local_confidences` array with scores for each segment
 
 ## Example Configuration
 

@@ -9,16 +9,16 @@ Extract training samples from detections.csv with the following constraints:
 - Spread samples evenly across nodes per category
 - Minimize total rows while meeting constraints
 - For tp_human_only detections: Run model on preceding 60 seconds to find correct timestamp
-- For other detections: Subtract 2 seconds from timestamps
+- For other detections: Subtract SEGMENT_DURATION_SECONDS from timestamps
 
 For tp_human_only detections, we download 60 seconds of audio preceding the detection
-timestamp, run model inference to score each 2-second segment, and use the highest
-scoring segment to determine the correct timestamp offset (between 2-60 seconds).
+timestamp, run model inference to score each segment, and use the highest
+scoring segment to determine the correct timestamp offset.
 
-This matches the behavior of aifororcas-livesystem's LiveInferenceOrchestrator.py
+This matches the behavior of aifororcas-livesystem's LiveInferenceOrchestratorV1.py
 which uses DateRangeHLSStream to download audio and returns local_confidences for
-each 2-second sample. See:
-https://github.com/orcasound/aifororcas-livesystem/blob/main/InferenceSystem/src/LiveInferenceOrchestrator.py
+each 3-second sample. See:
+https://github.com/orcasound/aifororcas-livesystem/blob/main/InferenceSystem/src/LiveInferenceOrchestratorV1.py
 """
 
 import argparse
@@ -58,7 +58,7 @@ MIN_SAMPLES_PER_CATEGORY = 30
 
 # Count existing humpback signal files.
 OTHER_HUMPBACK_SAMPLES = len(glob.glob(str(REPO_ROOT / 'output' / 'wav' / 'humpback' / 'signals-humpback_*.wav')))
-SEGMENT_DURATION_SECONDS = 2  # Duration of each audio segment for model inference.
+SEGMENT_DURATION_SECONDS = 3  # Default duration of each audio segment for model inference.
 
 def parse_timestamp(timestamp_str: str) -> datetime:
     """Parse a PST timestamp string to datetime object."""
@@ -71,10 +71,10 @@ def format_timestamp(dt: datetime) -> str:
     return dt.strftime('%Y_%m_%d_%H_%M_%S_PST')
 
 
-def subtract_two_seconds(timestamp_str: str) -> str:
-    """Subtract SEGMENT_DURATION_SECONDS from a PST timestamp string."""
+def subtract_segment_duration(timestamp_str: str, segment_duration: int = SEGMENT_DURATION_SECONDS) -> str:
+    """Subtract segment_duration seconds from a PST timestamp string."""
     dt = parse_timestamp(timestamp_str)
-    dt_minus_offset = dt - timedelta(seconds=SEGMENT_DURATION_SECONDS)
+    dt_minus_offset = dt - timedelta(seconds=segment_duration)
     return format_timestamp(dt_minus_offset)
 
 
@@ -418,19 +418,21 @@ def download_60s_audio(node_name: str, timestamp_str: str, tmp_dir: str) -> Opti
 def compute_correct_timestamp_for_tp_human_only(
     sample: dict,
     model_inference,
-    tmp_dir: str
+    tmp_dir: str,
+    segment_duration: int = SEGMENT_DURATION_SECONDS
 ) -> tuple[str, float]:
     """
     Compute the correct timestamp for a tp_human_only detection.
     
     For tp_human_only detections, we download the preceding 50-60 seconds of audio,
-    run the model on it to score each 2-second segment, find the highest scoring
+    run the model on it to score each segment, find the highest scoring
     segment, and adjust the timestamp accordingly.
     
     Args:
         sample: Detection sample dictionary
         model_inference: Model inference instance
         tmp_dir: Temporary directory for audio files
+        segment_duration: Duration of each audio segment in seconds
     
     Returns:
         Tuple of (corrected timestamp string, max confidence score)
@@ -444,8 +446,8 @@ def compute_correct_timestamp_for_tp_human_only(
     wav_path = download_60s_audio(node_name, timestamp_str, tmp_dir)
     
     if wav_path is None:
-        print(f"  Failed to download audio, falling back to 2-second offset")
-        return subtract_two_seconds(timestamp_str), 0.0
+        print(f"  Failed to download audio, falling back to {segment_duration}-second offset")
+        return subtract_segment_duration(timestamp_str, segment_duration), 0.0
     try:
         # Run model inference
         print(f"  Running model inference...")
@@ -456,8 +458,8 @@ def compute_correct_timestamp_for_tp_human_only(
             print(f"    Second {i}: Probability {score * 100}")
         
         if not local_confidences:
-            print(f"  No confidences returned, falling back to 2-second offset")
-            return subtract_two_seconds(timestamp_str), 0.0
+            print(f"  No confidences returned, falling back to {segment_duration}-second offset")
+            return subtract_segment_duration(timestamp_str, segment_duration), 0.0
         
         # Find the index of the highest scoring segment.
         max_confidence_idx = local_confidences.index(max(local_confidences))
@@ -483,8 +485,8 @@ def compute_correct_timestamp_for_tp_human_only(
         
     except Exception as e:
         print(f"  Error during inference: {e}")
-        print(f"  Falling back to 2-second offset")
-        return subtract_two_seconds(timestamp_str), 0.0
+        print(f"  Falling back to {segment_duration}-second offset")
+        return subtract_segment_duration(timestamp_str, segment_duration), 0.0
     finally:
         # Clean up the downloaded audio file.
         if wav_path and os.path.exists(wav_path):
@@ -500,7 +502,8 @@ def write_training_samples(
     output_path: Path,
     manual_timestamps: dict[str, str],
     manual_confidences: dict[str, str],
-    model_inference=None
+    model_inference=None,
+    segment_duration: int = SEGMENT_DURATION_SECONDS
 ):
     """
     Write selected samples to CSV with timestamps adjusted.
@@ -511,6 +514,7 @@ def write_training_samples(
         manual_timestamps: Dictionary mapping URIs to corrected timestamp strings
         manual_confidences: Dictionary mapping URIs to confidence strings (0.0-100.0)
         model_inference: Optional model inference instance for tp_human_only timestamp correction
+        segment_duration: Duration of each audio segment in seconds
     """
     output_path.parent.mkdir(parents=True, exist_ok=True)
     
@@ -541,13 +545,13 @@ def write_training_samples(
                 # For tp_human_only detections, use model-based timestamp correction.
                 elif sample['Notes'] == 'tp_human_only' and model_inference is not None:
                     timestamp, confidence = compute_correct_timestamp_for_tp_human_only(
-                        sample, model_inference, tmp_dir
+                        sample, model_inference, tmp_dir, segment_duration
                     )
                     output_row['Timestamp'] = timestamp
                     output_row['Confidence'] = f"{confidence:.1f}"
                 else:
-                    # For all other detections, subtract 2 seconds.
-                    output_row['Timestamp'] = subtract_two_seconds(sample['Timestamp'])
+                    # For all other detections, subtract segment_duration seconds.
+                    output_row['Timestamp'] = subtract_segment_duration(sample['Timestamp'], segment_duration)
                     confidence_str = sample.get('Confidence', '')
                     if confidence_str:
                         try:
@@ -634,6 +638,12 @@ def main():
         type=str,
         default='output/csv/detections.csv',
         help='Path to input detections CSV file (default: output/csv/detections.csv)'
+    )
+    parser.add_argument(
+        '--duration',
+        type=int,
+        default=SEGMENT_DURATION_SECONDS,
+        help=f'Duration of each audio segment in seconds (default: {SEGMENT_DURATION_SECONDS})'
     )
     args = parser.parse_args()
     
@@ -726,7 +736,7 @@ def main():
         sys.exit(1)
 
     print(f"\nWriting training samples to {output_path}...")
-    write_training_samples(samples, output_path, manual_timestamps, manual_confidences, model_inference)
+    write_training_samples(samples, output_path, manual_timestamps, manual_confidences, model_inference, args.duration)
     print("Done!")
 
 
