@@ -17,6 +17,7 @@ permissions:
 
 jobs:
   make_csv_ubuntu:
+    if: github.actor != 'dependabot[bot]'
     permissions:
       actions: write  # for fkirc/skip-duplicate-actions to skip or stop workflow runs
       contents: read  # for actions/checkout to fetch code
@@ -91,6 +92,7 @@ jobs:
           git diff --exit-code
 
   make_csv_windows:
+    if: github.actor != 'dependabot[bot]'
     permissions:
       actions: write  # for fkirc/skip-duplicate-actions to skip or stop workflow runs
       contents: read  # for actions/checkout to fetch code
