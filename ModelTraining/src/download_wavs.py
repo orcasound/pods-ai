@@ -23,7 +23,7 @@ from audio_utils import (
 )
 
 PACIFIC_TZ = timezone('US/Pacific')
-N_SECONDS = 2  # Create 2-second wav files.
+N_SECONDS = 3  # Create 3-second wav files.
 
 @dataclass
 class CSVRow:
@@ -95,10 +95,10 @@ def download_audio_segment(
     output_root: Path,
 ):
     """
-    Download a 2-second audio segment for a detection and save it to the appropriate label directory.
+    Download a 3-second audio segment for a detection and save it to the appropriate label directory.
     
     This function implements a simplified version of DateRangeHLSStream logic to download
-    only a 2-second wav file instead of the full 60-second clip.
+    only a 3-second wav file instead of the full 60-second clip.
     
     Parameters:
         category (str): The label/category for the detection (e.g., "resident", "transient").

@@ -568,6 +568,42 @@ def write_training_samples(
                 writer.writerow(output_row)
 
 
+def remove_zero_confidence_detections(
+    detections: list[dict],
+    manual_confidences: dict[str, str]
+) -> list[dict]:
+    """
+    Remove from detections any entries whose URI has a manual_confidence of 0.
+    
+    Args:
+        detections: List of detection dictionaries
+        manual_confidences: Dictionary mapping URIs to confidence strings (0.0-100.0)
+    
+    Returns:
+        list[dict]: Filtered list of detections with zero-confidence entries removed
+    """
+    filtered = []
+    removed_count = 0
+    
+    for det in detections:
+        uri = det.get('URI', '')
+        if uri in manual_confidences:
+            try:
+                conf = float(manual_confidences[uri])
+                if conf == 0.0:
+                    removed_count += 1
+                    continue  # Skip this detection
+            except (ValueError, TypeError):
+                pass  # Keep detection if confidence can't be parsed
+        
+        filtered.append(det)
+    
+    if removed_count > 0:
+        print(f"  Removed {removed_count} detections with 0.0 confidence")
+    
+    return filtered
+
+
 def load_manual_corrections(corrections_path: Path) -> tuple[dict[str, str], dict[str, str]]:
     """
     Load manual timestamp corrections and confidence values from CSV file.
@@ -660,6 +696,9 @@ def main():
     print(f"Loading detections from {input_path}...")
     detections = load_detections(input_path)
     print(f"Loaded {len(detections)} detections")
+
+    # Remove from detections any entries whose URI has a manual_confidence of 0.
+    detections = remove_zero_confidence_detections(detections, manual_confidences)
     
     print("\nOrganizing detections by category and node...")
     organized_data = organize_by_category_node(detections)
