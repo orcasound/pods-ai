@@ -23,7 +23,7 @@ from audio_utils import (
 )
 
 PACIFIC_TZ = timezone('US/Pacific')
-N_SECONDS = 2  # Create 2-second wav files.
+N_SECONDS = 3  # Create 3-second wav files.
 
 @dataclass
 class CSVRow:
@@ -95,10 +95,10 @@ def download_audio_segment(
     output_root: Path,
 ):
     """
-    Download a 2-second audio segment for a detection and save it to the appropriate label directory.
+    Download a 3-second audio segment for a detection and save it to the appropriate label directory.
     
     This function implements a simplified version of DateRangeHLSStream logic to download
-    only a 2-second wav file instead of the full 60-second clip.
+    only a 3-second wav file instead of the full 60-second clip.
     
     Parameters:
         category (str): The label/category for the detection (e.g., "resident", "transient").
@@ -180,13 +180,10 @@ def download_audio_segment(
     num_segments_needed = math.ceil(N_SECONDS / target_duration)
     
     # Calculate start and end indices based on time since folder start.
-    # Note: there's typically a 2-second audio offset.
-    audio_offset = 2
+    # Don't apply a 2-second offset since it was already applied into the timestamps we have.
     time_since_folder_start_for_start = get_difference_between_times_in_seconds(start_unix_time, current_folder)
-    time_since_folder_start_for_start -= audio_offset
 
     time_since_folder_start_for_end = get_difference_between_times_in_seconds(end_unix_time, current_folder)
-    time_since_folder_start_for_end -= audio_offset
 
     segment_start_index = max(0, math.floor(time_since_folder_start_for_start / target_duration))
     segment_end_index = min(num_total_segments, math.ceil(time_since_folder_start_for_end / target_duration))

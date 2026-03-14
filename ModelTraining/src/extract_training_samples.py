@@ -50,6 +50,9 @@ from audio_utils import (
 # Get repository root (ModelTraining directory).
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
+# Offset, in seconds, between the detection end time and the start of the downloaded audio.
+AUDIO_OFFSET_SECONDS: int = 2
+
 PACIFIC_TZ = timezone('US/Pacific')
 UTC_TZ = timezone('UTC')
 PREFERRED_NOTES = {'tp_machine_only', 'fp_machine_only'}
@@ -475,13 +478,16 @@ def compute_correct_timestamp_for_tp_human_only(
             max_confidence = previous_confidence
             print(f"  Adjusted to previous second: {max_confidence} at second {max_confidence_idx}")
         
-        # The offset is calculated as (num_segments - max_confidence_idx).
-        # This gives us how many seconds before the original timestamp the highest scoring segment starts.
+        # max_confidence_idx represents seconds from the START of the downloaded 60-second WAV
+        # We need to calculate what clock time that corresponds to
+        # The WAV starts at (aligned_end - 60 - AUDIO_OFFSET_SECONDS) due to the 2-second offset in download.
         end_time = get_aligned_end_time(timestamp_str)
-        start_time = end_time - timedelta(seconds=60 - max_confidence_idx)
-        print(f"  Timestamp: {start_time}")
+        wav_start_time = end_time - timedelta(seconds=60 + AUDIO_OFFSET_SECONDS)
+        # The detected call is at wav_start_time + max_confidence_idx
+        call_time = wav_start_time + timedelta(seconds=max_confidence_idx)
+        print(f"  Call detected at: {call_time}")
 
-        return format_timestamp(start_time), max_confidence * 100
+        return format_timestamp(call_time), max_confidence * 100
         
     except Exception as e:
         print(f"  Error during inference: {e}")
@@ -566,6 +572,42 @@ def write_training_samples(
                 output_row['URI'] = generate_uri(sample['URI'], output_row['Timestamp'])
                 
                 writer.writerow(output_row)
+
+
+def remove_zero_confidence_detections(
+    detections: list[dict],
+    manual_confidences: dict[str, str]
+) -> list[dict]:
+    """
+    Remove from detections any entries whose URI has a manual_confidence of 0.
+    
+    Args:
+        detections: List of detection dictionaries
+        manual_confidences: Dictionary mapping URIs to confidence strings (0.0-100.0)
+    
+    Returns:
+        list[dict]: Filtered list of detections with zero-confidence entries removed
+    """
+    filtered = []
+    removed_count = 0
+    
+    for det in detections:
+        uri = det.get('URI', '')
+        if uri in manual_confidences:
+            try:
+                conf = float(manual_confidences[uri])
+                if conf == 0.0:
+                    removed_count += 1
+                    continue  # Skip this detection
+            except (ValueError, TypeError):
+                pass  # Keep detection if confidence can't be parsed
+        
+        filtered.append(det)
+    
+    if removed_count > 0:
+        print(f"  Removed {removed_count} detections with 0.0 confidence")
+    
+    return filtered
 
 
 def load_manual_corrections(corrections_path: Path) -> tuple[dict[str, str], dict[str, str]]:
@@ -660,6 +702,9 @@ def main():
     print(f"Loading detections from {input_path}...")
     detections = load_detections(input_path)
     print(f"Loaded {len(detections)} detections")
+
+    # Remove from detections any entries whose URI has a manual_confidence of 0.
+    detections = remove_zero_confidence_detections(detections, manual_confidences)
     
     print("\nOrganizing detections by category and node...")
     organized_data = organize_by_category_node(detections)
