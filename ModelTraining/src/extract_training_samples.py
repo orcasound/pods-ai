@@ -50,6 +50,9 @@ from audio_utils import (
 # Get repository root (ModelTraining directory).
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
+# Offset, in seconds, between the detection end time and the start of the downloaded audio.
+AUDIO_OFFSET_SECONDS: int = 2
+
 PACIFIC_TZ = timezone('US/Pacific')
 UTC_TZ = timezone('UTC')
 PREFERRED_NOTES = {'tp_machine_only', 'fp_machine_only'}
@@ -477,10 +480,9 @@ def compute_correct_timestamp_for_tp_human_only(
         
         # max_confidence_idx represents seconds from the START of the downloaded 60-second WAV
         # We need to calculate what clock time that corresponds to
-        # The WAV starts at (aligned_end - 60 - audio_offset) due to the 2-second offset in download
+        # The WAV starts at (aligned_end - 60 - AUDIO_OFFSET_SECONDS) due to the 2-second offset in download.
         end_time = get_aligned_end_time(timestamp_str)
-        audio_offset = 2  # Same offset used in download_60s_audio
-        wav_start_time = end_time - timedelta(seconds=60 + audio_offset)
+        wav_start_time = end_time - timedelta(seconds=60 + AUDIO_OFFSET_SECONDS)
         # The detected call is at wav_start_time + max_confidence_idx
         call_time = wav_start_time + timedelta(seconds=max_confidence_idx)
         print(f"  Call detected at: {call_time}")
