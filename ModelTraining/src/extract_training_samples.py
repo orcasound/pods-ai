@@ -475,13 +475,17 @@ def compute_correct_timestamp_for_tp_human_only(
             max_confidence = previous_confidence
             print(f"  Adjusted to previous second: {max_confidence} at second {max_confidence_idx}")
         
-        # The offset is calculated as (num_segments - max_confidence_idx).
-        # This gives us how many seconds before the original timestamp the highest scoring segment starts.
+        # max_confidence_idx represents seconds from the START of the downloaded 60-second WAV
+        # We need to calculate what clock time that corresponds to
+        # The WAV starts at (aligned_end - 60 - audio_offset) due to the 2-second offset in download
         end_time = get_aligned_end_time(timestamp_str)
-        start_time = end_time - timedelta(seconds=60 - max_confidence_idx)
-        print(f"  Timestamp: {start_time}")
+        audio_offset = 2  # Same offset used in download_60s_audio
+        wav_start_time = end_time - timedelta(seconds=60 + audio_offset)
+        # The detected call is at wav_start_time + max_confidence_idx
+        call_time = wav_start_time + timedelta(seconds=max_confidence_idx)
+        print(f"  Call detected at: {call_time}")
 
-        return format_timestamp(start_time), max_confidence * 100
+        return format_timestamp(call_time), max_confidence * 100
         
     except Exception as e:
         print(f"  Error during inference: {e}")
