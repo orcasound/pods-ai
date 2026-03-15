@@ -13,7 +13,11 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from extract_training_samples import process_sample, write_training_samples
+from extract_training_samples import (
+    process_sample,
+    remove_zero_confidence_detections,
+    write_training_samples,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -58,6 +62,38 @@ TP_MACHINE_ONLY_EXPECTED = {
     'Description': 'Humpback whale song',
     'Notes': 'tp_machine_only',
     'Confidence': '58.4',
+}
+
+# Manual timestamp correction: tp_human_only with a manual override in manual_timestamps.csv.
+MANUAL_TIMESTAMP_INPUT = {
+    'Category': 'humpback',
+    'NodeName': 'rpi_andrews_bay',
+    'Timestamp': '2025_11_24_20_13_43_PST',
+    'URI': 'https://live.orcasound.net/bouts/new/andrews-bay?time=2025-11-25T04%3A13%3A43.000Z',
+    'Description': 'Distant humpback calls at 20:14.',
+    'Notes': 'tp_human_only',
+    'Confidence': '',
+}
+
+MANUAL_TIMESTAMP_EXPECTED = {
+    'Category': 'humpback',
+    'NodeName': 'rpi_andrews_bay',
+    'Timestamp': '2025_11_24_20_14_00_PST',
+    'URI': 'https://live.orcasound.net/bouts/new/andrews-bay?time=2025-11-25T04%3A14%3A00.000Z',
+    'Description': 'Distant humpback calls at 20:14.',
+    'Notes': 'tp_human_only',
+    'Confidence': '100.0',
+}
+
+# Zero-confidence detection: manual_confidences marks this as 0.0, so it must be filtered out.
+ZERO_CONFIDENCE_INPUT = {
+    'Category': 'humpback',
+    'NodeName': 'rpi_andrews_bay',
+    'Timestamp': '2025_12_13_18_33_00_PST',
+    'URI': 'https://live.orcasound.net/bouts/new/andrews-bay?time=2025-12-14T02%3A33%3A00.000Z',
+    'Description': 'Humpback',
+    'Notes': 'tp_human_only',
+    'Confidence': '',
 }
 
 
@@ -140,6 +176,27 @@ class TestProcessSampleTpHumanOnly:
         result = process_sample(TP_HUMAN_ONLY_INPUT, {}, {}, model_inference=None)
         # 2025_12_12_01_14_55 - 3 seconds = 2025_12_12_01_14_52
         assert result['Timestamp'] == '2025_12_12_01_14_52_PST'
+
+
+# ---------------------------------------------------------------------------
+# manual_timestamps tests
+# ---------------------------------------------------------------------------
+
+class TestManualTimestamps:
+    """Tests for samples that have manual timestamp/confidence corrections."""
+
+    def test_manual_timestamp_applied(self):
+        """process_sample should use the manually-corrected timestamp and URI."""
+        manual_timestamps = {MANUAL_TIMESTAMP_INPUT['URI']: '2025_11_24_20_14_00_PST'}
+        manual_confidences = {MANUAL_TIMESTAMP_INPUT['URI']: '100.0'}
+        result = process_sample(MANUAL_TIMESTAMP_INPUT, manual_timestamps, manual_confidences)
+        assert result == MANUAL_TIMESTAMP_EXPECTED
+
+    def test_zero_confidence_detection_filtered_out(self):
+        """remove_zero_confidence_detections should remove a sample with 0.0 confidence."""
+        manual_confidences = {ZERO_CONFIDENCE_INPUT['URI']: '0.0'}
+        filtered = remove_zero_confidence_detections([ZERO_CONFIDENCE_INPUT], manual_confidences)
+        assert filtered == []
 
 
 # ---------------------------------------------------------------------------
