@@ -203,11 +203,8 @@ def download_audio_segment(
                 base_path = audio_segment.base_uri
                 file_name = audio_segment.uri
                 audio_url = base_path + file_name
-                try:
-                    download_from_url(audio_url, tmp_path)
-                    file_names.append(file_name)
-                except Exception as e:
-                    print(f"Warning: Skipping {audio_url}: {e}")
+                download_from_url(audio_url, tmp_path)
+                file_names.append(file_name)
             
             if not file_names:
                 print("ERROR: No segments were successfully downloaded")

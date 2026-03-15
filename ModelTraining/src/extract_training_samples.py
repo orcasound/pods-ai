@@ -369,11 +369,8 @@ def download_60s_audio(node_name: str, timestamp_str: str, tmp_dir: str) -> Opti
             base_path = audio_segment.base_uri
             file_name = audio_segment.uri
             audio_url = base_path + file_name
-            try:
-                download_from_url(audio_url, tmp_dir)
-                file_names.append(file_name)
-            except Exception as e:
-                print(f"  Warning: Skipping {audio_url}: {e}")
+            download_from_url(audio_url, tmp_dir)
+            file_names.append(file_name)
         
         if not file_names:
             print("  ERROR: No segments were successfully downloaded")
