@@ -10,6 +10,7 @@ and download_wavs.py to avoid code duplication.
 from datetime import datetime
 from typing import List
 import os
+import time
 
 import boto3
 from botocore import UNSIGNED
@@ -19,6 +20,12 @@ import requests
 
 # Simple in-memory cache for S3 folder listings keyed by "bucket::prefix"
 _FOLDERS_CACHE = {}
+
+# Number of times to retry a download on transient connection errors.
+MAX_DOWNLOAD_RETRIES = 3
+
+# Seconds to wait between download retry attempts.
+DOWNLOAD_RETRY_DELAY_SECONDS = 2
 
 
 def get_all_folders(bucket: str, prefix: str) -> List[str]:
@@ -105,20 +112,32 @@ def get_difference_between_times_in_seconds(unix_time1: int, unix_time2: int) ->
 
 def download_from_url(dl_url: str, dl_dir: str):
     """
-    Download a file from URL to a directory.
-    
+    Download a file from URL to a directory, with retry on transient connection errors.
+
+    Retries up to MAX_DOWNLOAD_RETRIES times on ConnectionError or ChunkedEncodingError
+    before re-raising the exception.
+
     Parameters:
         dl_url (str): URL to download from.
         dl_dir (str): Directory to save the file.
     """
     file_name = os.path.basename(dl_url)
     dl_path = os.path.join(dl_dir, file_name)
-    
+
     if os.path.isfile(dl_path):
         return
-    
-    response = requests.get(dl_url, timeout=30)
-    response.raise_for_status()
-    
-    with open(dl_path, 'wb') as f:
-        f.write(response.content)
+
+    last_exception: Exception = RuntimeError("No attempts made")
+    for attempt in range(MAX_DOWNLOAD_RETRIES + 1):
+        try:
+            response = requests.get(dl_url, timeout=30)
+            response.raise_for_status()
+            with open(dl_path, 'wb') as f:
+                f.write(response.content)
+            return
+        except (requests.exceptions.ConnectionError, requests.exceptions.ChunkedEncodingError) as e:
+            last_exception = e
+            if attempt < MAX_DOWNLOAD_RETRIES:
+                print(f"  Retry {attempt + 1} of {MAX_DOWNLOAD_RETRIES} for {dl_url}: {e}")
+                time.sleep(DOWNLOAD_RETRY_DELAY_SECONDS)
+    raise last_exception
