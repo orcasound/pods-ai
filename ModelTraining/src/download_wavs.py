@@ -19,7 +19,8 @@ from audio_utils import (
     get_cached_folders,
     get_folders_between_timestamp,
     get_difference_between_times_in_seconds,
-    download_from_url
+    download_from_url,
+    load_m3u8_with_retry
 )
 
 PACIFIC_TZ = timezone('US/Pacific')
@@ -161,7 +162,7 @@ def download_audio_segment(
     stream_url = f"{hydrophone_stream_url}/hls/{current_folder}/live.m3u8"
     
     try:
-        stream_obj = m3u8.load(stream_url)
+        stream_obj = load_m3u8_with_retry(stream_url)
     except Exception as e:
         print(f"ERROR: Failed to load m3u8 file from {stream_url}")
         print(f"Details: {e}")
