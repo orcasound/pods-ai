@@ -141,6 +141,34 @@ Key dependencies:
 
 - **spectrogram_visualizer.py**: Adapted from [aifororcas-livesystem](https://github.com/orcasound/aifororcas-livesystem/blob/main/InferenceSystem/src/spectrogram_visualizer.py)
 - **model_inference.py**: Provides model inference interface for scoring audio samples
+- **get_best_timestamp.py**: Given a node name and a detection timestamp, runs
+  `process_sample()` and prints the corrected URI with the best timestamp.
+
+### get_best_timestamp.py
+
+```
+usage: python get_best_timestamp.py <node_name> <timestamp_str> [--no-model] [--duration N]
+```
+
+| Argument | Description |
+|---|---|
+| `node_name` | Node name, e.g. `rpi_orcasound_lab` |
+| `timestamp_str` | PST timestamp, e.g. `2023_08_18_00_59_53_PST` |
+| `--no-model` | Skip model inference; apply a fixed-offset correction instead |
+| `--duration N` | Segment duration in seconds (default: 3) |
+
+The script uses the same model-based timestamp correction logic as
+`extract_training_samples.py` (see [Model-Based Timestamp Correction](#model-based-timestamp-correction-for-tp_human_only)
+above).  The same `MODEL_TYPE`, `MODEL_PATH`, `MODEL_AUTO_DOWNLOAD`, and
+`MODEL_URL` environment variables apply.
+
+**Example**
+
+```bash
+cd src
+python get_best_timestamp.py rpi_orcasound_lab 2023_08_18_00_59_53_PST
+# https://live.orcasound.net/bouts/new/orcasound-lab?time=2023-08-18T07%3A59%3A50.000Z
+```
 
 ## Architecture
 
