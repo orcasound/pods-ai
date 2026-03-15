@@ -1,4 +1,5 @@
 azure-cosmos
+pytest
 boto3
 ffmpeg-python
 ipython

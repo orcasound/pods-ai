@@ -63,6 +63,12 @@ jobs:
         working-directory: ModelTraining
         run: bash patch_fastai_audio.sh
 
+      - name: Run unit tests
+        if: steps.skip_check.outputs.should_skip != 'true'
+        working-directory: ModelTraining
+        run: |
+          python -m pytest tests/ -v
+
       - name: Make CSV
         if: steps.skip_check.outputs.should_skip != 'true'
         working-directory: ModelTraining
@@ -136,6 +142,12 @@ jobs:
         working-directory: ModelTraining
         shell: cmd
         run: patch_fastai_audio.bat
+
+      - name: Run unit tests
+        if: steps.skip_check.outputs.should_skip != 'true'
+        working-directory: ModelTraining
+        run: |
+          python -m pytest tests/ -v
 
       - name: Make CSV
         if: steps.skip_check.outputs.should_skip != 'true'
