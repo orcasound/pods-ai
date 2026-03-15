@@ -3,44 +3,40 @@
 """
 Unit tests for get_best_timestamp.py.
 
-Tests focus on node_name_to_slug() and build_sample(), which contain the
+Tests focus on node_slug_to_name() and build_sample(), which contain the
 helper logic specific to this script.
 """
 import pytest
 
-from get_best_timestamp import build_sample, node_name_to_slug
+from get_best_timestamp import build_sample, node_slug_to_name
 
 
 # ---------------------------------------------------------------------------
-# node_name_to_slug
+# node_slug_to_name
 # ---------------------------------------------------------------------------
 
-class TestNodeNameToSlug:
-    """Tests for converting a node_name to a URL slug."""
+class TestNodeSlugToName:
+    """Tests for converting a URL slug to a node_name."""
 
-    def test_strips_rpi_prefix(self):
-        """'rpi_' prefix should be removed."""
-        assert node_name_to_slug('rpi_orcasound_lab') == 'orcasound-lab'
+    def test_prepends_rpi_prefix(self):
+        """'rpi_' prefix should be added."""
+        assert node_slug_to_name('orcasound-lab') == 'rpi_orcasound_lab'
 
-    def test_replaces_underscores_with_hyphens(self):
-        """Underscores in the remainder should become hyphens."""
-        assert node_name_to_slug('rpi_andrews_bay') == 'andrews-bay'
+    def test_replaces_hyphens_with_underscores(self):
+        """Hyphens should become underscores."""
+        assert node_slug_to_name('andrews-bay') == 'rpi_andrews_bay'
 
-    def test_single_word_after_prefix(self):
-        """A single-word name after 'rpi_' should convert correctly."""
-        assert node_name_to_slug('rpi_bush_point') == 'bush-point'
+    def test_two_word_slug(self):
+        """A two-word slug should convert correctly."""
+        assert node_slug_to_name('bush-point') == 'rpi_bush_point'
 
-    def test_multi_word_node(self):
-        """Multi-word names should convert all underscores to hyphens."""
-        assert node_name_to_slug('rpi_sunset_bay') == 'sunset-bay'
+    def test_multi_word_slug(self):
+        """Multi-word slugs should convert all hyphens to underscores."""
+        assert node_slug_to_name('sunset-bay') == 'rpi_sunset_bay'
 
-    def test_no_rpi_prefix(self):
-        """Names without an 'rpi_' prefix should only have underscores replaced."""
-        assert node_name_to_slug('orcasound_lab') == 'orcasound-lab'
-
-    def test_already_slug(self):
-        """A value that is already a slug should be returned unchanged."""
-        assert node_name_to_slug('andrews-bay') == 'andrews-bay'
+    def test_single_word_slug(self):
+        """A single-word slug (no hyphens) should just get the prefix."""
+        assert node_slug_to_name('lab') == 'rpi_lab'
 
 
 # ---------------------------------------------------------------------------
@@ -48,17 +44,17 @@ class TestNodeNameToSlug:
 # ---------------------------------------------------------------------------
 
 class TestBuildSample:
-    """Tests for constructing a sample dict from node_name and timestamp_str."""
+    """Tests for constructing a sample dict from node_slug and timestamp_str."""
 
-    NODE = 'rpi_orcasound_lab'
+    SLUG = 'orcasound-lab'
     TIMESTAMP = '2023_08_18_00_59_53_PST'
 
     def _sample(self):
-        return build_sample(self.NODE, self.TIMESTAMP)
+        return build_sample(self.SLUG, self.TIMESTAMP)
 
-    def test_node_name_preserved(self):
-        """NodeName should be the original node_name argument."""
-        assert self._sample()['NodeName'] == self.NODE
+    def test_node_name_derived_from_slug(self):
+        """NodeName should be the node_name derived from the slug."""
+        assert self._sample()['NodeName'] == 'rpi_orcasound_lab'
 
     def test_timestamp_preserved(self):
         """Timestamp should be the original timestamp_str argument."""
@@ -69,7 +65,7 @@ class TestBuildSample:
         assert self._sample()['Notes'] == 'tp_human_only'
 
     def test_uri_contains_slug(self):
-        """URI should contain the slug derived from node_name."""
+        """URI should contain the original slug."""
         assert 'orcasound-lab' in self._sample()['URI']
 
     def test_uri_starts_with_bouts_base(self):

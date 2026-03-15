@@ -2,14 +2,14 @@
 # Copyright (c) PODS-AI contributors
 # SPDX-License-Identifier: MIT
 """
-Given a node_name and timestamp_str, compute and output the best corrected
+Given a node_slug and timestamp_str, compute and output the best corrected
 timestamp URI by running process_sample().
 
 Usage:
-    python get_best_timestamp.py <node_name> <timestamp_str> [--no-model] [--duration N]
+    python get_best_timestamp.py <node_slug> <timestamp_str> [--no-model] [--duration N]
 
 Example:
-    python get_best_timestamp.py rpi_orcasound_lab 2023_08_18_00_59_53_PST
+    python get_best_timestamp.py orcasound-lab 2023_08_18_00_59_53_PST
 """
 
 import argparse
@@ -28,35 +28,32 @@ from extract_training_samples import (
 from model_inference import get_model_inference
 
 
-def node_name_to_slug(node_name: str) -> str:
+def node_slug_to_name(node_slug: str) -> str:
     """
-    Convert a node_name to the URL slug used in Orcasound bouts URIs.
+    Convert an Orcasound URL slug to the node_name used internally.
 
     Args:
-        node_name: Node name such as 'rpi_orcasound_lab'.
+        node_slug: URL slug such as 'orcasound-lab'.
 
     Returns:
-        Slug such as 'orcasound-lab'.
+        Node name such as 'rpi_orcasound_lab'.
     """
-    # Remove the 'rpi_' prefix if present.
-    if node_name.startswith('rpi_'):
-        node_name = node_name[4:]
-    return node_name.replace('_', '-')
+    return 'rpi_' + node_slug.replace('-', '_')
 
 
-def build_sample(node_name: str, timestamp_str: str) -> dict:
+def build_sample(node_slug: str, timestamp_str: str) -> dict:
     """
-    Build a minimal detection sample dict from node_name and timestamp_str.
+    Build a minimal detection sample dict from node_slug and timestamp_str.
 
     Args:
-        node_name: Node name (e.g., 'rpi_orcasound_lab').
+        node_slug: URL slug (e.g., 'orcasound-lab').
         timestamp_str: PST timestamp string (e.g., '2023_08_18_00_59_53_PST').
 
     Returns:
         Sample dict suitable for passing to process_sample().
     """
-    slug = node_name_to_slug(node_name)
-    base_uri = f"https://live.orcasound.net/bouts/new/{slug}"
+    node_name = node_slug_to_name(node_slug)
+    base_uri = f"https://live.orcasound.net/bouts/new/{node_slug}"
     # Encode the original timestamp into the URI so process_sample can use it
     # as a baseline before applying its correction strategy.
     original_uri = generate_uri(base_uri, timestamp_str)
@@ -80,9 +77,9 @@ def main():
         )
     )
     parser.add_argument(
-        'node_name',
+        'node_slug',
         type=str,
-        help="Node name (e.g., rpi_orcasound_lab)",
+        help="Node URL slug (e.g., orcasound-lab)",
     )
     parser.add_argument(
         'timestamp_str',
@@ -106,7 +103,7 @@ def main():
     args = parser.parse_args()
 
     # Construct a sample dict from the provided arguments.
-    sample = build_sample(args.node_name, args.timestamp_str)
+    sample = build_sample(args.node_slug, args.timestamp_str)
 
     # Load manual timestamp corrections.
     manual_corrections_path = REPO_ROOT / 'output' / 'csv' / 'manual_timestamps.csv'
