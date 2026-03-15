@@ -9,12 +9,15 @@ and download_wavs.py to avoid code duplication.
 
 from datetime import datetime
 from typing import List
+import http.client
 import os
 import time
+import urllib.error
 
 import boto3
 from botocore import UNSIGNED
 from botocore.config import Config
+import m3u8
 import requests
 
 
@@ -139,5 +142,30 @@ def download_from_url(dl_url: str, dl_dir: str):
             last_exception = e
             if attempt < MAX_DOWNLOAD_RETRIES:
                 print(f"  Retry {attempt + 1} of {MAX_DOWNLOAD_RETRIES} for {dl_url}: {e}")
+                time.sleep(DOWNLOAD_RETRY_DELAY_SECONDS)
+    raise last_exception
+
+
+def load_m3u8_with_retry(stream_url: str) -> m3u8.M3U8:
+    """
+    Load an m3u8 playlist from a URL, retrying on transient network errors.
+
+    Retries up to MAX_DOWNLOAD_RETRIES times on IncompleteRead, URLError,
+    or ConnectionError before re-raising the exception.
+
+    Parameters:
+        stream_url (str): URL of the m3u8 playlist to load.
+
+    Returns:
+        m3u8.M3U8: Parsed m3u8 object.
+    """
+    last_exception: Exception = RuntimeError("No attempts made")
+    for attempt in range(MAX_DOWNLOAD_RETRIES + 1):
+        try:
+            return m3u8.load(stream_url)
+        except (http.client.IncompleteRead, urllib.error.URLError, ConnectionError) as e:
+            last_exception = e
+            if attempt < MAX_DOWNLOAD_RETRIES:
+                print(f"  Retry {attempt + 1} of {MAX_DOWNLOAD_RETRIES} for {stream_url}: {e}")
                 time.sleep(DOWNLOAD_RETRY_DELAY_SECONDS)
     raise last_exception
