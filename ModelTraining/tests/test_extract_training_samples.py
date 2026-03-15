@@ -85,6 +85,27 @@ MANUAL_TIMESTAMP_EXPECTED = {
     'Confidence': '100.0',
 }
 
+# ubuntu/windows discrepancy: resident tp_human_only from rpi_bush_point.
+RESIDENT_TP_HUMAN_ONLY_INPUT = {
+    'Category': 'resident',
+    'NodeName': 'rpi_bush_point',
+    'Timestamp': '2023_11_28_14_12_51_PST',
+    'URI': 'https://live.orcasound.net/bouts/new/bush-point?time=2023-11-28T22%3A12%3A51.000Z',
+    'Description': 'J pod, getting louder now',
+    'Notes': 'tp_human_only',
+    'Confidence': '',
+}
+
+RESIDENT_TP_HUMAN_ONLY_EXPECTED = {
+    'Category': 'resident',
+    'NodeName': 'rpi_bush_point',
+    'Timestamp': '2023_11_28_14_12_43_PST',
+    'URI': 'https://live.orcasound.net/bouts/new/bush-point?time=2023-11-28T22%3A12%3A43.000Z',
+    'Description': 'J pod, getting louder now',
+    'Notes': 'tp_human_only',
+    'Confidence': '86.6',
+}
+
 # Zero-confidence detection: manual_confidences marks this as 0.0, so it must be filtered out.
 ZERO_CONFIDENCE_INPUT = {
     'Category': 'humpback',
@@ -176,6 +197,18 @@ class TestProcessSampleTpHumanOnly:
         result = process_sample(TP_HUMAN_ONLY_INPUT, {}, {}, model_inference=None)
         # 2025_12_12_01_14_55 - 3 seconds = 2025_12_12_01_14_52
         assert result['Timestamp'] == '2025_12_12_01_14_52_PST'
+
+    def test_resident_bush_point_full_output_row_matches_expected(self):
+        """resident tp_human_only from rpi_bush_point should produce the correct output row (ubuntu/windows discrepancy)."""
+        mock_model = MagicMock()
+        with patch(
+            'extract_training_samples.compute_correct_timestamp_for_tp_human_only',
+            return_value=('2023_11_28_14_12_43_PST', 86.6),
+        ):
+            result = process_sample(
+                RESIDENT_TP_HUMAN_ONLY_INPUT, {}, {}, model_inference=mock_model, tmp_dir='/tmp'
+            )
+        assert result == RESIDENT_TP_HUMAN_ONLY_EXPECTED
 
 
 # ---------------------------------------------------------------------------
