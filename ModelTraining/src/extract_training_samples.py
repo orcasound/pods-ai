@@ -503,6 +503,68 @@ def compute_correct_timestamp_for_tp_human_only(
                 pass
 
 
+def process_sample(
+    sample: dict,
+    manual_timestamps: dict[str, str],
+    manual_confidences: dict[str, str],
+    model_inference=None,
+    tmp_dir: Optional[str] = None,
+    segment_duration: int = SEGMENT_DURATION_SECONDS
+) -> dict:
+    """
+    Process a single sample, adjusting its timestamp, URI, and confidence.
+
+    Applies one of three strategies based on the sample's Notes field and available data:
+    1. Manual correction: if the sample's URI has a manual timestamp override.
+    2. Model-based correction: if Notes is 'tp_human_only' and model_inference is provided.
+    3. Fixed offset: subtract segment_duration seconds from the timestamp.
+
+    Args:
+        sample: Detection sample dictionary with keys Category, NodeName, Timestamp,
+            URI, Description, Notes, Confidence.
+        manual_timestamps: Dictionary mapping URIs to corrected timestamp strings.
+        manual_confidences: Dictionary mapping URIs to confidence strings (0.0-100.0).
+        model_inference: Optional model inference instance for tp_human_only timestamp correction.
+        tmp_dir: Temporary directory for audio downloads (required for tp_human_only).
+        segment_duration: Duration of each audio segment in seconds.
+
+    Returns:
+        dict: Copy of sample with Timestamp, URI, and Confidence adjusted.
+    """
+    output_row = sample.copy()
+
+    # Check if there's a manual timestamp correction for this sample.
+    if sample['URI'] in manual_timestamps:
+        print(f"  Using manual timestamp for {sample['URI']}")
+        output_row['Timestamp'] = manual_timestamps[sample['URI']]
+        output_row['Confidence'] = manual_confidences[sample['URI']]
+
+    # For tp_human_only detections, use model-based timestamp correction.
+    elif sample['Notes'] == 'tp_human_only' and model_inference is not None:
+        timestamp, confidence = compute_correct_timestamp_for_tp_human_only(
+            sample, model_inference, tmp_dir or '', segment_duration
+        )
+        output_row['Timestamp'] = timestamp
+        output_row['Confidence'] = f"{confidence:.1f}"
+    else:
+        # For all other detections, subtract segment_duration seconds.
+        output_row['Timestamp'] = subtract_segment_duration(sample['Timestamp'], segment_duration)
+        confidence_str = sample.get('Confidence', '')
+        if confidence_str:
+            try:
+                confidence = float(confidence_str)
+                output_row['Confidence'] = f"{confidence:.1f}"
+            except (ValueError, TypeError):
+                output_row['Confidence'] = confidence_str  # Keep as-is if not a valid number.
+        else:
+            output_row['Confidence'] = ''
+
+    # Update URI to match the new timestamp.
+    output_row['URI'] = generate_uri(sample['URI'], output_row['Timestamp'])
+
+    return output_row
+
+
 def write_training_samples(
     samples: list[dict],
     output_path: Path,
@@ -538,39 +600,10 @@ def write_training_samples(
             
             for idx, sample in enumerate(samples, start=1):
                 print(f"\n[{idx}/{total_samples}] Processing: {sample['Category']} - {sample['NodeName']} - {sample['Timestamp']}")
-                
-                # Create a copy and adjust timestamp and URI.
-                output_row = sample.copy()
-                
-                # Check if there's a manual timestamp correction for this sample.
-                if sample['URI'] in manual_timestamps:
-                    print(f"  Using manual timestamp for {sample['URI']}")
-                    output_row['Timestamp'] = manual_timestamps[sample['URI']]
-                    output_row['Confidence'] = manual_confidences[sample['URI']]
 
-                # For tp_human_only detections, use model-based timestamp correction.
-                elif sample['Notes'] == 'tp_human_only' and model_inference is not None:
-                    timestamp, confidence = compute_correct_timestamp_for_tp_human_only(
-                        sample, model_inference, tmp_dir, segment_duration
-                    )
-                    output_row['Timestamp'] = timestamp
-                    output_row['Confidence'] = f"{confidence:.1f}"
-                else:
-                    # For all other detections, subtract segment_duration seconds.
-                    output_row['Timestamp'] = subtract_segment_duration(sample['Timestamp'], segment_duration)
-                    confidence_str = sample.get('Confidence', '')
-                    if confidence_str:
-                        try:
-                            confidence = float(confidence_str)
-                            output_row['Confidence'] = f"{confidence:.1f}"
-                        except (ValueError, TypeError):
-                            output_row['Confidence'] = confidence_str  # Keep as-is if not a valid number.
-                    else:
-                        output_row['Confidence'] = ''
-                
-                # Update URI to match the new timestamp.
-                output_row['URI'] = generate_uri(sample['URI'], output_row['Timestamp'])
-                
+                output_row = process_sample(
+                    sample, manual_timestamps, manual_confidences, model_inference, tmp_dir, segment_duration
+                )
                 writer.writerow(output_row)
 
 
