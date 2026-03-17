@@ -15,7 +15,7 @@ import pytest
 
 from extract_training_samples import (
     process_sample,
-    remove_zero_confidence_detections,
+    sort_by_preference,
     write_training_samples,
 )
 
@@ -105,18 +105,6 @@ RESIDENT_TP_HUMAN_ONLY_EXPECTED = {
     'Notes': 'tp_human_only',
     'Confidence': '86.6',
 }
-
-# Zero-confidence detection: manual_confidences marks this as 0.0, so it must be filtered out.
-ZERO_CONFIDENCE_INPUT = {
-    'Category': 'humpback',
-    'NodeName': 'rpi_andrews_bay',
-    'Timestamp': '2025_12_13_18_33_00_PST',
-    'URI': 'https://live.orcasound.net/bouts/new/andrews-bay?time=2025-12-14T02%3A33%3A00.000Z',
-    'Description': 'Humpback',
-    'Notes': 'tp_human_only',
-    'Confidence': '',
-}
-
 
 # ---------------------------------------------------------------------------
 # process_sample tests
@@ -225,11 +213,89 @@ class TestManualTimestamps:
         result = process_sample(MANUAL_TIMESTAMP_INPUT, manual_timestamps, manual_confidences)
         assert result == MANUAL_TIMESTAMP_EXPECTED
 
-    def test_zero_confidence_detection_filtered_out(self):
-        """remove_zero_confidence_detections should remove a sample with 0.0 confidence."""
-        manual_confidences = {ZERO_CONFIDENCE_INPUT['URI']: '0.0'}
-        filtered = remove_zero_confidence_detections([ZERO_CONFIDENCE_INPUT], manual_confidences)
-        assert filtered == []
+
+# ---------------------------------------------------------------------------
+# sort_by_preference tests
+# ---------------------------------------------------------------------------
+
+# Shared detection factory for sort tests.
+def _make_det(uri: str, notes: str = 'tp_human_only', timestamp: str = '2025_01_01_00_00_00_PST',
+              description: str = '') -> dict:
+    return {
+        'Category': 'humpback',
+        'NodeName': 'rpi_test',
+        'Timestamp': timestamp,
+        'URI': uri,
+        'Description': description,
+        'Notes': notes,
+        'Confidence': '',
+    }
+
+
+class TestSortByPreference:
+    """Tests for sort_by_preference 3-tier manual-timestamp ordering."""
+
+    def test_hundred_confidence_sorted_before_no_entry(self):
+        """A detection with 100.0 confidence should come before one with no manual entry."""
+        det_100 = _make_det('http://example.com/100')
+        det_none = _make_det('http://example.com/none')
+        manual_confidences = {'http://example.com/100': '100.0'}
+        result = sort_by_preference([det_none, det_100], manual_confidences)
+        assert result[0]['URI'] == 'http://example.com/100'
+        assert result[1]['URI'] == 'http://example.com/none'
+
+    def test_no_entry_sorted_before_zero_confidence(self):
+        """A detection with no manual entry should come before one with 0.0 confidence."""
+        det_none = _make_det('http://example.com/none')
+        det_zero = _make_det('http://example.com/zero')
+        manual_confidences = {'http://example.com/zero': '0.0'}
+        result = sort_by_preference([det_zero, det_none], manual_confidences)
+        assert result[0]['URI'] == 'http://example.com/none'
+        assert result[1]['URI'] == 'http://example.com/zero'
+
+    def test_hundred_confidence_sorted_before_zero_confidence(self):
+        """A detection with 100.0 confidence should come before one with 0.0 confidence."""
+        det_100 = _make_det('http://example.com/100')
+        det_zero = _make_det('http://example.com/zero')
+        manual_confidences = {
+            'http://example.com/100': '100.0',
+            'http://example.com/zero': '0.0',
+        }
+        result = sort_by_preference([det_zero, det_100], manual_confidences)
+        assert result[0]['URI'] == 'http://example.com/100'
+        assert result[1]['URI'] == 'http://example.com/zero'
+
+    def test_full_three_tier_order(self):
+        """Full 3-tier ordering: 100.0 confidence, then no entry, then 0.0 confidence."""
+        det_100 = _make_det('http://example.com/100')
+        det_none = _make_det('http://example.com/none')
+        det_zero = _make_det('http://example.com/zero')
+        manual_confidences = {
+            'http://example.com/100': '100.0',
+            'http://example.com/zero': '0.0',
+        }
+        result = sort_by_preference([det_zero, det_none, det_100], manual_confidences)
+        assert [d['URI'] for d in result] == [
+            'http://example.com/100',
+            'http://example.com/none',
+            'http://example.com/zero',
+        ]
+
+    def test_preferred_notes_still_sort_first(self):
+        """Preferred notes (tp_machine_only) should still rank above 100.0 confidence."""
+        det_preferred = _make_det('http://example.com/preferred', notes='tp_machine_only')
+        det_100 = _make_det('http://example.com/100', notes='tp_human_only')
+        manual_confidences = {'http://example.com/100': '100.0'}
+        result = sort_by_preference([det_100, det_preferred], manual_confidences)
+        assert result[0]['URI'] == 'http://example.com/preferred'
+
+    def test_quality_issue_deprioritized_within_tier(self):
+        """Within the same tier, quality issues should be deprioritized."""
+        det_clean = _make_det('http://example.com/clean')
+        det_faint = _make_det('http://example.com/faint', description='faint signal')
+        result = sort_by_preference([det_faint, det_clean], {})
+        assert result[0]['URI'] == 'http://example.com/clean'
+        assert result[1]['URI'] == 'http://example.com/faint'
 
 
 # ---------------------------------------------------------------------------

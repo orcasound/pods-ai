@@ -131,38 +131,48 @@ def sort_by_preference(detections: list[dict], manual_confidences: dict[str, str
     """
     Sort detections by preference:
     1. Preferred notes (tp_machine_only, fp_machine_only) first
-    2. Descriptions without quality issues (e.g., faint, distant) preferred
-    3. Manual timestamps with 0.0 confidence are deprioritized
+    2. Manual timestamps with 100.0 confidence preferred over no manual entry,
+       which is preferred over manual timestamps with 0.0 confidence
+    3. Descriptions without quality issues (e.g., faint, distant) preferred
     4. Then by timestamp (oldest first)
     
     Args:
         detections: List of detection dictionaries to sort
         manual_confidences: Dictionary mapping URIs to confidence strings (0.0-100.0).
-            Detections with 0.0 confidence are deprioritized.
+            Detections with 100.0 confidence are prioritized; detections with 0.0
+            confidence are deprioritized below those with no manual entry.
     
     Returns:
         list[dict]: Sorted list of detection dictionaries, ordered by preference
-            (preferred notes first, quality issues last, oldest timestamps first)
+            (preferred notes first, 100.0 confidence before no-entry before 0.0,
+            quality issues deprioritized within each tier, oldest timestamps first)
     """
     def sort_key(det):
         has_preferred_note = det['Notes'] in PREFERRED_NOTES
         description_lower = det.get('Description', '').lower()
         has_quality_issue = any(term in description_lower for term in QUALITY_FILTER_TERMS)
-        
-        # Check if this detection has a manual override with 0.0 confidence.
-        has_zero_confidence = False
+
+        # Compute manual_priority based on manual confidence entry:
+        #   0 = manual timestamp with 100.0 confidence (most preferred)
+        #   1 = no manual timestamp entry (middle)
+        #   2 = manual timestamp with 0.0 confidence (least preferred)
+        manual_priority = 1  # Default: no manual entry.
         if det['URI'] in manual_confidences:
             try:
                 conf = float(manual_confidences[det['URI']])
-                has_zero_confidence = (conf == 0.0)
+                if conf == 100.0:
+                    manual_priority = 0
+                elif conf == 0.0:
+                    manual_priority = 2
             except (ValueError, TypeError):
                 pass
-        
+
         timestamp = det['Timestamp']
-        # Return tuple: (not preferred note, has quality issue or zero confidence, timestamp).
-        # This puts preferred notes first, then non-problematic descriptions, then by timestamp.
-        return (not has_preferred_note, has_quality_issue or has_zero_confidence, timestamp)
-    
+        # Return tuple: (not preferred note, manual_priority, has quality issue, timestamp).
+        # This puts preferred notes first, then 100.0-confidence entries, then no-entry,
+        # then 0.0-confidence entries, with quality issues deprioritised within each tier.
+        return (not has_preferred_note, manual_priority, has_quality_issue, timestamp)
+
     return sorted(detections, key=sort_key)
 
 
@@ -605,40 +615,6 @@ def write_training_samples(
                 writer.writerow(output_row)
 
 
-def remove_zero_confidence_detections(
-    detections: list[dict],
-    manual_confidences: dict[str, str]
-) -> list[dict]:
-    """
-    Remove from detections any entries whose URI has a manual_confidence of 0.
-    
-    Args:
-        detections: List of detection dictionaries
-        manual_confidences: Dictionary mapping URIs to confidence strings (0.0-100.0)
-    
-    Returns:
-        list[dict]: Filtered list of detections with zero-confidence entries removed
-    """
-    filtered = []
-    removed_count = 0
-    
-    for det in detections:
-        uri = det.get('URI', '')
-        if uri in manual_confidences:
-            try:
-                conf = float(manual_confidences[uri])
-                if conf == 0.0:
-                    removed_count += 1
-                    continue  # Skip this detection
-            except (ValueError, TypeError):
-                pass  # Keep detection if confidence can't be parsed
-        
-        filtered.append(det)
-    
-    if removed_count > 0:
-        print(f"  Removed {removed_count} detections with 0.0 confidence")
-    
-    return filtered
 
 
 def load_manual_corrections(corrections_path: Path) -> tuple[dict[str, str], dict[str, str]]:
@@ -734,9 +710,6 @@ def main():
     detections = load_detections(input_path)
     print(f"Loaded {len(detections)} detections")
 
-    # Remove from detections any entries whose URI has a manual_confidence of 0.
-    detections = remove_zero_confidence_detections(detections, manual_confidences)
-    
     print("\nOrganizing detections by category and node...")
     organized_data = organize_by_category_node(detections)
     
