@@ -53,7 +53,7 @@ class OrcaHelloDetection:
     confidence: Optional[float] = None  # Confidence score from model inference
 
 # Terms in a detection description that indicate the label cannot be determined with confidence.
-SKIP_TERMS = {'?', 'not sure', 'unsure', 'possibl', 'sounds like', 'sounded like'}
+SKIP_TERMS = {'?', 'not sure', 'unsure', 'possibl', 'sounds like', 'sounded like', 'ould be'}
 
 def get_label(
     orcasite_det: OrcasiteDetection,
