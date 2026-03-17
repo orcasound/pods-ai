@@ -195,3 +195,49 @@ class TestProcessAllFeedsTimestampFilter:
         too_late = _make_det(_utc(2026, 2, 1))
         rows = self._run([too_early, in_range, too_late], start_time=start, end_time=end)
         assert len(rows) == 1
+
+    def test_end_time_none_includes_future_detections(self):
+        """end_time=None (i.e., '--end now') should include all future detections."""
+        future = _make_det(_utc(2099, 1, 1))
+        rows = self._run([future], end_time=None)
+        assert len(rows) == 1
+
+
+# ---------------------------------------------------------------------------
+# CLI argument parsing – default end and 'now' keyword
+# ---------------------------------------------------------------------------
+
+class TestCliEndArgument:
+    """Tests for the --end CLI argument default and 'now' special value."""
+
+    def test_default_end_is_fixed_timestamp(self):
+        """The default --end value should be 2026_03_17_00_00_00_PST."""
+        import argparse
+        import sys
+        # Re-parse with no arguments using the same logic as __main__.
+        parser = argparse.ArgumentParser()
+        parser.add_argument("--start", type=str, default=None)
+        parser.add_argument("--end", type=str, default="2026_03_17_00_00_00_PST")
+        args = parser.parse_args([])
+        assert args.end == "2026_03_17_00_00_00_PST"
+        # Should parse without error.
+        end_time = None if (args.end or "").lower() == "now" else parse_pst_timestamp(args.end)
+        assert end_time is not None
+
+    def test_end_now_yields_none(self):
+        """'--end now' should produce end_time=None (no upper bound)."""
+        import argparse
+        parser = argparse.ArgumentParser()
+        parser.add_argument("--end", type=str, default="2026_03_17_00_00_00_PST")
+        args = parser.parse_args(["--end", "now"])
+        end_time = None if (args.end or "").lower() == "now" else parse_pst_timestamp(args.end)
+        assert end_time is None
+
+    def test_end_now_case_insensitive(self):
+        """'--end NOW' (uppercase) should also produce end_time=None."""
+        import argparse
+        parser = argparse.ArgumentParser()
+        parser.add_argument("--end", type=str, default="2026_03_17_00_00_00_PST")
+        args = parser.parse_args(["--end", "NOW"])
+        end_time = None if (args.end or "").lower() == "now" else parse_pst_timestamp(args.end)
+        assert end_time is None

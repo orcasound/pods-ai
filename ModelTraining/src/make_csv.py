@@ -552,14 +552,19 @@ if __name__ == "__main__":
     parser.add_argument(
         "--end",
         type=str,
-        default=None,
-        metavar="YYYY_MM_DD_HH_MM_SS_PST",
-        help="Include only detections with timestamp <= this value (e.g., 2026_03_17_00_00_00_PST)"
+        default="2026_03_17_00_00_00_PST",
+        metavar="YYYY_MM_DD_HH_MM_SS_PST|now",
+        help=(
+            "Include only detections with timestamp <= this value "
+            "(e.g., 2026_03_17_00_00_00_PST). "
+            "Use 'now' to include all detections with no upper bound. "
+            "Defaults to 2026_03_17_00_00_00_PST."
+        )
     )
     args = parser.parse_args()
 
     start_time = parse_pst_timestamp(args.start) if args.start else None
-    end_time = parse_pst_timestamp(args.end) if args.end else None
+    end_time = None if (args.end or "").lower() == "now" else parse_pst_timestamp(args.end)
 
     output_root = Path("output/csv")
     process_all_feeds(output_root, feed_filter=args.feed, start_time=start_time, end_time=end_time)
