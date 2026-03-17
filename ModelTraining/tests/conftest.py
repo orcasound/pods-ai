@@ -19,6 +19,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
 # imported; CI (which runs pip install -r requirements.txt) will use the real
 # packages.
 _OPTIONAL_DEPS = [
+    'azure',
+    'azure.cosmos',
     'numpy',
     'pandas',
     'torch',

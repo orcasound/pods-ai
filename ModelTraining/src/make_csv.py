@@ -399,6 +399,26 @@ def format_timestamp_pst(dt: datetime) -> str:
     dt_pst = dt.astimezone(PACIFIC_TZ)
     return dt_pst.strftime("%Y_%m_%d_%H_%M_%S_PST")
 
+def parse_pst_timestamp(ts_str: str) -> datetime:
+    """
+    Parse a PST timestamp string in the format YYYY_MM_DD_HH_MM_SS_PST into a timezone-aware datetime.
+
+    Parameters:
+        ts_str (str): Timestamp string in the format ``YYYY_MM_DD_HH_MM_SS_PST``
+            (e.g., ``"2026_03_17_00_00_00_PST"``).
+
+    Returns:
+        datetime: A timezone-aware datetime object in the US/Pacific timezone.
+
+    Raises:
+        ValueError: If ``ts_str`` does not end with ``_PST`` or cannot be parsed.
+    """
+    if not ts_str.endswith("_PST"):
+        raise ValueError(f"Timestamp '{ts_str}' must end with '_PST'")
+    body = ts_str[:-4]  # strip trailing "_PST"
+    dt_naive = datetime.strptime(body, "%Y_%m_%d_%H_%M_%S")
+    return PACIFIC_TZ.localize(dt_naive)
+
 def generate_uri(node: str, dt: datetime) -> str:
     """
     Generate a URI for the Orcasound bouts interface.
@@ -418,7 +438,12 @@ def generate_uri(node: str, dt: datetime) -> str:
     time_encoded = quote(time_str, safe='')
     return f"https://live.orcasound.net/bouts/new/{node}?time={time_encoded}"
 
-def process_all_feeds(output_root: Path, feed_filter: Optional[str] = None):
+def process_all_feeds(
+    output_root: Path,
+    feed_filter: Optional[str] = None,
+    start_time: Optional[datetime] = None,
+    end_time: Optional[datetime] = None,
+):
     """
     Generate a consolidated CSV file of selected Orcasite detections, optionally filtered by feed
     and matched with corresponding OrcaHello detections.
@@ -434,6 +459,10 @@ def process_all_feeds(output_root: Path, feed_filter: Optional[str] = None):
         feed_filter (str | None, optional): If provided, only feeds whose ``node_name`` matches
             this value are processed. If no feed matches the given name, the function logs a
             message and returns without creating a CSV file. Defaults to ``None`` (process all feeds).
+        start_time (datetime | None, optional): If provided, only detections with a timestamp
+            >= start_time are included. Defaults to ``None`` (no lower bound).
+        end_time (datetime | None, optional): If provided, only detections with a timestamp
+            <= end_time are included. Defaults to ``None`` (no upper bound).
     """
     feeds = get_orcasite_feeds()
 
@@ -452,6 +481,13 @@ def process_all_feeds(output_root: Path, feed_filter: Optional[str] = None):
         orcahello_dets = get_orcahello_detections(feed)
 
         for det in orcasite_dets:
+            # Filter by time range if specified.
+            if det.timestamp is not None:
+                if start_time is not None and det.timestamp < start_time:
+                    continue
+                if end_time is not None and det.timestamp > end_time:
+                    continue
+
             orcahello_match = None
             if det.source == "machine":
                 orcahello_match = next((d for d in orcahello_dets if d.id == det.idempotency_key), None)
@@ -506,7 +542,29 @@ if __name__ == "__main__":
         type=str,
         help="Process only this feed (by node_name, e.g., rpi_sunset_bay)"
     )
+    parser.add_argument(
+        "--start",
+        type=str,
+        default=None,
+        metavar="YYYY_MM_DD_HH_MM_SS_PST",
+        help="Include only detections with timestamp >= this value (e.g., 2025_01_01_00_00_00_PST)"
+    )
+    parser.add_argument(
+        "--end",
+        type=str,
+        default="2026_03_17_00_00_00_PST",
+        metavar="YYYY_MM_DD_HH_MM_SS_PST|now",
+        help=(
+            "Include only detections with timestamp <= this value "
+            "(e.g., 2026_03_17_00_00_00_PST). "
+            "Use 'now' to include all detections with no upper bound. "
+            "Defaults to 2026_03_17_00_00_00_PST."
+        )
+    )
     args = parser.parse_args()
 
+    start_time = parse_pst_timestamp(args.start) if args.start else None
+    end_time = None if (args.end or "").lower() == "now" else parse_pst_timestamp(args.end)
+
     output_root = Path("output/csv")
-    process_all_feeds(output_root, feed_filter=args.feed)
+    process_all_feeds(output_root, feed_filter=args.feed, start_time=start_time, end_time=end_time)
