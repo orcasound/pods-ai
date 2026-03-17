@@ -1,0 +1,197 @@
+# Copyright (c) PODS-AI contributors
+# SPDX-License-Identifier: MIT
+"""
+Unit tests for make_csv.py.
+
+Tests cover parse_pst_timestamp() and the timestamp-range filtering logic
+inside process_all_feeds().
+"""
+from datetime import datetime, timezone
+from unittest.mock import MagicMock, patch
+
+import pytest
+from pytz import timezone as pytz_timezone
+
+from make_csv import parse_pst_timestamp, process_all_feeds, PACIFIC_TZ
+
+
+# ---------------------------------------------------------------------------
+# parse_pst_timestamp
+# ---------------------------------------------------------------------------
+
+class TestParsePstTimestamp:
+    """Tests for parsing YYYY_MM_DD_HH_MM_SS_PST strings into datetimes."""
+
+    def test_returns_timezone_aware_datetime(self):
+        """Result must carry timezone info."""
+        dt = parse_pst_timestamp("2026_03_17_00_00_00_PST")
+        assert dt.tzinfo is not None
+
+    def test_correct_date_components(self):
+        """Date components should match the input string."""
+        dt = parse_pst_timestamp("2025_12_24_17_51_23_PST")
+        dt_pst = dt.astimezone(PACIFIC_TZ)
+        assert dt_pst.year == 2025
+        assert dt_pst.month == 12
+        assert dt_pst.day == 24
+        assert dt_pst.hour == 17
+        assert dt_pst.minute == 51
+        assert dt_pst.second == 23
+
+    def test_timezone_is_pacific(self):
+        """Result should be localized to US/Pacific."""
+        dt = parse_pst_timestamp("2026_01_01_00_00_00_PST")
+        # Convert to UTC and check the offset matches PST (UTC-8) or PDT (UTC-7).
+        utc_dt = dt.astimezone(timezone.utc)
+        offset_hours = (dt.utcoffset().total_seconds()) / 3600
+        # Pacific time is either UTC-8 (PST) or UTC-7 (PDT).
+        assert offset_hours in (-8.0, -7.0)
+
+    def test_midnight_boundary(self):
+        """Midnight (00:00:00) should parse correctly."""
+        dt = parse_pst_timestamp("2026_03_17_00_00_00_PST")
+        dt_pst = dt.astimezone(PACIFIC_TZ)
+        assert dt_pst.hour == 0
+        assert dt_pst.minute == 0
+        assert dt_pst.second == 0
+
+    def test_raises_on_missing_pst_suffix(self):
+        """ValueError should be raised if the string doesn't end with _PST."""
+        with pytest.raises(ValueError, match="_PST"):
+            parse_pst_timestamp("2026_03_17_00_00_00")
+
+    def test_raises_on_invalid_format(self):
+        """ValueError should be raised on an unparseable timestamp body."""
+        with pytest.raises(ValueError):
+            parse_pst_timestamp("not_a_timestamp_PST")
+
+
+# ---------------------------------------------------------------------------
+# process_all_feeds – timestamp filtering
+# ---------------------------------------------------------------------------
+
+def _make_det(ts: datetime, source: str = "human", category: str = "whale",
+              description: str = "resident pod"):
+    """Build a minimal OrcasiteDetection-like mock for a given timestamp."""
+    from make_csv import OrcasiteDetection, OrcasiteFeed
+    feed = OrcasiteFeed(
+        id="feed_1",
+        name="Test Feed",
+        node_name="rpi_test",
+        slug="test",
+        bucket="audio-orcasound-net",
+        bucket_region="us-west-2",
+        visible=True,
+        location=(47.0, -122.0),
+    )
+    return OrcasiteDetection(
+        id="det_1",
+        feed=feed,
+        timestamp=ts,
+        source=source,
+        category=category,
+        description=description,
+        idempotency_key="",
+    )
+
+
+def _utc(year: int, month: int, day: int, hour: int = 0) -> datetime:
+    """Return a UTC-aware datetime."""
+    return datetime(year, month, day, hour, tzinfo=timezone.utc)
+
+
+class TestProcessAllFeedsTimestampFilter:
+    """Tests that process_all_feeds correctly filters by start_time / end_time."""
+
+    def _run(self, dets, start_time=None, end_time=None, tmp_path=None):
+        """
+        Run process_all_feeds with mocked I/O and return the rows written to the CSV.
+        """
+        import csv
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+
+        ctx = TemporaryDirectory() if tmp_path is None else None
+        out_dir = Path(ctx.name if ctx else str(tmp_path))
+
+        with patch("make_csv.get_orcasite_feeds") as mock_feeds, \
+             patch("make_csv.get_orcasite_detections") as mock_dets, \
+             patch("make_csv.get_orcahello_detections") as mock_oh:
+
+            from make_csv import OrcasiteFeed
+            feed = OrcasiteFeed(
+                id="feed_1", name="Test", node_name="rpi_test", slug="test",
+                bucket="audio-orcasound-net", bucket_region="us-west-2",
+                visible=True, location=(47.0, -122.0),
+            )
+            mock_feeds.return_value = [feed]
+            mock_dets.return_value = dets
+            mock_oh.return_value = []
+
+            process_all_feeds(out_dir, start_time=start_time, end_time=end_time)
+
+        csv_path = out_dir / "detections.csv"
+        if not csv_path.exists():
+            if ctx:
+                ctx.cleanup()
+            return []
+
+        with open(csv_path, encoding="utf-8") as f:
+            rows = list(csv.DictReader(f))
+
+        if ctx:
+            ctx.cleanup()
+        return rows
+
+    def test_no_filter_includes_all(self):
+        """Without filters, all classifiable detections are included."""
+        dets = [
+            _make_det(_utc(2025, 1, 1)),
+            _make_det(_utc(2025, 6, 1)),
+            _make_det(_utc(2026, 1, 1)),
+        ]
+        rows = self._run(dets)
+        assert len(rows) == 3
+
+    def test_end_time_excludes_later_detections(self):
+        """Detections after end_time must not appear in the output."""
+        end = parse_pst_timestamp("2026_03_17_00_00_00_PST")
+        before = _make_det(_utc(2025, 12, 1))
+        after = _make_det(_utc(2026, 6, 1))
+        rows = self._run([before, after], end_time=end)
+        assert len(rows) == 1
+
+    def test_start_time_excludes_earlier_detections(self):
+        """Detections before start_time must not appear in the output."""
+        start = parse_pst_timestamp("2025_06_01_00_00_00_PST")
+        before = _make_det(_utc(2025, 1, 1))
+        after = _make_det(_utc(2025, 12, 1))
+        rows = self._run([before, after], start_time=start)
+        assert len(rows) == 1
+
+    def test_detection_on_end_boundary_is_included(self):
+        """A detection exactly at end_time should be included (<=)."""
+        end = parse_pst_timestamp("2026_03_17_00_00_00_PST")
+        # Convert end to UTC and use it as the detection timestamp.
+        end_utc = end.astimezone(timezone.utc)
+        det = _make_det(end_utc)
+        rows = self._run([det], end_time=end)
+        assert len(rows) == 1
+
+    def test_detection_on_start_boundary_is_included(self):
+        """A detection exactly at start_time should be included (>=)."""
+        start = parse_pst_timestamp("2025_06_01_00_00_00_PST")
+        start_utc = start.astimezone(timezone.utc)
+        det = _make_det(start_utc)
+        rows = self._run([det], start_time=start)
+        assert len(rows) == 1
+
+    def test_range_filter_combined(self):
+        """Only detections within [start, end] should be included."""
+        start = parse_pst_timestamp("2025_01_01_00_00_00_PST")
+        end = parse_pst_timestamp("2025_12_31_23_59_59_PST")
+        too_early = _make_det(_utc(2024, 12, 31))
+        in_range = _make_det(_utc(2025, 6, 15))
+        too_late = _make_det(_utc(2026, 2, 1))
+        rows = self._run([too_early, in_range, too_late], start_time=start, end_time=end)
+        assert len(rows) == 1

@@ -73,7 +73,7 @@ jobs:
         if: steps.skip_check.outputs.should_skip != 'true'
         working-directory: ModelTraining
         run: |
-          python src/make_csv.py
+          python src/make_csv.py --end 2026_03_17_00_00_00_PST
 
       - name: Verify there are no changes in detections.csv
         if: steps.skip_check.outputs.should_skip != 'true'
@@ -153,7 +153,7 @@ jobs:
         if: steps.skip_check.outputs.should_skip != 'true'
         working-directory: ModelTraining
         run: |
-          python src/make_csv.py
+          python src/make_csv.py --end 2026_03_17_00_00_00_PST
 
       - name: Verify there are no changes in detections.csv
         if: steps.skip_check.outputs.should_skip != 'true'
