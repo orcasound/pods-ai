@@ -39,7 +39,7 @@ def node_slug_to_name(node_slug: str) -> str:
     Returns:
         Node name such as 'rpi_orcasound_lab'.
     """
-    # Remove 'rpi-' prefix if present
+    # Remove 'rpi-' prefix if present.
     if node_slug.startswith('rpi-'):
         node_slug = node_slug[4:]
     return 'rpi_' + node_slug.replace('-', '_')
@@ -59,20 +59,20 @@ def parse_combined_input(combined: str) -> tuple[str, str]:
     Returns:
         Tuple of (node_slug, timestamp_str).
     """
-    # Split on underscore to find where timestamp starts (YYYY_MM_DD pattern)
+    # Split on underscore to find where timestamp starts (YYYY_MM_DD pattern).
     parts = combined.split('_')
     
-    # Timestamp should be last 7 parts: YYYY_MM_DD_HH_MM_SS_PST
+    # Timestamp should be last 7 parts: YYYY_MM_DD_HH_MM_SS_PST.
     if len(parts) < 8:
         raise ValueError(
             f"Invalid format: {combined}. "
             "Expected format: node-name_YYYY_MM_DD_HH_MM_SS_PST"
         )
     
-    # Last 7 parts are the timestamp
+    # Last 7 parts are the timestamp.
     timestamp_str = '_'.join(parts[-7:])
     
-    # Everything before is the node slug (with underscores converted back to hyphens)
+    # Everything before is the node slug (with underscores converted back to hyphens).
     node_slug = '-'.join(parts[:-7])
     
     return node_slug, timestamp_str
@@ -90,7 +90,7 @@ def build_sample(node_slug: str, timestamp_str: str) -> dict:
         Sample dict suitable for passing to process_sample().
     """
     node_name = node_slug_to_name(node_slug)
-    # Remove 'rpi-' prefix for URL slug if present
+    # Remove 'rpi-' prefix for URL slug if present.
     url_slug = node_slug[4:] if node_slug.startswith('rpi-') else node_slug
     base_uri = f"https://live.orcasound.net/bouts/new/{url_slug}"
     # Encode the original timestamp into the URI so process_sample can use it
@@ -153,7 +153,7 @@ def main():
     )
     args = parser.parse_args()
 
-    # Determine if we have combined format or legacy format
+    # Determine if we have combined format or legacy format.
     if args.timestamp_str is None:
         # Combined format: parse node_slug and timestamp_str from single argument
         try:
@@ -162,7 +162,7 @@ def main():
             print(f"Error: {e}", file=sys.stderr)
             sys.exit(1)
     else:
-        # Legacy format: separate node_slug and timestamp_str arguments
+        # Legacy format: separate node_slug and timestamp_str arguments.
         node_slug = args.node_or_combined
         timestamp_str = args.timestamp_str
 
