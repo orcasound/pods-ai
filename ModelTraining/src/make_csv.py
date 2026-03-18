@@ -126,6 +126,31 @@ def is_isolated_human_whale(
             return False
     return True
 
+def find_nearby_machine_detection(
+    det: OrcasiteDetection,
+    all_detections: List[OrcasiteDetection],
+) -> Optional[OrcasiteDetection]:
+    """
+    Returns the first machine whale detection at the same feed within NEAR_MIN minutes, or None.
+
+    Parameters:
+        det (OrcasiteDetection): The human detection to find a nearby machine match for.
+        all_detections (List[OrcasiteDetection]): All detections for the same feed.
+
+    Returns:
+        OrcasiteDetection | None: The nearest machine whale detection within NEAR_MIN, or None if not found.
+    """
+    for d in all_detections:
+        if d.feed.id != det.feed.id:
+            continue
+        if d.source != "machine":
+            continue
+        if (d.category or "").lower() != "whale":
+            continue
+        if abs(d.timestamp - det.timestamp) <= NEAR_MIN:
+            return d
+    return None
+
 @dataclass
 class Classification:
     kind: str       # 'tp_human_only', 'tp_machine_only', 'fp_machine_only', 'tp_both', 'skip'
@@ -510,10 +535,21 @@ def process_all_feeds(
             timestamp_pst = format_timestamp_pst(det.timestamp)
             uri = generate_uri(det.feed.slug, det.timestamp)
 
-            # Get confidence from orcahello_match if available
+            # Get confidence from orcahello_match if available.
             confidence = ""
             if orcahello_match and orcahello_match.confidence is not None:
                 confidence = f"{orcahello_match.confidence:.4f}"
+            elif classification.kind == "tp_both":
+                # For tp_both detections (human + nearby machine), look up confidence
+                # from the nearby machine detection's OrcaHello match.
+                nearby_machine = find_nearby_machine_detection(det, orcasite_dets)
+                if nearby_machine is not None:
+                    nearby_orcahello = next(
+                        (d for d in orcahello_dets if d.id == nearby_machine.idempotency_key),
+                        None
+                    )
+                    if nearby_orcahello is not None and nearby_orcahello.confidence is not None:
+                        confidence = f"{nearby_orcahello.confidence:.4f}"
 
             all_rows.append((det.timestamp, category, node_name, timestamp_pst, uri, det.description, classification.kind, confidence))
     
