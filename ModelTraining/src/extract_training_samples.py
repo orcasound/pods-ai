@@ -548,7 +548,7 @@ def process_sample(
         output_row['Confidence'] = f"{confidence:.1f}"
     else:
         # For all other detections, use the timestamp from segment_duration seconds earlier
-        # since machine detection timestamps in orcasite seem to be off by that much currently.
+        # since machine detection timestamps in the orcasite UI seem to be off by that much currently.
         output_row['Timestamp'] = subtract_segment_duration(sample['Timestamp'], segment_duration)
         confidence_str = sample.get('Confidence', '')
         if confidence_str:
