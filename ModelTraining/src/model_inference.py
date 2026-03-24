@@ -7,7 +7,7 @@ Model inference module for scoring audio samples.
 This module provides a simple interface for running model inference on audio files
 to score 2-second segments. It can be extended to support different model types.
 
-For production use, this can be integrated with aifororcas-livesystem's 
+For production use, this can be integrated with aifororcas-livesystem's
 LiveInferenceOrchestrator.py which uses DateRangeHLSStream to download and score
 audio from specific time ranges. See:
 https://github.com/orcasound/aifororcas-livesystem/blob/main/InferenceSystem/src/LiveInferenceOrchestrator.py
@@ -29,6 +29,7 @@ from pathlib import Path
 from numpy import floor
 from audio.data import AudioConfig, SpectrogramConfig, AudioList
 import torchaudio
+from huggingface_inference import get_huggingface_inference
 
 from typing import Dict, List, Optional
 import warnings
@@ -172,7 +173,7 @@ class FastAIModel(ModelInference):
     The model file (typically model.pkl) should be available in the model_path directory.
     """
     
-    def __init__(self, model_path: str = "./model", model_name: str = "stg2-rn18.pkl", 
+    def __init__(self, model_path: str = "./model", model_name: str = "stg2-rn18.pkl",
                  threshold: float = 0.5, min_num_positive_calls_threshold: int = 3):
         """
         Initialize FastAI model inference.
@@ -382,7 +383,7 @@ class DummyModelInference(ModelInference):
         }
 
 
-def download_model_if_needed(model_path: str = "./model", 
+def download_model_if_needed(model_path: str = "./model",
                             model_url: Optional[str] = None) -> bool:
     """
     Download the FastAI model from Azure Blob Storage if it doesn't exist.
@@ -455,8 +456,8 @@ def download_model_if_needed(model_path: str = "./model",
         return False
 
 
-def get_model_inference(model_path: Optional[str] = None, model_type: str = "dummy", 
-                       auto_download: bool = False, model_url: Optional[str] = None) -> ModelInference:
+def get_model_inference(model_path: Optional[str] = None, model_type: str = "fastai",
+                       auto_download: bool = False, model_url: Optional[str] = None, **kwargs) -> ModelInference:
     """
     Factory function to create a model inference instance.
     
@@ -468,7 +469,8 @@ def get_model_inference(model_path: Optional[str] = None, model_type: str = "dum
         auto_download: If True and model_type is "fastai", automatically download model if not found
         model_url: Optional custom URL for downloading the model. If not provided, uses default model.
                   Can also be set via MODEL_URL environment variable.
-            
+        **kwargs: Additional arguments passed to model constructor
+        
     Returns:
         ModelInference instance
         
@@ -488,14 +490,16 @@ def get_model_inference(model_path: Optional[str] = None, model_type: str = "dum
             
             # Use specific model version
             model = get_model_inference(
-                model_path="./model", 
-                model_type="fastai", 
+                model_path="./model",
+                model_type="fastai",
                 auto_download=True,
                 model_url="https://trainedproductionmodels.blob.core.windows.net/dnnmodel/NEW-MODEL.zip"
             )
     """
     if model_type == "dummy":
         return DummyModelInference(model_path)
+    elif model_type == "huggingface":
+        return get_huggingface_inference(model_path or "facebook/wav2vec2-base", **kwargs)
     elif model_type == "fastai":
         if model_path is None:
             model_path = "./model"

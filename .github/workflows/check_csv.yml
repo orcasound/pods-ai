@@ -97,6 +97,11 @@ jobs:
         run: |
           git diff --exit-code
 
+      - name: Train model
+        if: steps.skip_check.outputs.should_skip != 'true'
+        run: |
+          python src/train_huggingface_model.py --output_dir model/huggingface --epochs 10 --batch_size 8
+
   make_csv_windows:
     if: github.actor != 'dependabot[bot]'
     permissions:
@@ -176,3 +181,8 @@ jobs:
         if: steps.skip_check.outputs.should_skip != 'true'
         run: |
           git diff --exit-code
+
+      - name: Train model
+        if: steps.skip_check.outputs.should_skip != 'true'
+        run: |
+          python src/train_huggingface_model.py --output_dir model/huggingface --epochs 10 --batch_size 8
