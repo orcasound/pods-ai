@@ -225,7 +225,7 @@ class FastAIModel(ModelInference):
         for i in range(int(floor(max_length)-2)):
             threeSecList.append([i, i+3])
 
-        # Create a proposal dictionary.s
+        # Create a proposal dictionary.
         three_sec_dict = {}
         three_sec_dict[Path(wav_file_path).name] = threeSecList
 
@@ -522,7 +522,15 @@ def get_model_inference(model_path: Optional[str] = None, model_type: str = "fas
     if model_type == "dummy":
         return DummyModelInference(model_path)
     elif model_type == "huggingface":
-        return get_huggingface_inference(model_path or "facebook/wav2vec2-base", **kwargs)
+        # HuggingFace models require explicit model path (no fallback to base model)
+        # The base model lacks id2label/label2id config required by HuggingFaceInference
+        if model_path is None:
+            raise ValueError(
+                "model_path is required for huggingface model type. "
+                "Provide a path to a fine-tuned model directory or HuggingFace Hub model ID. "
+                "Train a model first using train_huggingface_model.py or specify a Hub model."
+            )
+        return get_huggingface_inference(model_path, **kwargs)
     elif model_type == "fastai":
         if model_path is None:
             model_path = "./model"
@@ -537,7 +545,14 @@ def get_model_inference(model_path: Optional[str] = None, model_type: str = "fas
                     f"and extract to {model_path}"
                 )
         
-        return FastAIModel(model_path=model_path, model_name="model.pkl", **kwargs)
+        # Filter kwargs to only include parameters supported by FastAIModel
+        # FastAIModel accepts: threshold, min_num_positive_calls_threshold
+        fastai_kwargs = {
+            k: v for k, v in kwargs.items()
+            if k in ('threshold', 'min_num_positive_calls_threshold')
+        }
+        
+        return FastAIModel(model_path=model_path, model_name="model.pkl", **fastai_kwargs)
     else:
         raise ValueError(
             f"Unknown model type: {model_type}. "

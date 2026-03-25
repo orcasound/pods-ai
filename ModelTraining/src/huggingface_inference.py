@@ -24,15 +24,20 @@ class HuggingFaceInference:
     providing predictions in the format required by extract_training_samples.py.
     """
     
-    def __init__(self, model_path: str, device: Optional[str] = None) -> None:
+    def __init__(self, model_path: str, device: Optional[str] = None,
+                 threshold: float = 0.5, min_num_positive_calls_threshold: int = 3) -> None:
         """
         Initialize the inference model.
         
         Args:
             model_path: Path to model directory or HuggingFace Hub model ID
             device: Device to run inference on ('cuda', 'cpu', or None for auto)
+            threshold: Confidence threshold for positive predictions (default: 0.5)
+            min_num_positive_calls_threshold: Minimum positive predictions for global positive (default: 3)
         """
         self.model_path = model_path
+        self.threshold = threshold
+        self.min_num_positive_calls_threshold = min_num_positive_calls_threshold
         
         # Auto-detect device. Default to GPU if available, otherwise CPU. Allow override via argument.
         if device is None:
@@ -66,26 +71,38 @@ class HuggingFaceInference:
         
         print(f"Model loaded successfully. Labels: {list(self.label2id.keys())}")
     
-    def predict(self, wav_path: str, segment_duration: int = 3, hop_duration: int = 1) -> dict[str, object]:
+    def predict(self, wav_path: str, segment_duration: int = 3, hop_duration: int = 1,
+                threshold: Optional[float] = None, min_num_positive_calls_threshold: Optional[int] = None) -> dict[str, object]:
         """
         Run inference on a wav file using sliding window.
         
         Uses a sliding window approach with configurable segment and hop duration to match
-        the FastAI model behavior. Each element in local_confidences corresponds to a 
+        the FastAI model behavior. Each element in local_confidences corresponds to a
         1-second position from the start of the audio file.
         
         Args:
             wav_path: Path to wav file (typically 60 seconds long)
             segment_duration: Duration of each segment in seconds (default: 3)
             hop_duration: Hop size in seconds between segments (default: 1)
+            threshold: Confidence threshold for positive predictions (default: use instance value)
+            min_num_positive_calls_threshold: Minimum positive predictions for global positive (default: use instance value)
             
         Returns:
             Dictionary with keys:
+                - local_predictions: List of binary predictions (0 or 1) for each second
                 - local_confidences: List of confidence scores, where index i represents second i
-                - prediction: Overall prediction label
-                - confidence: Overall confidence score
-            Returns empty dict with empty list if audio loading fails.
+                - global_prediction: Overall binary prediction for the entire audio
+                - global_confidence: Overall confidence score
+            Returns dict with empty lists and error values if audio loading fails.
         """
+        # Use instance values if not overridden
+        threshold = threshold if threshold is not None else self.threshold
+        min_num_positive_calls_threshold = (
+            min_num_positive_calls_threshold
+            if min_num_positive_calls_threshold is not None
+            else self.min_num_positive_calls_threshold
+        )
+        
         # Load audio. Resample to 16kHz and convert to mono. Handle exceptions gracefully.
         try:
             audio, sr = librosa.load(wav_path, sr=16000, mono=True)
@@ -93,18 +110,20 @@ class HuggingFaceInference:
             error_msg = f"Error loading audio file {wav_path}: {type(e).__name__}: {e}"
             print(error_msg)
             return {
+                "local_predictions": [],
                 "local_confidences": [],
-                "prediction": "error",
-                "confidence": 0.0,
+                "global_prediction": "error",
+                "global_confidence": 0.0,
             }
         
         # Handle empty audio. This can happen if the file is corrupted or has no valid audio data.
         if len(audio) == 0:
             print(f"Warning: Audio file {wav_path} is empty")
             return {
+                "local_predictions": [],
                 "local_confidences": [],
-                "prediction": "error",
-                "confidence": 0.0,
+                "global_prediction": "error",
+                "global_confidence": 0.0,
             }
         
         # Calculate segment and hop sizes in samples.
@@ -117,6 +136,7 @@ class HuggingFaceInference:
         # Generate segment predictions using sliding window with 1-second hop.
         # This ensures local_confidences[i] corresponds to second i from the start.
         segment_confidences: list[float] = []
+        segment_predictions: list[int] = []
         
         # For each starting position (in seconds), extract a segment_duration window.
         num_positions = int(np.floor(audio_duration)) - (segment_duration - 1)
@@ -169,57 +189,53 @@ class HuggingFaceInference:
         if not segment_confidences:
             print(f"Warning: No segments processed for {wav_path}")
             return {
+                "local_predictions": [],
                 "local_confidences": [],
-                "prediction": "error",
-                "confidence": 0.0,
+                "global_prediction": "error",
+                "global_confidence": 0.0,
             }
         
         # Apply rolling average to smooth predictions (matching FastAI behavior).
         # FastAI uses a 2-position rolling window, averaging overlapping segments.
+        # Build local_confidences with exactly n entries for n segments.
+        n = len(segment_confidences)
         local_confidences: list[float] = []
         
-        # First position: use first segment confidence directly.
-        local_confidences.append(segment_confidences[0])
+        for i in range(n):
+            if i == 0:
+                # First position: use first segment confidence directly
+                local_confidences.append(segment_confidences[0])
+            elif i == n - 1:
+                # Last position: use last segment confidence directly
+                local_confidences.append(segment_confidences[-1])
+            else:
+                # Middle positions: average previous and current segment
+                avg_confidence = (segment_confidences[i - 1] + segment_confidences[i]) / 2.0
+                local_confidences.append(avg_confidence)
         
-        # Middle positions: average current and next segment.
-        for i in range(len(segment_confidences) - 1):
-            avg_confidence = (segment_confidences[i] + segment_confidences[i + 1]) / 2.0
-            local_confidences.append(avg_confidence)
+        # Determine local predictions based on the threshold
+        local_predictions = [1 if conf >= threshold else 0 for conf in local_confidences]
         
-        # Last position: use last segment confidence directly.
-        if len(segment_confidences) > 1:
-            local_confidences.append(segment_confidences[-1])
+        # Global prediction is based on the sum of local predictions.
+        # If the sum exceeds the threshold, predict positive (1), else negative (0).
+        global_prediction = 1 if sum(local_predictions) >= min_num_positive_calls_threshold else 0
         
-        # Overall prediction is based on the segment with highest confidence.
-        max_idx = np.argmax(local_confidences)
-        max_confidence = local_confidences[max_idx]
+        # Global confidence is the average confidence of the segments contributing to the global positive prediction.
+        # If predicting negative, set confidence to 0.
+        global_confidence = (
+            sum(np.array(local_confidences)[np.array(local_predictions) == 1]) / max(1, sum(local_predictions))
+        ) if global_prediction == 1 else 0.0
         
-        # Get the predicted class for the highest confidence segment.
-        start = max_idx * hop_samples
-        end = min(start + segment_samples, len(audio))
-        best_segment = audio[start:end]
-        
-        if len(best_segment) < segment_samples:
-            padding = segment_samples - len(best_segment)
-            best_segment = np.pad(best_segment, (0, padding), mode='constant')
-        
-        with torch.no_grad():
-            inputs = self.feature_extractor(
-                best_segment,
-                sampling_rate=sr,
-                return_tensors="pt",
-                padding=True,
-            )
-            inputs = {k: v.to(self.device) for k, v in inputs.items()}
-            outputs = self.model(**inputs)
-            logits = outputs.logits
-            pred_id = logits.argmax(-1).item()
-            prediction = self.id2label[pred_id]
+        # Convert global prediction to label name (e.g., "other", "resident")
+        global_prediction_label = (
+            self.id2label[global_prediction] if global_prediction in self.id2label else "other"
+        )
         
         return {
+            "local_predictions": local_predictions,
             "local_confidences": local_confidences,
-            "prediction": prediction,
-            "confidence": max_confidence,
+            "global_prediction": global_prediction_label,
+            "global_confidence": global_confidence,
         }
 
 

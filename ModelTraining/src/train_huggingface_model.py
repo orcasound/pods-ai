@@ -244,14 +244,27 @@ def main() -> None:
     
     # Load feature extractor and model.
     print(f"Loading feature extractor and model: {args.model_name}")
-    feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(args.model_name)
     
-    model = Wav2Vec2ForSequenceClassification.from_pretrained(
-        args.model_name,
-        num_labels=len(LABEL2ID),
-        label2id=LABEL2ID,
-        id2label=ID2LABEL,
-    )
+    try:
+        feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(args.model_name)
+    except Exception as e:
+        error_msg = f"Error loading feature extractor from {args.model_name}: {type(e).__name__}: {e}"
+        print(error_msg)
+        print("Please ensure the model name is correct and you have internet connectivity.")
+        raise RuntimeError(error_msg) from e
+    
+    try:
+        model = Wav2Vec2ForSequenceClassification.from_pretrained(
+            args.model_name,
+            num_labels=len(LABEL2ID),
+            label2id=LABEL2ID,
+            id2label=ID2LABEL,
+        )
+    except Exception as e:
+        error_msg = f"Error loading model from {args.model_name}: {type(e).__name__}: {e}"
+        print(error_msg)
+        print("Please ensure the model name is correct and you have internet connectivity.")
+        raise RuntimeError(error_msg) from e
     
     # Preprocess dataset.
     print("Preprocessing dataset...")
