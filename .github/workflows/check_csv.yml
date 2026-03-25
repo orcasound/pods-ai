@@ -97,8 +97,15 @@ jobs:
         run: |
           git diff --exit-code
 
+      - name: Download WAV files
+        if: steps.skip_check.outputs.should_skip != 'true'
+        working-directory: ModelTraining
+        run: |
+          python src/download_wavs.py
+
       - name: Train model
         if: steps.skip_check.outputs.should_skip != 'true'
+        working-directory: ModelTraining
         run: |
           python src/train_huggingface_model.py --output_dir model/huggingface --epochs 10 --batch_size 8
 
@@ -182,7 +189,14 @@ jobs:
         run: |
           git diff --exit-code
 
+      - name: Download WAV files
+        if: steps.skip_check.outputs.should_skip != 'true'
+        working-directory: ModelTraining
+        run: |
+          python src/download_wavs.py
+
       - name: Train model
         if: steps.skip_check.outputs.should_skip != 'true'
+        working-directory: ModelTraining
         run: |
           python src/train_huggingface_model.py --output_dir model/huggingface --epochs 10 --batch_size 8

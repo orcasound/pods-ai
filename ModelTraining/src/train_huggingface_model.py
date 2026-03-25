@@ -14,6 +14,7 @@ Usage:
 import argparse
 import numpy as np
 from pathlib import Path
+from collections import Counter
 from datasets import Dataset, Audio, DatasetDict
 from transformers import (
     Wav2Vec2FeatureExtractor,
@@ -23,15 +24,19 @@ from transformers import (
 )
 from transformers import EvalPrediction
 import evaluate
-import glob
-import os
 
-# Get repository root (ModelTraining directory)
+# Get repository root (ModelTraining directory).
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
-# Label mapping
+# Label mapping.
 LABEL2ID = {"resident": 0, "transient": 1, "humpback": 2, "other": 3}
 ID2LABEL = {v: k for k, v in LABEL2ID.items()}
+
+# Load metrics once at module scope.
+ACCURACY_METRIC = evaluate.load("accuracy")
+PRECISION_METRIC = evaluate.load("precision")
+RECALL_METRIC = evaluate.load("recall")
+F1_METRIC = evaluate.load("f1")
 
 
 def load_audio_dataset(data_dir: Path) -> DatasetDict:
@@ -43,18 +48,21 @@ def load_audio_dataset(data_dir: Path) -> DatasetDict:
         
     Returns:
         DatasetDict with train and test splits
+        
+    Raises:
+        ValueError: If no audio files are found or dataset is too small for training
     """
     audio_files = []
     labels = []
     
-    # Iterate through each category directory
+    # Iterate through each category directory.
     for category in ["resident", "transient", "humpback", "other"]:
         category_dir = data_dir / category
         if not category_dir.exists():
             print(f"Warning: {category_dir} does not exist")
             continue
             
-        # Get all wav files in this category
+        # Get all wav files in this category.
         wav_files = list(category_dir.glob("**/*.wav"))
         print(f"Found {len(wav_files)} files for {category}")
         
@@ -62,22 +70,44 @@ def load_audio_dataset(data_dir: Path) -> DatasetDict:
             audio_files.append(str(wav_file))
             labels.append(LABEL2ID[category])
     
-    # Create dataset
+    # Validate that dataset is not empty.
+    if len(audio_files) == 0:
+        raise ValueError(f"No audio files found in {data_dir}. Please ensure wav files exist in category subdirectories.")
+    
+    # Check label distribution for stratification
+    label_counts = Counter(labels)
+    min_samples_per_label = min(label_counts.values())
+    
+    print(f"Total samples: {len(audio_files)}")
+    print(f"Label distribution: {dict(label_counts)}")
+    
+    # Create dataset.
     dataset = Dataset.from_dict({
         "audio": audio_files,
         "label": labels
     })
     
-    # Cast audio column to Audio type
+    # Cast audio column to Audio type.
     dataset = dataset.cast_column("audio", Audio(sampling_rate=16000))
     
-    # Split into train/test (80/20)
-    dataset = dataset.train_test_split(test_size=0.2, seed=42, stratify_by_column="label")
+    # Split into train/test.
+    # Use stratification only if each label has at least 2 samples and total > 1.
+    if len(audio_files) < 2:
+        raise ValueError(f"Dataset too small for train/test split: only {len(audio_files)} sample(s) found. Need at least 2 samples.")
+    
+    if min_samples_per_label >= 2:
+        # Stratified split (maintains class distribution).
+        print("Using stratified train/test split (80/20)")
+        dataset = dataset.train_test_split(test_size=0.2, seed=42, stratify_by_column="label")
+    else:
+        # Some labels have only 1 sample - use non-stratified split.
+        print(f"Warning: Some labels have fewer than 2 samples (min={min_samples_per_label}). Using non-stratified split.")
+        dataset = dataset.train_test_split(test_size=0.2, seed=42)
     
     return dataset
 
 
-def preprocess_function(examples, feature_extractor, max_duration=3.0):
+def preprocess_function(examples: dict, feature_extractor: Wav2Vec2FeatureExtractor, max_duration: float = 3.0) -> dict:
     """
     Preprocess audio files for the model.
     
@@ -87,12 +117,12 @@ def preprocess_function(examples, feature_extractor, max_duration=3.0):
         max_duration: Maximum audio duration in seconds
         
     Returns:
-        Processed inputs for the model
+        Processed inputs for the model (as NumPy arrays for serialization)
     """
     audio_arrays = [x["array"] for x in examples["audio"]]
     
-    # Pad or truncate to max_duration
-    target_length = int(max_duration * 16000)  # 16kHz sample rate
+    # Pad or truncate to max_duration. Wav2Vec2 expects fixed-length inputs.
+    target_length = int(max_duration * 16000)  # 16kHz sample rate.
     processed_audio = []
     for audio in audio_arrays:
         if len(audio) > target_length:
@@ -102,16 +132,20 @@ def preprocess_function(examples, feature_extractor, max_duration=3.0):
             audio = np.pad(audio, (0, padding), mode='constant')
         processed_audio.append(audio)
     
+    # Return NumPy arrays instead of PyTorch tensors for dataset caching/serialization.
+    # The Trainer's data collator will convert to tensors during batching.
     inputs = feature_extractor(
         processed_audio,
         sampling_rate=16000,
-        return_tensors="pt",
         padding=True,
         max_length=target_length,
         truncation=True,
     )
     
+    # Ensure input_values is a NumPy array (feature_extractor returns this by default).
+    # Convert to list of arrays for proper serialization in datasets library.
     inputs["labels"] = examples["label"]
+    
     return inputs
 
 
@@ -125,17 +159,12 @@ def compute_metrics(eval_pred: EvalPrediction) -> dict:
     Returns:
         Dictionary of metrics
     """
-    accuracy_metric = evaluate.load("accuracy")
-    precision_metric = evaluate.load("precision")
-    recall_metric = evaluate.load("recall")
-    f1_metric = evaluate.load("f1")
-    
     predictions = np.argmax(eval_pred.predictions, axis=1)
     
-    accuracy = accuracy_metric.compute(predictions=predictions, references=eval_pred.label_ids)
-    precision = precision_metric.compute(predictions=predictions, references=eval_pred.label_ids, average="weighted")
-    recall = recall_metric.compute(predictions=predictions, references=eval_pred.label_ids, average="weighted")
-    f1 = f1_metric.compute(predictions=predictions, references=eval_pred.label_ids, average="weighted")
+    accuracy = ACCURACY_METRIC.compute(predictions=predictions, references=eval_pred.label_ids)
+    precision = PRECISION_METRIC.compute(predictions=predictions, references=eval_pred.label_ids, average="weighted")
+    recall = RECALL_METRIC.compute(predictions=predictions, references=eval_pred.label_ids, average="weighted")
+    f1 = F1_METRIC.compute(predictions=predictions, references=eval_pred.label_ids, average="weighted")
     
     return {
         "accuracy": accuracy["accuracy"],
@@ -145,7 +174,7 @@ def compute_metrics(eval_pred: EvalPrediction) -> dict:
     }
 
 
-def main():
+def main() -> None:
     """Main training function."""
     parser = argparse.ArgumentParser(
         description="Train HuggingFace audio classification model for orca calls"
@@ -204,7 +233,7 @@ def main():
     )
     args = parser.parse_args()
     
-    # Set up paths
+    # Set up paths.
     data_dir = REPO_ROOT / args.data_dir
     output_dir = REPO_ROOT / args.output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -213,7 +242,7 @@ def main():
     dataset = load_audio_dataset(data_dir)
     print(f"Dataset: {dataset}")
     
-    # Load feature extractor and model
+    # Load feature extractor and model.
     print(f"Loading feature extractor and model: {args.model_name}")
     feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(args.model_name)
     
@@ -224,7 +253,7 @@ def main():
         id2label=ID2LABEL,
     )
     
-    # Preprocess dataset
+    # Preprocess dataset.
     print("Preprocessing dataset...")
     dataset = dataset.map(
         lambda x: preprocess_function(x, feature_extractor),
@@ -232,10 +261,10 @@ def main():
         remove_columns=["audio"],
     )
     
-    # Training arguments
+    # Training arguments.
     training_args = TrainingArguments(
         output_dir=str(output_dir),
-        evaluation_strategy="epoch",
+        eval_strategy="epoch",
         save_strategy="epoch",
         learning_rate=args.learning_rate,
         per_device_train_batch_size=args.batch_size,
@@ -249,7 +278,7 @@ def main():
         hub_model_id=args.hub_model_id if args.push_to_hub else None,
     )
     
-    # Create trainer
+    # Create trainer.
     trainer = Trainer(
         model=model,
         args=training_args,
@@ -258,21 +287,21 @@ def main():
         compute_metrics=compute_metrics,
     )
     
-    # Resume from checkpoint if provided
+    # Resume from checkpoint if provided.
     if args.resume_from_checkpoint:
         print(f"Resuming training from checkpoint: {args.resume_from_checkpoint}")
         trainer.train(resume_from_checkpoint=args.resume_from_checkpoint)
     else:
-        # Train
+        # Train.
         print("Starting training...")
         trainer.train()
     
-    # Evaluate
+    # Evaluate.
     print("Evaluating model...")
     metrics = trainer.evaluate()
     print(f"Evaluation metrics: {metrics}")
     
-    # Save model and feature extractor
+    # Save model and feature extractor.
     print(f"Saving model to {output_dir}...")
     trainer.save_model(str(output_dir))
     feature_extractor.save_pretrained(str(output_dir))
