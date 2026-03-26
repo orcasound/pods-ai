@@ -54,10 +54,6 @@ jobs:
         working-directory: ModelTraining
         run: pip install -r requirements.txt
 
-      - name: Patch fastai_audio for Python 3.11+ compatibility
-        working-directory: ModelTraining
-        run: bash patch_fastai_audio.sh
-
       - name: Download WAV files
         working-directory: ModelTraining
         run: |
@@ -70,3 +66,40 @@ jobs:
           --output_dir ${{ inputs.output_dir }}
           --epochs ${{ inputs.epochs }}
           --batch_size ${{ inputs.batch_size }}
+
+  train_model_windows:
+    runs-on: windows-latest
+    env:
+      COSMOS_KEY: ${{ secrets.COSMOS_KEY }}
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594  # v2.16.0
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          submodules: 'recursive'
+
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
+        with:
+          python-version: '3.11'
+
+      - name: Install FFmpeg
+        run: |
+          choco install ffmpeg -y
+
+      - name: Install Python dependencies
+        working-directory: ModelTraining
+        run: pip install -r requirements.txt
+
+      - name: Download WAV files
+        working-directory: ModelTraining
+        run: |
+          python src/download_wavs.py
+
+      - name: Train model
+        working-directory: ModelTraining
+        run: |
+          python src/train_huggingface_model.py --output_dir ${{ inputs.output_dir }} --epochs ${{ inputs.epochs }} --batch_size ${{ inputs.batch_size }}

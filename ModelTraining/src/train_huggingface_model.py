@@ -15,7 +15,13 @@ import argparse
 import numpy as np
 from pathlib import Path
 from collections import Counter
-from datasets import Dataset, Audio, DatasetDict
+
+# Configure datasets to use soundfile for audio decoding BEFORE importing datasets components.
+import datasets.config
+datasets.config.AUDIO_BACKENDS_USE_TORCH = False
+datasets.config.AUDIOCODEC_DEFAULT_DECODER = "soundfile"
+
+from datasets import Dataset, Audio, DatasetDict, ClassLabel
 from transformers import (
     Wav2Vec2FeatureExtractor,
     Wav2Vec2ForSequenceClassification,
@@ -24,6 +30,17 @@ from transformers import (
 )
 from transformers import EvalPrediction
 import evaluate
+
+# Verify audio decoding dependencies are available.
+try:
+    import librosa
+    import soundfile
+except ImportError as e:
+    print("Error: Missing required audio decoding libraries.")
+    print("Please install the required dependencies:")
+    print("  pip install -r ModelTraining/requirements.txt")
+    print(f"\nSpecific error: {e}")
+    raise
 
 # Get repository root (ModelTraining directory).
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -89,6 +106,9 @@ def load_audio_dataset(data_dir: Path) -> DatasetDict:
     
     # Cast audio column to Audio type.
     dataset = dataset.cast_column("audio", Audio(sampling_rate=16000))
+
+    # Cast label column to ClassLabel type for stratification support.
+    dataset = dataset.cast_column("label", ClassLabel(names=list(ID2LABEL.values())))
     
     # Split into train/test.
     # Use stratification only if each label has at least 2 samples and total > 1.
@@ -286,7 +306,7 @@ def main() -> None:
     # Training arguments.
     training_args = TrainingArguments(
         output_dir=str(output_dir),
-        evaluation_strategy="epoch",
+        eval_strategy="epoch",
         save_strategy="epoch",
         learning_rate=args.learning_rate,
         per_device_train_batch_size=args.batch_size,
