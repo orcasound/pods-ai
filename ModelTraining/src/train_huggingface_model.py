@@ -95,13 +95,22 @@ def load_audio_dataset(data_dir: Path) -> DatasetDict:
     if len(audio_files) < 2:
         raise ValueError(f"Dataset too small for train/test split: only {len(audio_files)} sample(s) found. Need at least 2 samples.")
     
-    if min_samples_per_label >= 2:
+    # Check if stratification is possible:
+    # - Need at least 2 unique labels
+    # - Each label must have at least 2 samples
+    num_unique_labels = len(label_counts)
+    can_stratify = num_unique_labels > 1 and min_samples_per_label >= 2
+    
+    if can_stratify:
         # Stratified split (maintains class distribution).
         print("Using stratified train/test split (80/20)")
         dataset = dataset.train_test_split(test_size=0.2, seed=42, stratify_by_column="label")
     else:
-        # Some labels have only 1 sample - use non-stratified split.
-        print(f"Warning: Some labels have fewer than 2 samples (min={min_samples_per_label}). Using non-stratified split.")
+        # Cannot use stratification - use random split.
+        if num_unique_labels == 1:
+            print(f"Warning: Dataset has only 1 unique label. Using non-stratified split.")
+        elif min_samples_per_label < 2:
+            print(f"Warning: Some labels have fewer than 2 samples (min={min_samples_per_label}). Using non-stratified split.")
         dataset = dataset.train_test_split(test_size=0.2, seed=42)
     
     return dataset
@@ -277,7 +286,7 @@ def main() -> None:
     # Training arguments.
     training_args = TrainingArguments(
         output_dir=str(output_dir),
-        eval_strategy="epoch",
+        evaluation_strategy="epoch",
         save_strategy="epoch",
         learning_rate=args.learning_rate,
         per_device_train_batch_size=args.batch_size,

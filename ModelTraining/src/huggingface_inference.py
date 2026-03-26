@@ -70,6 +70,32 @@ class HuggingFaceInference:
         self.label2id = self.model.config.label2id
         
         print(f"Model loaded successfully. Labels: {list(self.label2id.keys())}")
+        
+        # Validate that model has required labels for orca call detection.
+        # We require an "other" class to distinguish positive calls from background noise.
+        if "other" not in self.label2id:
+            raise ValueError(
+                f"Model must include an 'other' label for background/negative class. "
+                f"Found labels: {list(self.label2id.keys())}. "
+                f"Please train the model with label mapping that includes 'other' as the negative class. "
+                f"Expected labels: resident, transient, humpback, other"
+            )
+        
+        # Warn if model doesn't have expected positive classes (but don't fail - could be binary model)
+        expected_positive_labels = {"resident", "transient", "humpback"}
+        found_positive_labels = expected_positive_labels & set(self.label2id.keys())
+        if not found_positive_labels:
+            print(
+                f"Warning: Model has 'other' but no expected positive classes (resident, transient, humpback). "
+                f"This may work but confidence scores may not be meaningful. "
+                f"Found labels: {list(self.label2id.keys())}"
+            )
+        elif found_positive_labels != expected_positive_labels:
+            missing = expected_positive_labels - found_positive_labels
+            print(
+                f"Warning: Model is missing some expected positive classes: {missing}. "
+                f"Confidence will be computed from available classes: {found_positive_labels}"
+            )
     
     def predict(self, wav_path: str, segment_duration: int = 3, hop_duration: int = 1,
                 threshold: Optional[float] = None, min_num_positive_calls_threshold: Optional[int] = None) -> dict[str, object]:
