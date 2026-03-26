@@ -586,6 +586,9 @@ def write_training_samples(
         segment_duration: Duration of each audio segment in seconds
     """
     output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Sort samples by Category, then NodeName, then Timestamp
+    sorted_samples = sorted(samples, key=lambda s: (s['Category'], s['NodeName'], s['Timestamp']))
     
     # Create a temporary directory for audio downloads.
     with TemporaryDirectory() as tmp_dir:
@@ -596,18 +599,16 @@ def write_training_samples(
             
             writer.writeheader()
             
-            total_samples = len(samples)
+            total_samples = len(sorted_samples)
             print(f"\nProcessing {total_samples} samples...")
             
-            for idx, sample in enumerate(samples, start=1):
+            for idx, sample in enumerate(sorted_samples, start=1):
                 print(f"\n[{idx}/{total_samples}] Processing: {sample['Category']} - {sample['NodeName']} - {sample['Timestamp']}")
 
                 output_row = process_sample(
                     sample, manual_timestamps, manual_confidences, model_inference, tmp_dir, segment_duration
                 )
                 writer.writerow(output_row)
-
-
 
 
 def remove_zero_confidence_detections(
