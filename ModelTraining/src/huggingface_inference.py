@@ -68,7 +68,7 @@ class HuggingFaceInference:
         self.id2label = self.model.config.id2label
         self.label2id = self.model.config.label2id
         
-        print(f"Model loaded successfully. Labels: {list(self.label2id.keys())}")
+        print(f"Model loaded successfully. Label mapping: {self.label2id}")
         
         # Validate that model has required labels for orca call detection.
         # We require an "other" class to distinguish positive calls from background noise.
@@ -77,7 +77,7 @@ class HuggingFaceInference:
                 f"Model must include an 'other' label for background/negative class. "
                 f"Found labels: {list(self.label2id.keys())}. "
                 f"Please train the model with label mapping that includes 'other' as the negative class. "
-                f"Expected labels: resident, transient, humpback, other"
+                f"Expected labels: other, resident, transient, humpback"
             )
         
         # Warn if model doesn't have expected positive classes (but don't fail - could be binary model)
@@ -93,31 +93,32 @@ class HuggingFaceInference:
             missing = expected_positive_labels - found_positive_labels
             print(
                 f"Warning: Model is missing some expected positive classes: {missing}. "
-                f"Confidence will be computed from available classes: {found_positive_labels}"
+                f"Predictions will be computed from available classes: {found_positive_labels}"
             )
     
-    def predict(self, wav_path: str, segment_duration: int = 3, hop_duration: int = 1,
+    def predict(self, wav_path: str, segment_duration: int = 3, hop_duration: int = 2,
                 threshold: Optional[float] = None, min_num_positive_calls_threshold: Optional[int] = None) -> dict[str, object]:
         """
         Run inference on a wav file using sliding window.
-        
+
         Uses a sliding window approach with configurable segment and hop duration to match
-        the FastAI model behavior. Each element in local_confidences corresponds to a
-        1-second position from the start of the audio file.
-        
+        the orcahello LiveInferenceOrchestrator behavior. Each element in local_confidences
+        corresponds to a hop_duration-second interval (default: 2 seconds) from the start of
+        the audio file.
+
         Args:
             wav_path: Path to wav file (typically 60 seconds long)
             segment_duration: Duration of each segment in seconds (default: 3)
-            hop_duration: Hop size in seconds between segments (default: 1)
-            threshold: Confidence threshold for positive predictions (default: use instance value)
+            hop_duration: Hop size in seconds between segments (default: 2)
+            threshold: Confidence threshold for positive (non-other) predictions (default: use instance value)
             min_num_positive_calls_threshold: Minimum positive predictions for global positive (default: use instance value)
             
         Returns:
             Dictionary with keys:
-                - local_predictions: List of binary predictions (0 or 1) for each second
-                - local_confidences: List of confidence scores (0.0-1.0), where index i represents second i
-                - global_prediction: Overall binary prediction for the entire audio
-                - global_confidence: Overall confidence score (0.0-1.0)
+                - local_predictions: List of class IDs (0-3) for each hop_duration interval
+                - local_confidences: List of confidence scores (0.0-1.0) for the predicted class at each interval
+                - global_prediction: Overall class prediction (label string) for the entire audio
+                - global_confidence: Overall confidence score (0.0-1.0) for the global prediction
             Returns dict with empty lists and error values if audio loading fails.
         """
         # Use instance values if not overridden
@@ -159,8 +160,9 @@ class HuggingFaceInference:
         audio_duration = len(audio) / sr
         
         # Generate segment predictions using sliding window with 1-second hop.
-        # This ensures local_confidences[i] corresponds to second i from the start.
-        segment_confidences: list[float] = []
+        # Store both class predictions and their probabilities.
+        segment_class_ids: list[int] = []
+        segment_probs: list[np.ndarray] = []
         
         # For each starting position (in seconds), extract a segment_duration window.
         num_positions = int(np.floor(audio_duration)) - (segment_duration - 1)
@@ -199,18 +201,14 @@ class HuggingFaceInference:
                 logits = outputs.logits
                 probs = torch.nn.functional.softmax(logits, dim=-1)
                 
-                # Compute confidence for positive classes only (exclude "other").
-                # Sum probabilities of all positive classes (resident, transient, humpback).
-                positive_confidence = 0.0
-                for label, idx in self.label2id.items():
-                    if label != "other":
-                        positive_confidence += probs[0, idx].item()
-                
-                segment_confidences.append(positive_confidence)
+                # Get predicted class (argmax) and store probabilities.
+                predicted_class = torch.argmax(probs, dim=-1).item()
+                segment_class_ids.append(predicted_class)
+                segment_probs.append(probs[0].cpu().numpy())
         
-        # Guard against empty confidences list.
+        # Guard against empty predictions list.
         # This can happen if the audio is too short or if there was an error during processing.
-        if not segment_confidences:
+        if not segment_class_ids:
             print(f"Warning: No segments processed for {wav_path}")
             return {
                 "local_predictions": [],
@@ -220,40 +218,63 @@ class HuggingFaceInference:
             }
         
         # Apply rolling average to smooth predictions (matching FastAI behavior).
-        # FastAI uses a 2-position rolling window, averaging overlapping segments.
-        # Build local_confidences with exactly n entries for n segments.
-        n = len(segment_confidences)
-        local_confidences: list[float] = []
+        # For multi-class, we average the probability distributions.
+        n = len(segment_probs)
+        smoothed_probs: list[np.ndarray] = []
         
         for i in range(n):
             if i == 0:
-                # First position: use first segment confidence directly
-                local_confidences.append(segment_confidences[0])
+                # First position: use first segment probabilities directly.
+                smoothed_probs.append(segment_probs[0])
             elif i == n - 1:
-                # Last position: use last segment confidence directly
-                local_confidences.append(segment_confidences[-1])
+                # Last position: use last segment probabilities directly.
+                smoothed_probs.append(segment_probs[-1])
             else:
-                # Middle positions: average previous and current segment
-                avg_confidence = (segment_confidences[i - 1] + segment_confidences[i]) / 2.0
-                local_confidences.append(avg_confidence)
+                # Middle positions: average previous and current segment.
+                avg_probs = (segment_probs[i - 1] + segment_probs[i]) / 2.0
+                smoothed_probs.append(avg_probs)
         
-        # Determine local predictions based on the threshold
-        local_predictions = [1 if conf >= threshold else 0 for conf in local_confidences]
+        # Get local predictions (class IDs) and confidences (probability of predicted class).
+        local_predictions: list[int] = []
+        local_confidences: list[float] = []
         
-        # Global prediction is based on the sum of local predictions.
-        # If the sum exceeds the threshold, predict positive (1), else negative (0).
-        global_prediction = 1 if sum(local_predictions) >= min_num_positive_calls_threshold else 0
+        for probs in smoothed_probs:
+            predicted_class = int(np.argmax(probs))
+            confidence = float(probs[predicted_class])
+            local_predictions.append(predicted_class)
+            local_confidences.append(confidence)
         
-        # Global confidence is the average confidence of the segments contributing to the global positive prediction.
-        # If predicting negative, set confidence to 0.
-        global_confidence = (
-            sum(np.array(local_confidences)[np.array(local_predictions) == 1]) / max(1, sum(local_predictions))
-        ) if global_prediction == 1 else 0.0
+        # Determine global prediction based on voting among high-confidence positive predictions.
+        # Filter for positive (non-other) predictions with confidence above threshold.
+        other_class_id = self.label2id["other"]
+        positive_predictions = [
+            (class_id, conf)
+            for class_id, conf in zip(local_predictions, local_confidences)
+            if class_id != other_class_id and conf >= threshold
+        ]
         
-        # Convert global prediction to label name (e.g., "other", "resident")
-        global_prediction_label = (
-            self.id2label[global_prediction] if global_prediction in self.id2label else "other"
-        )
+        # If we have enough positive predictions, use majority vote among them.
+        if len(positive_predictions) >= min_num_positive_calls_threshold:
+            # Count votes for each positive class.
+            class_votes: dict[int, list[float]] = {}
+            for class_id, conf in positive_predictions:
+                if class_id not in class_votes:
+                    class_votes[class_id] = []
+                class_votes[class_id].append(conf)
+            
+            # Winner is the class with most votes (ties broken by average confidence).
+            global_prediction_id = max(
+                class_votes.keys(),
+                key=lambda cid: (len(class_votes[cid]), np.mean(class_votes[cid]))
+            )
+            global_confidence = float(np.mean(class_votes[global_prediction_id]))
+        else:
+            # Not enough positive predictions - classify as "other".
+            global_prediction_id = other_class_id
+            global_confidence = 0.0
+        
+        # Convert global prediction ID to label name.
+        global_prediction_label = self.id2label[global_prediction_id]
         
         return {
             "local_predictions": local_predictions,

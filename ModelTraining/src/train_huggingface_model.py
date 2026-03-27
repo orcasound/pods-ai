@@ -46,7 +46,7 @@ except ImportError as e:
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 # Label mapping.
-LABEL2ID = {"resident": 0, "transient": 1, "humpback": 2, "other": 3}
+LABEL2ID = {"other": 0, "resident": 1, "transient": 2, "humpback": 3}
 ID2LABEL = {v: k for k, v in LABEL2ID.items()}
 
 # Load metrics once at module scope.
@@ -73,7 +73,7 @@ def load_audio_dataset(data_dir: Path) -> DatasetDict:
     labels = []
     
     # Iterate through each category directory.
-    for category in ["resident", "transient", "humpback", "other"]:
+    for category in ["other", "resident", "transient", "humpback"]:
         category_dir = data_dir / category
         if not category_dir.exists():
             print(f"Warning: {category_dir} does not exist")
