@@ -11,7 +11,6 @@ that implements the interface expected by PODS-AI's model_inference system.
 import torch
 import librosa
 import numpy as np
-from pathlib import Path
 from typing import Optional
 from transformers import Wav2Vec2FeatureExtractor, Wav2Vec2ForSequenceClassification
 
@@ -116,9 +115,9 @@ class HuggingFaceInference:
         Returns:
             Dictionary with keys:
                 - local_predictions: List of binary predictions (0 or 1) for each second
-                - local_confidences: List of confidence scores, where index i represents second i
+                - local_confidences: List of confidence scores (0.0-1.0), where index i represents second i
                 - global_prediction: Overall binary prediction for the entire audio
-                - global_confidence: Overall confidence score
+                - global_confidence: Overall confidence score (0.0-1.0)
             Returns dict with empty lists and error values if audio loading fails.
         """
         # Use instance values if not overridden
@@ -162,7 +161,6 @@ class HuggingFaceInference:
         # Generate segment predictions using sliding window with 1-second hop.
         # This ensures local_confidences[i] corresponds to second i from the start.
         segment_confidences: list[float] = []
-        segment_predictions: list[int] = []
         
         # For each starting position (in seconds), extract a segment_duration window.
         num_positions = int(np.floor(audio_duration)) - (segment_duration - 1)

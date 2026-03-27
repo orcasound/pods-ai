@@ -168,7 +168,7 @@ class ModelInference:
                                     Represents confidence that target signal is present.
                 - global_prediction: Overall binary prediction (0 or 1) for the entire audio.
                                     Typically based on number of positive local predictions.
-                - global_confidence: Overall confidence score (0.0-100.0) for the entire audio.
+                - global_confidence: Overall confidence score (0.0-1.0) for the entire audio.
                                     Typically mean of positive local confidences, scaled to percentage.
         """
         raise NotImplementedError("Subclasses must implement predict()")
@@ -204,7 +204,7 @@ class FastAIModel(ModelInference):
         Function which generates local predictions using wavefile.
         
         Processes 3-second segments with 1-second hop, applies rolling average,
-        and returns per-second predictions.
+        and returns per-second predictions (0.0-1.0) and a global confidence (0.0-1.0).
         '''
 
         # Create local directory to save 3 second clips.
@@ -319,7 +319,7 @@ class FastAIModel(ModelInference):
         )
 
         result_json['global_prediction'] = int(sum(result_json["local_predictions"]) >= self.min_num_positive_calls_threshold)
-        result_json['global_confidence'] = submission.loc[(submission['confidence'] > self.threshold), 'confidence'].mean()*100
+        result_json['global_confidence'] = submission.loc[(submission['confidence'] > self.threshold), 'confidence'].mean()
         if pd.isnull(result_json["global_confidence"]):
             result_json["global_confidence"] = 0
 
@@ -347,7 +347,8 @@ class DummyModelInference(ModelInference):
         """
         Generate predictions for testing.
         
-        Returns mock predictions where the middle of the audio has the highest score.
+        Returns mock predictions where the middle of the audio has the highest score (0.0-1.0)
+        and a global_confidence (0.0-1.0).
         """
         import librosa
         
@@ -382,7 +383,7 @@ class DummyModelInference(ModelInference):
         # Calculate global confidence.
         if num_positive > 0:
             positive_confidences = [c for p, c in zip(local_predictions, local_confidences) if p == 1]
-            global_confidence = sum(positive_confidences) / len(positive_confidences) * 100
+            global_confidence = sum(positive_confidences) / len(positive_confidences)
         else:
             global_confidence = 0.0
         

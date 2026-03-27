@@ -438,7 +438,7 @@ def compute_correct_timestamp_for_tp_human_only(
         segment_duration: Duration of each audio segment in seconds
     
     Returns:
-        Tuple of (corrected timestamp string, max confidence score)
+        Tuple of (corrected timestamp string, max confidence score in range 0.0-100.0)
     """
     node_name = sample['NodeName']
     timestamp_str = sample['Timestamp']
@@ -587,7 +587,7 @@ def write_training_samples(
     """
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # Sort samples by Category, then NodeName, then Timestamp
+    # Sort samples by Category, then NodeName, then Timestamp.
     sorted_samples = sorted(samples, key=lambda s: (s['Category'], s['NodeName'], s['Timestamp']))
     
     # Create a temporary directory for audio downloads.
