@@ -40,7 +40,7 @@ class OrcasiteDetection:
     feed: OrcasiteFeed
     timestamp: datetime          # center or start time (we'll define)
     source: str                  # "machine" | "human"
-    category: str                # e.g., "whale", "vessel", "other", "none"
+    category: str                # e.g., "whale", "vessel", "none"
     description: str             # free text; may be ""
     idempotency_key: str
 
@@ -67,7 +67,7 @@ def get_label(
         orcahello_det (Optional[OrcaHelloDetection]): An optional id-matched OrcaHello detection used to upgrade some whale labels.
     
     Returns:
-        str | None: `'resident'`, `'transient'`, `'humpback'`, or `'other'` when a label can be determined; `None` when the label is unknown.
+        str | None: `'resident'`, `'transient'`, `'humpback'`, `'water'`, `'vessel'`, `'jingle'`, or `'human'` when a label can be determined; `None` when the label is unknown.
     """
     desc = (orcasite_det.description or "").lower()
     cat = (orcasite_det.category or "").lower()
@@ -98,7 +98,14 @@ def get_label(
 
     # 4. Other
     if orcasite_det.source == "machine" and not ("click" in desc or "call" in desc or "whistle" in desc):
-        return "other"
+        if "human" in desc or "radio" in desc:
+            return "human"
+        if "vessel" in desc or "ship" in desc or "boat" in desc or "train" in desc:
+            return "vessel"
+        if "jingl" in desc:
+            return "jingle"
+        if "water" in desc:
+            return "water"
 
     # Unknown
     return None
@@ -166,14 +173,14 @@ def classify_detection(
     
     Parameters:
         det (OrcasiteDetection): The detection to classify.
-        label (str): The computed label for the detection (e.g., 'resident', 'transient', 'humpback', 'other', or None).
+        label (str): The computed label for the detection (e.g., 'resident', 'transient', 'humpback', 'water', 'vessel', 'jingle', 'human', or None).
         all_detections (List[OrcasiteDetection]): All detections for the same feed used to determine temporal context.
     
     Returns:
         Classification: An object with `kind` set to one of:
             - 'tp_human_only' for human-sourced whale detections with no nearby machine whale detections,
             - 'tp_machine_only' for machine-sourced whale detections,
-            - 'fp_machine_only' for machine-sourced non-whale detections labeled 'other',
+            - 'fp_machine_only' for machine-sourced non-whale detections,
             - 'tp_both' for human-sourced whale detections with a nearby machine whale detection,
             - 'skip' for detections that should be excluded.
         The `include` field indicates whether the detection should be included in downstream processing (`true` if included, `false` otherwise).
@@ -181,15 +188,15 @@ def classify_detection(
     cat = (det.category or "").lower()
     src = (det.source or "").lower()
 
-    # Skip non-whale human / non-machine things already filtered by label logic
+    # Skip non-whale human / non-machine things already filtered by label logic.
     if label is None:
         return Classification(kind="skip", include=False)
 
-    # False positive, machine-only (label 'other')
-    if label == "other" and src == "machine":
+    # False positive, machine-only (label 'human', 'vessel', 'jingle', or 'water').
+    if (label == "human" or label == "vessel" or label == "jingle" or label == "water") and src == "machine":
         return Classification(kind="fp_machine_only", include=True)
 
-    # True positive, human-only (include)
+    # True positive, human-only (include).
     if cat == "whale" and src == "human":
         if is_isolated_human_whale(det, all_detections):
             return Classification(kind="tp_human_only", include=True)
@@ -384,14 +391,14 @@ def get_orcahello_detections(feed: OrcasiteFeed) -> List[OrcaHelloDetection]:
         else:
             status = "unreviewed"
 
-        # Parse timestamp
+        # Parse timestamp.
         ts_raw = item.get("timestamp")
         try:
             ts = datetime.fromisoformat(ts_raw.replace("Z", "+00:00"))
         except Exception:
             ts = None
 
-        # Extract confidence if available
+        # Extract confidence if available.
         confidence = item.get("whaleFoundConfidence")
         if confidence is not None:
             try:
@@ -529,7 +536,7 @@ def process_all_feeds(
             if not classification.include:
                 continue
             
-            # Collect row data with timestamp for sorting
+            # Collect row data with timestamp for sorting.
             category = label
             node_name = det.feed.node_name  # e.g., "rpi_sunset_bay"
             timestamp_pst = format_timestamp_pst(det.timestamp)
@@ -553,10 +560,10 @@ def process_all_feeds(
 
             all_rows.append((det.timestamp, category, node_name, timestamp_pst, uri, det.description, classification.kind, confidence))
     
-    # Sort all rows by timestamp (first element of tuple) - oldest first, newest last
+    # Sort all rows by timestamp (first element of tuple) - oldest first, newest last.
     all_rows.sort(key=lambda row: row[0])
     
-    # Create CSV file and write sorted rows
+    # Create CSV file and write sorted rows.
     csv_path = output_root / "detections.csv"
     output_root.mkdir(parents=True, exist_ok=True)
     
