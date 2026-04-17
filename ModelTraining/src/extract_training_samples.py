@@ -185,7 +185,7 @@ def select_training_samples(organized_data: dict[str, dict[str, list[dict]]], ma
     
     Returns:
         List[Dict]: Selected training sample dictionaries, each containing:
-            - Category: Detection category (resident, transient, humpback, other)
+            - Category: Detection category (resident, transient, humpback, water, vessel, jingle, human)
             - NodeName: Hydrophone node name
             - Timestamp: Detection timestamp (PST format)
             - URI: Orcasound bouts interface URI
