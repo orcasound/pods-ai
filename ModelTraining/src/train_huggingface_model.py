@@ -11,8 +11,8 @@ Usage:
     # Binary classification (other vs any call)
     python train_huggingface_model.py --num_classes 2 --output_dir ./model/binary
 
-    # Multi-class classification (other, resident, transient, humpback)
-    python train_huggingface_model.py --num_classes 4 --output_dir ./model/multiclass
+    # Multi-class classification (water, resident, transient, humpback, vessel, jingle, human)
+    python train_huggingface_model.py --num_classes 7 --output_dir ./model/multiclass
 """
 
 import argparse
@@ -70,17 +70,17 @@ def setup_label_mappings(num_classes: int) -> None:
     global LABEL2ID, ID2LABEL
 
     if num_classes == 2:
-        # Binary: other (0) vs any call (1).
-        LABEL2ID = {"other": 0, "call": 1}
-        ID2LABEL = {0: "other", 1: "call"}
-        print("Using BINARY classification: other vs call")
-    elif num_classes == 4:
-        # Multi-class: other, resident, transient, humpback.
-        LABEL2ID = {"other": 0, "resident": 1, "transient": 2, "humpback": 3}
-        ID2LABEL = {0: "other", 1: "resident", 2: "transient", 3: "humpback"}
-        print("Using MULTI-CLASS classification: other, resident, transient, humpback")
+        # Binary: other (0) vs any whale (1).
+        LABEL2ID = {"other": 0, "whale": 1}
+        ID2LABEL = {0: "other", 1: "whale"}
+        print("Using BINARY classification: other vs whale")
+    elif num_classes == 7:
+        # Multi-class: water, resident, transient, humpback, vessel, jingle, human.
+        LABEL2ID = {"water": 0, "resident": 1, "transient": 2, "humpback": 3, "vessel": 4, "jingle": 5, "human": 6}
+        ID2LABEL = {0: "water", 1: "resident", 2: "transient", 3: "humpback", 4: "vessel", 5: "jingle", 6: "human"}
+        print("Using MULTI-CLASS classification: water, resident, transient, humpback, vessel, jingle, human")
     else:
-        raise ValueError(f"num_classes must be 2 or 4, got {num_classes}")
+        raise ValueError(f"num_classes must be 2 or 7, got {num_classes}")
 
 
 def load_audio_dataset(data_dir: Path, num_classes: int) -> DatasetDict:
@@ -89,7 +89,7 @@ def load_audio_dataset(data_dir: Path, num_classes: int) -> DatasetDict:
 
     Args:
         data_dir: Path to ModelTraining/output/wav directory
-        num_classes: 2 for binary, 4 for multi-class
+        num_classes: 2 for binary, 7 for multi-class
 
     Returns:
         DatasetDict with train and test splits
@@ -101,7 +101,7 @@ def load_audio_dataset(data_dir: Path, num_classes: int) -> DatasetDict:
     labels = []
 
     # Iterate through each category directory.
-    for category in ["other", "resident", "transient", "humpback"]:
+    for category in ["water", "resident", "transient", "humpback", "vessel", "jingle", "human"]:
         category_dir = data_dir / category
         if not category_dir.exists():
             print(f"Warning: {category_dir} does not exist")
@@ -116,8 +116,8 @@ def load_audio_dataset(data_dir: Path, num_classes: int) -> DatasetDict:
 
             # Map labels based on num_classes.
             if num_classes == 2:
-                # Binary: map resident/transient/humpback to "call" (1), other to "other" (0).
-                label = LABEL2ID["other"] if category == "other" else LABEL2ID["call"]
+                # Binary: map resident/transient/humpback to "whale" (1), everything else to "other" (0).
+                label = LABEL2ID["other"] if category == "water" or category == "vessel" or category == "jingle" or category == "human" else LABEL2ID["whale"]
             else:
                 # Multi-class: use original category.
                 label = LABEL2ID[category]
@@ -338,9 +338,9 @@ def main() -> None:
     parser.add_argument(
         "--num_classes",
         type=int,
-        choices=[2, 4],
-        default=4,
-        help="Number of classes: 2 for binary (other vs call), 4 for multi-class (default: 4)",
+        choices=[2, 7],
+        default=7,
+        help="Number of classes: 2 for binary (other vs whale), 7 for multi-class (default: 7)",
     )
     parser.add_argument(
         "--data_dir",
