@@ -115,9 +115,10 @@ class HuggingFaceInference:
             
         Returns:
             Dictionary with keys:
-                - local_predictions: List of class IDs (0-3) for each hop_duration interval
+                - local_predictions: List of class IDs for each hop_duration interval
                 - local_confidences: List of confidence scores (0.0-1.0) for the predicted class at each interval
-                - global_prediction: Overall class prediction (label string) for the entire audio
+                - global_prediction: Overall class ID for the entire audio
+                - global_prediction_label: Human-readable label for the global prediction
                 - global_confidence: Overall confidence score (0.0-1.0) for the global prediction
             Returns dict with empty lists and error values if audio loading fails.
         """
@@ -138,7 +139,8 @@ class HuggingFaceInference:
             return {
                 "local_predictions": [],
                 "local_confidences": [],
-                "global_prediction": "error",
+                "global_prediction": -1,
+                "global_prediction_label": "error",
                 "global_confidence": 0.0,
             }
         
@@ -148,7 +150,8 @@ class HuggingFaceInference:
             return {
                 "local_predictions": [],
                 "local_confidences": [],
-                "global_prediction": "error",
+                "global_prediction": -1,
+                "global_prediction_label": "error",
                 "global_confidence": 0.0,
             }
         
@@ -159,7 +162,7 @@ class HuggingFaceInference:
         # Calculate total audio duration and number of segments with sliding window.
         audio_duration = len(audio) / sr
         
-        # Generate segment predictions using sliding window with 1-second hop.
+        # Generate segment predictions using sliding window.
         # Store both class predictions and their probabilities.
         segment_class_ids: list[int] = []
         segment_probs: list[np.ndarray] = []
@@ -213,7 +216,8 @@ class HuggingFaceInference:
             return {
                 "local_predictions": [],
                 "local_confidences": [],
-                "global_prediction": "error",
+                "global_prediction": -1,
+                "global_prediction_label": "error",
                 "global_confidence": 0.0,
             }
         
@@ -279,7 +283,8 @@ class HuggingFaceInference:
         return {
             "local_predictions": local_predictions,
             "local_confidences": local_confidences,
-            "global_prediction": global_prediction_label,
+            "global_prediction": global_prediction_id,
+            "global_prediction_label": global_prediction_label,
             "global_confidence": global_confidence,
         }
 

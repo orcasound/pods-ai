@@ -169,7 +169,7 @@ class ModelInference:
                 - global_prediction: Overall binary prediction (0 or 1) for the entire audio.
                                     Typically based on number of positive local predictions.
                 - global_confidence: Overall confidence score (0.0-1.0) for the entire audio.
-                                    Typically mean of positive local confidences, scaled to percentage.
+                                    Typically mean of positive local confidences (0.0-1.0).
         """
         raise NotImplementedError("Subclasses must implement predict()")
 
