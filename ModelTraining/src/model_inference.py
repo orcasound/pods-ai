@@ -45,13 +45,13 @@ def _patched_torchaudio_load(filepath, *args, **kwargs):
     """Wrapper for torchaudio.load that uses soundfile directly instead of torchcodec"""
     import soundfile as sf
     import torch as t
-    
+
     # Load audio using soundfile.
     data, samplerate = sf.read(str(filepath), dtype='float32')
-    
+
     # Convert to torch tensor and ensure shape is (channels, samples).
     waveform = t.from_numpy(data.T if data.ndim > 1 else data.reshape(1, -1))
-    
+
     return waveform, samplerate
 
 torchaudio.load = _patched_torchaudio_load
@@ -66,11 +66,11 @@ def _patched_torchaudio_save(filepath, src, sample_rate, *args, **kwargs):
     """Wrapper for torchaudio.save that uses soundfile directly instead of torchcodec"""
     import soundfile as sf
     import numpy as np
-    
+
     # Convert torch tensor to numpy array.
     # src is expected to be (channels, samples), soundfile expects (samples, channels).
     audio_data = src.numpy().T if src.ndim > 1 else src.numpy().reshape(-1, 1)
-    
+
     # Save audio using soundfile.
     sf.write(str(filepath), audio_data, sample_rate)
 
@@ -130,44 +130,51 @@ def extract_segments(audioPath, sampleDict, destnPath, suffix):
 class ModelInference:
     """
     Base class for model inference.
-    
+
     This class provides an interface for scoring audio files using a sliding window
     approach. Subclasses should implement the actual model loading and inference logic.
-    
+
     The inference uses overlapping segments (typically 3-second windows with 1-second hop)
-    to generate per-second confidence scores. Each element in local_confidences[i] 
+    to generate per-second confidence scores. Each element in local_confidences[i]
     corresponds to second i from the start of the audio file.
+
+    Supports both binary classification (whale vs other) and multi-class classification
+    (species identification).
     """
-    
+
     def __init__(self, model_path: Optional[str] = None):
         """
         Initialize the model inference.
-        
+
         Args:
             model_path: Optional path to the model file or directory.
         """
         self.model_path = model_path
         self.model = None
-    
+
     def predict(self, wav_file_path: str) -> Dict:
         """
         Run inference on a wav file and return predictions.
-        
+
         Uses a sliding window approach (typically 3-second segments with 1-second hop)
-        to generate predictions. Each element in local_confidences corresponds to a 
+        to generate predictions. Each element in local_confidences corresponds to a
         1-second position from the start of the audio.
-        
+
         Args:
             wav_file_path: Path to the wav file to score.
-            
+
         Returns:
             Dictionary containing:
-                - local_predictions: List of binary predictions (0 or 1) for each second.
-                                    1 indicates presence of target signal (whale call).
+                - local_predictions: List of predictions for each second.
+                                    For binary models: 0 or 1 (0=other, 1=whale call)
+                                    For multi-class models: class ID (e.g., 0-6)
                 - local_confidences: List of confidence scores (0.0-1.0) for each second.
-                                    Represents confidence that target signal is present.
-                - global_prediction: Overall binary prediction (0 or 1) for the entire audio.
-                                    Typically based on number of positive local predictions.
+                                    Represents confidence in the predicted class.
+                - global_prediction: Overall prediction for the entire audio.
+                                    For binary models: 0 or 1
+                                    For multi-class models: class ID
+                - global_prediction_label: (Optional) Human-readable label for global prediction.
+                                          Only provided by multi-class models.
                 - global_confidence: Overall confidence score (0.0-1.0) for the entire audio.
                                     Typically mean of positive local confidences (0.0-1.0).
         """
@@ -177,17 +184,17 @@ class ModelInference:
 class FastAIModel(ModelInference):
     """
     FastAI model inference using the aifororcas model.
-    
+
     This implementation uses the FastAI model architecture from aifororcas-livesystem.
     The model processes 3-second segments with 1-second hop to generate per-second scores.
     The model file (typically model.pkl) should be available in the model_path directory.
     """
-    
+
     def __init__(self, model_path: str = "./model", model_name: str = "stg2-rn18.pkl",
                  threshold: float = 0.5, min_num_positive_calls_threshold: int = 3):
         """
         Initialize FastAI model inference.
-        
+
         Args:
             model_path: Path to directory containing the model file
             model_name: Name of the model file (default: "model.pkl")
@@ -202,7 +209,7 @@ class FastAIModel(ModelInference):
     def predict(self, wav_file_path):
         '''
         Function which generates local predictions using wavefile.
-        
+
         Processes 3-second segments with 1-second hop, applies rolling average,
         and returns per-second predictions (0.0-1.0) and a global confidence (0.0-1.0).
         '''
@@ -219,7 +226,7 @@ class FastAIModel(ModelInference):
         max_length = get_duration(path=wav_file_path)
         print(os.path.basename(wav_file_path))
         print("Length of Audio Clip:{0}".format(max_length))
-        
+
         # Generate 3 sec proposal with 1 sec hop length.
         threeSecList = []
         for i in range(int(floor(max_length)-2)):
@@ -237,7 +244,7 @@ class FastAIModel(ModelInference):
             local_dir,
             ""
         )
-        
+
         # Define Audio config needed to create on the fly mel spectograms.
         config = AudioConfig(standardize=False,
                              sg_cfg=SpectrogramConfig(
@@ -329,11 +336,11 @@ class FastAIModel(ModelInference):
 class DummyModelInference(ModelInference):
     """
     Dummy model inference for testing purposes.
-    
+
     This implementation returns mock predictions without actually running a model.
     It's useful for testing the timestamp correction logic.
     """
-    
+
     def __init__(self, model_path: Optional[str] = None):
         """Initialize dummy model."""
         super().__init__(model_path)
@@ -342,51 +349,51 @@ class DummyModelInference(ModelInference):
             "For production use, integrate a real model.",
             UserWarning
         )
-    
+
     def predict(self, wav_file_path: str) -> Dict:
         """
         Generate predictions for testing.
-        
+
         Returns mock predictions where the middle of the audio has the highest score (0.0-1.0)
         and a global_confidence (0.0-1.0).
         """
         import librosa
-        
+
         # Load audio to determine duration.
         y, sr = librosa.load(wav_file_path, sr=None)
         duration = len(y) / sr
-        
+
         # Number of per-second positions.
         num_segments = int(duration)
-        
+
         if num_segments == 0:
             num_segments = 1
-        
+
         # Generate mock predictions: highest score in the middle.
         local_predictions = []
         local_confidences = []
-        
+
         middle_idx = num_segments // 2
         for i in range(num_segments):
             # Create a score that peaks in the middle.
             distance_from_middle = abs(i - middle_idx)
             confidence = max(0.3, 0.9 - (distance_from_middle * 0.1))
             prediction = 1 if confidence > 0.6 else 0
-            
+
             local_predictions.append(prediction)
             local_confidences.append(round(confidence, 3))
-        
+
         # Calculate global prediction.
         num_positive = sum(local_predictions)
         global_prediction = 1 if num_positive >= 3 else 0
-        
+
         # Calculate global confidence.
         if num_positive > 0:
             positive_confidences = [c for p, c in zip(local_predictions, local_confidences) if p == 1]
             global_confidence = sum(positive_confidences) / len(positive_confidences)
         else:
             global_confidence = 0.0
-        
+
         return {
             "local_predictions": local_predictions,
             "local_confidences": local_confidences,
@@ -399,33 +406,33 @@ def download_model_if_needed(model_path: str = "./model",
                             model_url: Optional[str] = None) -> bool:
     """
     Download the FastAI model from Azure Blob Storage if it doesn't exist.
-    
+
     The default model is downloaded from:
     https://trainedproductionmodels.blob.core.windows.net/dnnmodel/11-15-20.FastAI.R1-12.zip
-    
+
     Args:
         model_path: Directory where the model should be stored
         model_url: Optional custom URL for the model zip file. If not provided, uses the default model.
                   Can also be set via MODEL_URL environment variable.
-        
+
     Returns:
         True if model is available (existed or downloaded successfully), False otherwise
     """
     import requests
     import zipfile
     import io
-    
+
     model_dir = Path(model_path)
     model_file = model_dir / "model.pkl"
-    
+
     # Check if model already exists.
     if model_file.exists():
         print(f"Model already exists at {model_file}")
         return True
-    
+
     # Create model directory.
     model_dir.mkdir(parents=True, exist_ok=True)
-    
+
     # Determine model URL.
     if model_url is None:
         # Check environment variable.
@@ -433,13 +440,13 @@ def download_model_if_needed(model_path: str = "./model",
             "MODEL_URL",
             "https://trainedproductionmodels.blob.core.windows.net/dnnmodel/11-15-20.FastAI.R1-12.zip"
         )
-    
+
     print(f"Downloading model from {model_url}...")
-    
+
     try:
         response = requests.get(model_url, timeout=120)
         response.raise_for_status()
-        
+
         # Extract zip file with path validation to prevent directory traversal attacks.
         # The zip file contains a "model" directory, so we extract to model_dir.parent.
         print(f"Extracting model to {model_dir.parent}...")
@@ -451,10 +458,10 @@ def download_model_if_needed(model_path: str = "./model",
                 member_path = (extract_target / member).resolve()
                 if not str(member_path).startswith(str(extract_target)):
                     raise ValueError(f"Zip file contains unsafe path: {member}")
-            
+
             # Safe to extract after validation.
             zip_ref.extractall(extract_target)
-        
+
         # Check if extraction was successful.
         if model_file.exists():
             print(f"Model downloaded and extracted successfully to {model_file}")
@@ -462,7 +469,7 @@ def download_model_if_needed(model_path: str = "./model",
         else:
             print(f"Warning: Model file not found after extraction at {model_file}")
             return False
-            
+
     except Exception as e:
         print(f"Error downloading model: {e}")
         return False
@@ -472,7 +479,7 @@ def get_model_inference(model_path: Optional[str] = None, model_type: str = "fas
                        auto_download: bool = False, model_url: Optional[str] = None, **kwargs) -> ModelInference:
     """
     Factory function to create a model inference instance.
-    
+
     Args:
         model_path: Optional path to the model file or directory.
         model_type: Type of model to use. Supports:
@@ -483,36 +490,36 @@ def get_model_inference(model_path: Optional[str] = None, model_type: str = "fas
         model_url: Optional custom URL for downloading the model. If not provided, uses default model.
                   Can also be set via MODEL_URL environment variable.
         **kwargs: Additional arguments passed to model constructor (e.g., threshold, min_num_positive_calls_threshold)
-        
+
     Returns:
         ModelInference instance
-        
+
     Note:
         The FastAI model can be downloaded from (default):
         https://trainedproductionmodels.blob.core.windows.net/dnnmodel/11-15-20.FastAI.R1-12.zip
-        
+
         To use a different model version, set the MODEL_URL environment variable:
         export MODEL_URL=https://trainedproductionmodels.blob.core.windows.net/dnnmodel/YOUR-MODEL.zip
-        
+
         Example usage:
-            # Use FastAI model (default)
+            # Use FastAI model (default).
             model = get_model_inference(model_path="./model")
-            
-            # Use FastAI model with auto-download
+
+            # Use FastAI model with auto-download.
             model = get_model_inference(model_path="./model", auto_download=True)
-            
-            # Use HuggingFace model for multi-class classification
+
+            # Use HuggingFace model for multi-class classification.
             model = get_model_inference(
                 model_path="path/to/huggingface/model",
                 model_type="huggingface",
                 threshold=0.5,
                 min_num_positive_calls_threshold=3
             )
-            
-            # Use dummy model for testing
+
+            # Use dummy model for testing.
             model = get_model_inference(model_type="dummy")
-            
-            # Use specific FastAI model version
+
+            # Use specific FastAI model version.
             model = get_model_inference(
                 model_path="./model",
                 model_type="fastai",
@@ -523,8 +530,8 @@ def get_model_inference(model_path: Optional[str] = None, model_type: str = "fas
     if model_type == "dummy":
         return DummyModelInference(model_path)
     elif model_type == "huggingface":
-        # HuggingFace models require explicit model path (no fallback to base model)
-        # The base model lacks id2label/label2id config required by HuggingFaceInference
+        # HuggingFace models require explicit model path (no fallback to base model).
+        # The base model lacks id2label/label2id config required by HuggingFaceInference.
         if model_path is None:
             raise ValueError(
                 "model_path is required for huggingface model type. "
@@ -535,7 +542,7 @@ def get_model_inference(model_path: Optional[str] = None, model_type: str = "fas
     elif model_type == "fastai":
         if model_path is None:
             model_path = "./model"
-        
+
         # Check if model exists, download if requested.
         model_file = Path(model_path) / "model.pkl"
         if not model_file.exists() and auto_download:
@@ -545,14 +552,14 @@ def get_model_inference(model_path: Optional[str] = None, model_type: str = "fas
                     f"{model_url or os.environ.get('MODEL_URL', 'https://trainedproductionmodels.blob.core.windows.net/dnnmodel/11-15-20.FastAI.R1-12.zip')}\n"
                     f"and extract to {model_path}"
                 )
-        
-        # Filter kwargs to only include parameters supported by FastAIModel
-        # FastAIModel accepts: threshold, min_num_positive_calls_threshold
+
+        # Filter kwargs to only include parameters supported by FastAIModel.
+        # FastAIModel accepts: threshold, min_num_positive_calls_threshold.
         fastai_kwargs = {
             k: v for k, v in kwargs.items()
             if k in ('threshold', 'min_num_positive_calls_threshold')
         }
-        
+
         return FastAIModel(model_path=model_path, model_name="model.pkl", **fastai_kwargs)
     else:
         raise ValueError(
