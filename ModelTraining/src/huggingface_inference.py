@@ -162,13 +162,16 @@ class HuggingFaceInference:
         # Calculate total audio duration and number of segments with sliding window.
         audio_duration = len(audio) / sr
         
-        # Generate segment predictions using sliding window.
+        # Generate segment predictions using sliding window with hop_duration-second hop.
+        # Each position represents a segment_duration-second window starting at position_index * hop_duration.
         # Store both class predictions and their probabilities.
         segment_class_ids: list[int] = []
         segment_probs: list[np.ndarray] = []
         
-        # For each starting position (in seconds), extract a segment_duration window.
-        num_positions = int(np.floor(audio_duration)) - (segment_duration - 1)
+        # Calculate number of positions based on hop_duration.
+        # num_positions = how many segment_duration windows fit with hop_duration spacing
+        # Last position must start early enough that segment_duration window fits within audio.
+        num_positions = int(np.floor((audio_duration - segment_duration) / hop_duration)) + 1
         
         # Handle very short audio (shorter than segment_duration).
         # In this case, we will just process one segment starting at 0 seconds.

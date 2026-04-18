@@ -65,7 +65,7 @@ def setup_label_mappings(num_classes: int) -> None:
     Set up label mappings based on number of classes.
 
     Args:
-        num_classes: 2 for binary (other vs call), 4 for multi-class
+        num_classes: 2 for binary (other vs call), 7 for multi-class
     """
     global LABEL2ID, ID2LABEL
 
@@ -165,7 +165,7 @@ def load_audio_dataset(data_dir: Path, num_classes: int) -> DatasetDict:
     else:
         # Cannot use stratification - use random split.
         if num_unique_labels == 1:
-            print(f"Warning: Dataset has only 1 unique label. Using non-stratified split.")
+            print("Warning: Dataset has only 1 unique label. Using non-stratified split.")
         elif min_samples_per_label < 2:
             print(f"Warning: Some labels have fewer than 2 samples (min={min_samples_per_label}). Using non-stratified split.")
         dataset = dataset.train_test_split(test_size=0.2, seed=42)
@@ -325,7 +325,7 @@ def analyze_dataset(dataset: DatasetDict) -> None:
             imbalance_ratio = max_count / min_count if min_count > 0 else float('inf')
             print(f"  Imbalance ratio: {imbalance_ratio:.1f}:1")
             if imbalance_ratio > 10:
-                print(f"  WARNING: Severe class imbalance detected!")
+                print("  WARNING: Severe class imbalance detected!")
 
     print("="*60 + "\n")
 
