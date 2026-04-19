@@ -134,9 +134,14 @@ class ModelInference:
     This class provides an interface for scoring audio files using a sliding window
     approach. Subclasses should implement the actual model loading and inference logic.
 
-    The inference uses overlapping segments (typically 3-second windows with 1-second hop)
-    to generate per-second confidence scores. Each element in local_confidences[i]
-    corresponds to second i from the start of the audio file.
+    The inference uses overlapping segments (typically 3-second windows) to generate
+    confidence scores. Different implementations may use different hop sizes:
+    - FastAIModel: 1-second hop, produces per-second confidences
+    - HuggingFaceInference: Configurable hop (default 2 seconds)
+
+    The timestamp correction logic in extract_training_samples.py automatically infers
+    the hop duration from the output length, so implementations are free to choose
+    their own hop size.
 
     Supports both binary classification (whale vs other) and multi-class classification
     (species identification).
@@ -156,20 +161,30 @@ class ModelInference:
         """
         Run inference on a wav file and return predictions.
 
-        Uses a sliding window approach (typically 3-second segments with 1-second hop)
-        to generate predictions. Each element in local_confidences corresponds to a
-        1-second position from the start of the audio.
+        Uses a sliding window approach (typically 3-second segments) to generate predictions.
+        The hop size between windows is implementation-specific:
+        - FastAIModel uses 1-second hop, producing one confidence per second
+        - HuggingFaceInference uses configurable hop (default 2 seconds)
+
+        The timestamp correction logic automatically infers the hop duration from
+        len(local_confidences) and audio duration, so local_confidences[i] represents
+        the confidence at position i * hop_duration seconds from the start.
 
         Args:
             wav_file_path: Path to the wav file to score.
 
         Returns:
             Dictionary containing:
-                - local_predictions: List of predictions for each second.
+                - local_predictions: List of predictions for each hop position.
                                     For binary models: 0 or 1 (0=other, 1=whale call)
                                     For multi-class models: class ID (e.g., 0-6)
-                - local_confidences: List of confidence scores (0.0-1.0) for each second.
-                                    Represents confidence in the predicted class.
+                - local_confidences: List of confidence scores (0.0-1.0) for each hop position.
+                                    For binary models: confidence that whale call is present
+                                    For multi-class models: whale-call likelihood (1 - P(negative classes))
+                                    Used by timestamp correction to locate whale calls.
+                                    Note: The number of entries depends on hop_duration. FastAI uses
+                                    1-second hop and produces ~N entries for N-second audio. HuggingFace
+                                    uses 2-second hop and produces ~N/2 entries.
                 - global_prediction: Overall prediction for the entire audio.
                                     For binary models: 0 or 1
                                     For multi-class models: class ID

@@ -459,9 +459,10 @@ def compute_correct_timestamp_for_tp_human_only(
         local_confidences = prediction_results["local_confidences"]
 
         # Determine the hop duration from the model output.
-        # For FastAI: local_confidences has one entry per second (hop_duration=1).
-        # For HuggingFace: local_confidences has one entry per hop_duration seconds (default hop_duration=2).
-        # We infer the hop duration from the output length and audio duration.
+        # Different model implementations use different hop sizes:
+        # - FastAIModel: 1-second hop → ~60 confidences for 60s audio
+        # - HuggingFaceInference (default): 2-second hop → ~29 confidences for 60s audio
+        # We infer the hop duration from output length to handle both cases automatically.
         try:
             import librosa
             audio, sr = librosa.load(wav_path, sr=None)
@@ -471,8 +472,6 @@ def compute_correct_timestamp_for_tp_human_only(
             audio_duration = 60.0  # Assume 60 seconds as fallback.
 
         # Calculate inferred hop duration.
-        # For FastAI: 60 confidences for 60s audio -> hop_duration ≈ 1
-        # For HuggingFace: 29 confidences for 60s audio -> hop_duration ≈ 2
         if len(local_confidences) > 0:
             inferred_hop_duration = audio_duration / len(local_confidences)
         else:
