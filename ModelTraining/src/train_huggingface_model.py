@@ -234,10 +234,11 @@ def compute_metrics(eval_pred: EvalPrediction) -> dict:
     recall = RECALL_METRIC.compute(predictions=predictions, references=labels, average="weighted")
     f1 = F1_METRIC.compute(predictions=predictions, references=labels, average="weighted")
 
-    # Per-class metrics.
-    precision_per_class = PRECISION_METRIC.compute(predictions=predictions, references=labels, average=None)
-    recall_per_class = RECALL_METRIC.compute(predictions=predictions, references=labels, average=None)
-    f1_per_class = F1_METRIC.compute(predictions=predictions, references=labels, average=None)
+    # Per-class metrics with explicit labels to ensure alignment with ID2LABEL ordering.
+    all_labels = list(ID2LABEL.keys())
+    precision_per_class = PRECISION_METRIC.compute(predictions=predictions, references=labels, average=None, labels=all_labels)
+    recall_per_class = RECALL_METRIC.compute(predictions=predictions, references=labels, average=None, labels=all_labels)
+    f1_per_class = F1_METRIC.compute(predictions=predictions, references=labels, average=None, labels=all_labels)
 
     # Confusion matrix analysis.
     print("\n" + "="*60)

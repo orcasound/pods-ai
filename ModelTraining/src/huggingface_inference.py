@@ -14,8 +14,11 @@ import numpy as np
 from typing import Optional
 from transformers import Wav2Vec2FeatureExtractor, Wav2Vec2ForSequenceClassification
 
+# Import base class to establish inheritance
+from model_inference import ModelInference
 
-class HuggingFaceInference:
+
+class HuggingFaceInference(ModelInference):  # Inherit from ModelInference
     """
     Inference wrapper for HuggingFace audio classification models.
     
@@ -34,7 +37,7 @@ class HuggingFaceInference:
             threshold: Confidence threshold for positive predictions (default: 0.5)
             min_num_positive_calls_threshold: Minimum positive predictions for global positive (default: 3)
         """
-        self.model_path = model_path
+        super().__init__(model_path)  # Call parent constructor
         self.threshold = threshold
         self.min_num_positive_calls_threshold = min_num_positive_calls_threshold
         
@@ -70,31 +73,37 @@ class HuggingFaceInference:
         
         print(f"Model loaded successfully. Label mapping: {self.label2id}")
         
-        # Validate that model has required labels for orca call detection.
-        # We require an "other" class to distinguish positive calls from background noise.
-        if "other" not in self.label2id:
+        # Validate that model has at least one negative/background class.
+        # Accept either explicit "other" or treat specific classes as negative.
+        negative_classes = {"other", "water", "vessel", "jingle", "human"}
+        positive_classes = {"resident", "transient", "humpback"}
+        
+        found_negative = negative_classes & set(self.label2id.keys())
+        found_positive = positive_classes & set(self.label2id.keys())
+        
+        if not found_negative:
             raise ValueError(
-                f"Model must include an 'other' label for background/negative class. "
+                f"Model must include at least one negative/background class (other, water, vessel, jingle, or human). "
                 f"Found labels: {list(self.label2id.keys())}. "
-                f"Please train the model with label mapping that includes 'other' as the negative class. "
-                f"Expected labels: other, resident, transient, humpback"
+                f"Please train the model with at least one negative class to distinguish from whale calls."
             )
         
-        # Warn if model doesn't have expected positive classes (but don't fail - could be binary model)
-        expected_positive_labels = {"resident", "transient", "humpback"}
-        found_positive_labels = expected_positive_labels & set(self.label2id.keys())
-        if not found_positive_labels:
+        if not found_positive:
             print(
-                f"Warning: Model has 'other' but no expected positive classes (resident, transient, humpback). "
+                f"Warning: Model has negative classes but no expected positive classes (resident, transient, humpback). "
                 f"This may work but confidence scores may not be meaningful. "
                 f"Found labels: {list(self.label2id.keys())}"
             )
-        elif found_positive_labels != expected_positive_labels:
-            missing = expected_positive_labels - found_positive_labels
+        elif found_positive != positive_classes:
+            missing = positive_classes - found_positive
             print(
                 f"Warning: Model is missing some expected positive classes: {missing}. "
-                f"Predictions will be computed from available classes: {found_positive_labels}"
+                f"Predictions will be computed from available classes: {found_positive}"
             )
+        
+        # Store which classes are considered negative (non-whale)
+        self.negative_class_ids = {self.label2id[label] for label in found_negative}
+        print(f"Treating classes as negative/background: {found_negative}")
     
     def predict(self, wav_path: str, segment_duration: int = 3, hop_duration: int = 2,
                 threshold: Optional[float] = None, min_num_positive_calls_threshold: Optional[int] = None) -> dict[str, object]:
@@ -139,8 +148,8 @@ class HuggingFaceInference:
             return {
                 "local_predictions": [],
                 "local_confidences": [],
-                "global_prediction": -1,
-                "global_prediction_label": "error",
+                "global_prediction": primary_negative_id,
+                "global_prediction_label": self.id2label[primary_negative_id],
                 "global_confidence": 0.0,
             }
         
@@ -150,8 +159,8 @@ class HuggingFaceInference:
             return {
                 "local_predictions": [],
                 "local_confidences": [],
-                "global_prediction": -1,
-                "global_prediction_label": "error",
+                "global_prediction": primary_negative_id,
+                "global_prediction_label": self.id2label[primary_negative_id],
                 "global_confidence": 0.0,
             }
         
@@ -219,8 +228,8 @@ class HuggingFaceInference:
             return {
                 "local_predictions": [],
                 "local_confidences": [],
-                "global_prediction": -1,
-                "global_prediction_label": "error",
+                "global_prediction": primary_negative_id,
+                "global_prediction_label": self.id2label[primary_negative_id],
                 "global_confidence": 0.0,
             }
         
@@ -252,12 +261,11 @@ class HuggingFaceInference:
             local_confidences.append(confidence)
         
         # Determine global prediction based on voting among high-confidence positive predictions.
-        # Filter for positive (non-other) predictions with confidence above threshold.
-        other_class_id = self.label2id["other"]
+        # Filter for positive (non-negative) predictions with confidence above threshold.
         positive_predictions = [
             (class_id, conf)
             for class_id, conf in zip(local_predictions, local_confidences)
-            if class_id != other_class_id and conf >= threshold
+            if class_id not in self.negative_class_ids and conf >= threshold
         ]
         
         # If we have enough positive predictions, use majority vote among them.
@@ -276,8 +284,12 @@ class HuggingFaceInference:
             )
             global_confidence = float(np.mean(class_votes[global_prediction_id]))
         else:
-            # Not enough positive predictions - classify as "other".
-            global_prediction_id = other_class_id
+            # Not enough positive predictions - classify as negative.
+            if "other" in self.label2id:
+                global_prediction_id = self.label2id["other"]
+            else:
+                # Use the first negative class
+                global_prediction_id = min(self.negative_class_ids)
             global_confidence = 0.0
         
         # Convert global prediction ID to label name.
