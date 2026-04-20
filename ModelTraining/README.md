@@ -142,8 +142,67 @@ Key dependencies:
 
 - **spectrogram_visualizer.py**: Adapted from [aifororcas-livesystem](https://github.com/orcasound/aifororcas-livesystem/blob/main/InferenceSystem/src/spectrogram_visualizer.py)
 - **model_inference.py**: Provides model inference interface for scoring audio samples
+- **run_inference.py**: Runs a model on a wav file and prints the global prediction,
+  confidence, and per-class probabilities.
 - **get_best_timestamp.py**: Given a node slug and a detection timestamp, runs
   `process_sample()` and prints the corrected URI with the best timestamp.
+
+### run_inference.py
+
+Run model inference on a wav file and display the global prediction, confidence score,
+and per-class probabilities.  For HuggingFace models the per-class probability is the
+mean of all `local_confidence` values (from windows predicting that class) that exceed
+the model's threshold — the same statistic used for `global_confidence`.  For the FastAI
+binary model, `whale = global_confidence` and `other = 1 - global_confidence`.
+
+```
+usage: python run_inference.py <wav_file> [--model {huggingface,fastai}] [--model-path PATH]
+```
+
+| Argument | Description |
+|---|---|
+| `wav_file` | Path to the wav file to score |
+| `--model` | Model type: `huggingface` (default) or `fastai` |
+| `--model-path` | Path to model directory or HuggingFace Hub model ID. Required for `huggingface`; defaults to `./model` for `fastai` |
+
+**Example — HuggingFace model**
+
+```bash
+cd src
+python run_inference.py sample.wav --model huggingface --model-path /path/to/hf-model
+```
+
+Output:
+```
+Model type: huggingface
+Global prediction: resident (confidence: 0.7000)
+
+Per-class probabilities:
+  humpback: 0.0000
+  human: 0.0000
+  jingle: 0.0000
+  resident: 0.7000
+  transient: 0.0000
+  vessel: 0.0000
+  water: 0.0000
+```
+
+**Example — FastAI model**
+
+```bash
+cd src
+python run_inference.py sample.wav --model fastai --model-path ../model
+```
+
+Output:
+```
+Model type: fastai
+Global prediction: whale (confidence: 0.7500)
+
+Per-class probabilities:
+  other: 0.2500
+  whale: 0.7500
+```
 
 ### get_best_timestamp.py
 
