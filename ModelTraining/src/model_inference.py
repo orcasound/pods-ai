@@ -5,9 +5,10 @@
 Model inference module for scoring audio samples.
 
 This module provides a simple interface for running model inference on audio files
-to score 2-second segments. It can be extended to support different model types.
+to score segments using a sliding window approach. It can be extended to support
+different model types.
 
-For production use, this can be integrated with aifororcas-livesystem's 
+For production use, this can be integrated with aifororcas-livesystem's
 LiveInferenceOrchestrator.py which uses DateRangeHLSStream to download and score
 audio from specific time ranges. See:
 https://github.com/orcasound/aifororcas-livesystem/blob/main/InferenceSystem/src/LiveInferenceOrchestrator.py
@@ -43,41 +44,41 @@ def _patched_torchaudio_load(filepath, *args, **kwargs):
     """Wrapper for torchaudio.load that uses soundfile directly instead of torchcodec"""
     import soundfile as sf
     import torch as t
-    
-    # Load audio using soundfile
+
+    # Load audio using soundfile.
     data, samplerate = sf.read(str(filepath), dtype='float32')
-    
-    # Convert to torch tensor and ensure shape is (channels, samples)
+
+    # Convert to torch tensor and ensure shape is (channels, samples).
     waveform = t.from_numpy(data.T if data.ndim > 1 else data.reshape(1, -1))
-    
+
     return waveform, samplerate
 
 torchaudio.load = _patched_torchaudio_load
 
 
-# Monkey-patch torchaudio.save to avoid torchcodec dependency
-# torchaudio 2.9.0+ defaults to torchcodec backend which requires additional installation
-# This patch uses soundfile directly which is already installed
+# Monkey-patch torchaudio.save to avoid torchcodec dependency.
+# torchaudio 2.9.0+ defaults to torchcodec backend which requires additional installation.
+# This patch uses soundfile directly which is already installed.
 _original_torchaudio_save = torchaudio.save
 
 def _patched_torchaudio_save(filepath, src, sample_rate, *args, **kwargs):
     """Wrapper for torchaudio.save that uses soundfile directly instead of torchcodec"""
     import soundfile as sf
     import numpy as np
-    
-    # Convert torch tensor to numpy array
-    # src is expected to be (channels, samples), soundfile expects (samples, channels)
+
+    # Convert torch tensor to numpy array.
+    # src is expected to be (channels, samples), soundfile expects (samples, channels).
     audio_data = src.numpy().T if src.ndim > 1 else src.numpy().reshape(-1, 1)
-    
-    # Save audio using soundfile
+
+    # Save audio using soundfile.
     sf.write(str(filepath), audio_data, sample_rate)
 
 torchaudio.save = _patched_torchaudio_save
 
 
-# Monkey-patch torch.load to use weights_only=False for compatibility with fastai models
+# Monkey-patch torch.load to use weights_only=False for compatibility with fastai models.
 # PyTorch 2.6+ changed the default to weights_only=True for security, but fastai models
-# require weights_only=False to load functools.partial and other objects
+# require weights_only=False to load functools.partial and other objects.
 _original_torch_load = torch.load
 
 def _patched_torch_load(*args, **kwargs):
@@ -87,10 +88,6 @@ def _patched_torch_load(*args, **kwargs):
     return _original_torch_load(*args, **kwargs)
 
 torch.load = _patched_torch_load
-
-
-def load_model(mPath, mName="stg2-rn18.pkl"):
-    return load_learner(mPath, mName)
 
 
 def load_model(mPath, mName="stg2-rn18.pkl"):
@@ -116,7 +113,7 @@ def extract_segments(audioPath, sampleDict, destnPath, suffix):
     '''
     Function to extract segments given an audio path folder and proposal segments
     '''
-    # Listing the local audio files
+    # List the local audio files.
     local_audio_files = str(audioPath) + '/'
     for wav_file in sampleDict.keys():
         audio_file = get_wave_file(local_audio_files + wav_file)
@@ -132,34 +129,67 @@ def extract_segments(audioPath, sampleDict, destnPath, suffix):
 class ModelInference:
     """
     Base class for model inference.
-    
-    This class provides an interface for scoring audio files. Subclasses should
-    implement the actual model loading and inference logic.
+
+    This class provides an interface for scoring audio files using a sliding window
+    approach. Subclasses should implement the actual model loading and inference logic.
+
+    The inference uses overlapping segments (typically 3-second windows) to generate
+    confidence scores. Different implementations may use different hop sizes:
+    - FastAIModel: 1-second hop, produces per-second confidences
+    - HuggingFaceInference: Configurable hop (default 2 seconds)
+
+    The timestamp correction logic in extract_training_samples.py automatically infers
+    the hop duration from the output length, so implementations are free to choose
+    their own hop size.
+
+    Supports both binary classification (whale vs other) and multi-class classification
+    (species identification).
     """
-    
+
     def __init__(self, model_path: Optional[str] = None):
         """
         Initialize the model inference.
-        
+
         Args:
             model_path: Optional path to the model file or directory.
         """
         self.model_path = model_path
         self.model = None
-    
+
     def predict(self, wav_file_path: str) -> Dict:
         """
         Run inference on a wav file and return predictions.
-        
+
+        Uses a sliding window approach (typically 3-second segments) to generate predictions.
+        The hop size between windows is implementation-specific:
+        - FastAIModel uses 1-second hop, producing one confidence per second
+        - HuggingFaceInference uses configurable hop (default 2 seconds)
+
         Args:
             wav_file_path: Path to the wav file to score.
-            
+
         Returns:
             Dictionary containing:
-                - local_predictions: List of binary predictions (0 or 1) for each 2-second segment
-                - local_confidences: List of confidence scores for each 2-second segment
-                - global_prediction: Overall binary prediction for the entire audio
-                - global_confidence: Overall confidence score
+                - local_predictions: List of predictions for each hop position.
+                                    For binary models: 0 or 1 (0=other, 1=whale call)
+                                    For multi-class models: class ID (e.g., 0-6)
+                - local_confidences: List of confidence scores (0.0-1.0) for each hop position.
+                                    For binary models: confidence that whale call is present
+                                    For multi-class models: whale-call likelihood (1 - P(negative classes))
+                                    Used by timestamp correction to locate whale calls.
+                                    Note: The number of entries depends on hop_duration. FastAI uses
+                                    1-second hop and produces ~N entries for N-second audio. HuggingFace
+                                    uses 2-second hop and produces ~N/2 entries.
+                - global_prediction: Overall prediction for the entire audio.
+                                    For binary models: 0 or 1
+                                    For multi-class models: class ID
+                - global_prediction_label: (Optional) Human-readable label for global prediction.
+                                          Only provided by multi-class models.
+                - global_confidence: Overall confidence score (0.0-1.0) for the entire audio.
+                                    Typically mean of positive local confidences (0.0-1.0).
+                - hop_duration: Actual hop duration in seconds used by the model.
+                               This eliminates the need for timestamp correction to infer hop size.
+                - segment_duration: Actual segment duration in seconds used by the model.
         """
         raise NotImplementedError("Subclasses must implement predict()")
 
@@ -167,16 +197,17 @@ class ModelInference:
 class FastAIModel(ModelInference):
     """
     FastAI model inference using the aifororcas model.
-    
+
     This implementation uses the FastAI model architecture from aifororcas-livesystem.
+    The model processes 3-second segments with 1-second hop to generate per-second scores.
     The model file (typically model.pkl) should be available in the model_path directory.
     """
-    
-    def __init__(self, model_path: str = "./model", model_name: str = "stg2-rn18.pkl", 
+
+    def __init__(self, model_path: str = "./model", model_name: str = "stg2-rn18.pkl",
                  threshold: float = 0.5, min_num_positive_calls_threshold: int = 3):
         """
         Initialize FastAI model inference.
-        
+
         Args:
             model_path: Path to directory containing the model file
             model_name: Name of the model file (default: "model.pkl")
@@ -187,14 +218,16 @@ class FastAIModel(ModelInference):
         self.threshold = threshold
         self.min_num_positive_calls_threshold = min_num_positive_calls_threshold
 
- 
+
     def predict(self, wav_file_path):
         '''
-        Function which generates local predictions using wavefile
+        Function which generates local predictions using wavefile.
+
+        Processes 3-second segments with 1-second hop, applies rolling average,
+        and returns per-second predictions (0.0-1.0) and a global confidence (0.0-1.0).
         '''
 
-        # Creates local directory to save 2 second clips
-        # local_dir = "./fastai_dir/"
+        # Create local directory to save 3 second clips.
         local_dir = tempfile.mkdtemp()+"/"
         if os.path.exists(local_dir):
             shutil.rmtree(local_dir, ignore_errors=False, onerror=None)
@@ -202,80 +235,80 @@ class FastAIModel(ModelInference):
         else:
             os.makedirs(local_dir)
 
-        # infer clip length
+        # Infer clip length.
         max_length = get_duration(path=wav_file_path)
         print(os.path.basename(wav_file_path))
         print("Length of Audio Clip:{0}".format(max_length))
-        #max_length = 60
-        # Generating 2 sec proposal with 1 sec hop length
-        twoSecList = []
-        for i in range(int(floor(max_length)-1)):
-            twoSecList.append([i, i+2])
 
-        # Creating a proposal dictionary
-        two_sec_dict = {}
-        two_sec_dict[Path(wav_file_path).name] = twoSecList
+        # Generate 3 sec proposal with 1 sec hop length.
+        threeSecList = []
+        for i in range(int(floor(max_length)-2)):
+            threeSecList.append([i, i+3])
 
-        # Creating 2 sec segments from the defined wavefile using proposals built above.
-        # "use_a_real_wavname.wav" will generate -> "use_a_real_wavname_1_3.wav", "use_a_real_wavname_2_4.wav" etc. files in fastai_dir folder
+        # Create a proposal dictionary.
+        three_sec_dict = {}
+        three_sec_dict[Path(wav_file_path).name] = threeSecList
+
+        # Create 3 sec segments from the defined wavefile using proposals built above.
+        # "use_a_real_wavname.wav" will generate -> "use_a_real_wavname_0_3.wav", "use_a_real_wavname_1_4.wav" etc. files in local directory.
         extract_segments(
             str(Path(wav_file_path).parent),
-            two_sec_dict,
+            three_sec_dict,
             local_dir,
             ""
         )
-        
-        # Definining Audio config needed to create on the fly mel spectograms
+
+        # Define Audio config needed to create on the fly mel spectograms.
         config = AudioConfig(standardize=False,
                              sg_cfg=SpectrogramConfig(
-                                 f_min=0.0,  # Minimum frequency to Display
-                                 f_max=10000,  # Maximum Frequency to Display
+                                 f_min=0.0,  # Minimum frequency to Display.
+                                 f_max=10000,  # Maximum Frequency to Display.
                                  hop_length=256,
-                                 n_fft=2560,  # Number of Samples for Fourier
-                                 n_mels=256,  # Mel bins
+                                 n_fft=2560,  # Number of Samples for Fourier.
+                                 n_mels=256,  # Mel bins.
                                  pad=0,
-                                 to_db_scale=True,  # Converting to DB sclae
-                                 top_db=100,  # Top decible sound
+                                 to_db_scale=True,  # Converting to DB scale.
+                                 top_db=100,  # Top decibel sound.
                                  win_length=None,
                                  n_mfcc=20)
                              )
-        config.duration = 4000  # 4 sec padding or snip
-        config.resample_to = 20000  # Every sample at 20000 frequency
+        config.duration = 4000  # 4 sec padding or snip.
+        config.resample_to = 20000  # Every sample at 20000 frequency.
         config.downmix=True
         config.pad_mode = "zeros-after"  # Make deterministic: zeros at end only
 
-        # Creating a Audio DataLoader
+        # Create an Audio DataLoader.
         test_data_folder = Path(local_dir)
         tfms = None
         test = AudioList.from_folder(
             test_data_folder, config=config).split_none().label_empty()
         testdb = test.transform(tfms).databunch(bs=32)
 
-        # Scoring each 2 sec clip
+        # Score each 3 second clip.
         predictions = []
         pathList = list(pd.Series(test_data_folder.ls()).astype('str'))
         for item in testdb.x:
             predictions.append(self.model.predict(item)[2][1])
 
-        # clean folder
+        # Clean folder.
         shutil.rmtree(local_dir)
 
-        # Aggregating predictions
+        # Aggregate predictions.
 
-        # Creating a DataFrame
+        # Create a DataFrame.
         prediction = pd.DataFrame({'FilePath': pathList, 'confidence': predictions})
 
-        # Converting prediction to float
+        # Convert prediction to float.
         prediction['confidence'] = prediction.confidence.astype(float)
 
-        # Extracting Starting time from file name
+        # Extract starting time from file name.
         prediction['start_time_s'] = prediction.FilePath.apply(lambda x: int(x.split('_')[-2]))
 
-        # Sorting the file based on start_time_s
+        # Sort the file based on start_time_s.
         prediction = prediction.sort_values(
             ['start_time_s']).reset_index(drop=True)
 
-        # Rolling Window (to average at per second level)
+        # Rolling Window (to average at per second level).
         submission = pd.DataFrame(
                 {
                     'wav_filename': Path(wav_file_path).name,
@@ -284,10 +317,10 @@ class FastAIModel(ModelInference):
                 }
             ).reset_index().rename(columns={'index': 'start_time_s'})
 
-        # Updating first row
+        # Update first row.
         submission.loc[0, 'confidence'] = prediction.confidence[0]
 
-        # Adding lastrow
+        # Add last row.
         lastLine = pd.DataFrame({
             'wav_filename': Path(wav_file_path).name,
             'start_time_s': [submission.start_time_s.max()+1],
@@ -297,16 +330,18 @@ class FastAIModel(ModelInference):
         submission = submission.append(lastLine, ignore_index=True)
         submission = submission[['wav_filename', 'start_time_s', 'duration_s', 'confidence']]
 
-        # initialize output JSON
+        # Initialize output JSON.
         result_json = {}
         result_json = dict(
             submission=submission,
             local_predictions=list((submission['confidence'] > self.threshold).astype(int)),
-            local_confidences=list(submission['confidence'])
+            local_confidences=list(submission['confidence']),
+            hop_duration=1.0,  # FastAI uses 1-second hop
+            segment_duration=3.0  # FastAI uses 3-second segments
         )
 
         result_json['global_prediction'] = int(sum(result_json["local_predictions"]) >= self.min_num_positive_calls_threshold)
-        result_json['global_confidence'] = submission.loc[(submission['confidence'] > self.threshold), 'confidence'].mean()*100
+        result_json['global_confidence'] = submission.loc[(submission['confidence'] > self.threshold), 'confidence'].mean()
         if pd.isnull(result_json["global_confidence"]):
             result_json["global_confidence"] = 0
 
@@ -316,11 +351,11 @@ class FastAIModel(ModelInference):
 class DummyModelInference(ModelInference):
     """
     Dummy model inference for testing purposes.
-    
+
     This implementation returns mock predictions without actually running a model.
     It's useful for testing the timestamp correction logic.
     """
-    
+
     def __init__(self, model_path: Optional[str] = None):
         """Initialize dummy model."""
         super().__init__(model_path)
@@ -329,51 +364,51 @@ class DummyModelInference(ModelInference):
             "For production use, integrate a real model.",
             UserWarning
         )
-    
+
     def predict(self, wav_file_path: str) -> Dict:
         """
         Generate predictions for testing.
-        
-        Returns mock predictions where the middle of the audio has the highest score.
+
+        Returns mock predictions where the middle of the audio has the highest score (0.0-1.0)
+        and a global_confidence (0.0-1.0).
         """
         import librosa
-        
-        # Load audio to determine duration
+
+        # Load audio to determine duration.
         y, sr = librosa.load(wav_file_path, sr=None)
         duration = len(y) / sr
-        
-        # Number of 2-second segments (with 1-second hop for typical implementations)
-        # For simplicity, assume non-overlapping 2-second segments
-        num_segments = int(duration // 2)
-        
+
+        # Number of per-second positions.
+        num_segments = int(duration)
+
         if num_segments == 0:
             num_segments = 1
-        
-        # Generate mock predictions: highest score in the middle
+
+        # Generate mock predictions: highest score in the middle.
         local_predictions = []
         local_confidences = []
-        
+
         middle_idx = num_segments // 2
         for i in range(num_segments):
-            # Create a score that peaks in the middle
+            # Create a score that peaks in the middle.
             distance_from_middle = abs(i - middle_idx)
             confidence = max(0.3, 0.9 - (distance_from_middle * 0.1))
             prediction = 1 if confidence > 0.6 else 0
-            
+
             local_predictions.append(prediction)
             local_confidences.append(round(confidence, 3))
-        
-        # Calculate global prediction
+
+        # Calculate global prediction.
         num_positive = sum(local_predictions)
         global_prediction = 1 if num_positive >= 3 else 0
-        
-        # Calculate global confidence
+
+        # Calculate global confidence.
         if num_positive > 0:
             positive_confidences = [c for p, c in zip(local_predictions, local_confidences) if p == 1]
-            global_confidence = sum(positive_confidences) / len(positive_confidences) * 100
+            global_confidence = sum(positive_confidences) / len(positive_confidences)
         else:
             global_confidence = 0.0
-        
+
         return {
             "local_predictions": local_predictions,
             "local_confidences": local_confidences,
@@ -382,125 +417,152 @@ class DummyModelInference(ModelInference):
         }
 
 
-def download_model_if_needed(model_path: str = "./model", 
+def download_model_if_needed(model_path: str = "./model",
                             model_url: Optional[str] = None) -> bool:
     """
     Download the FastAI model from Azure Blob Storage if it doesn't exist.
-    
+
     The default model is downloaded from:
     https://trainedproductionmodels.blob.core.windows.net/dnnmodel/11-15-20.FastAI.R1-12.zip
-    
+
     Args:
         model_path: Directory where the model should be stored
         model_url: Optional custom URL for the model zip file. If not provided, uses the default model.
                   Can also be set via MODEL_URL environment variable.
-        
+
     Returns:
         True if model is available (existed or downloaded successfully), False otherwise
     """
     import requests
     import zipfile
     import io
-    
+
     model_dir = Path(model_path)
     model_file = model_dir / "model.pkl"
-    
-    # Check if model already exists
+
+    # Check if model already exists.
     if model_file.exists():
         print(f"Model already exists at {model_file}")
         return True
-    
-    # Create model directory
+
+    # Create model directory.
     model_dir.mkdir(parents=True, exist_ok=True)
-    
-    # Determine model URL
+
+    # Determine model URL.
     if model_url is None:
-        # Check environment variable
+        # Check environment variable.
         model_url = os.environ.get(
             "MODEL_URL",
             "https://trainedproductionmodels.blob.core.windows.net/dnnmodel/11-15-20.FastAI.R1-12.zip"
         )
-    
+
     print(f"Downloading model from {model_url}...")
-    
+
     try:
         response = requests.get(model_url, timeout=120)
         response.raise_for_status()
-        
-        # Extract zip file with path validation to prevent directory traversal attacks
-        # The zip file contains a "model" directory, so we extract to model_dir.parent
+
+        # Extract zip file with path validation to prevent directory traversal attacks.
+        # The zip file contains a "model" directory, so we extract to model_dir.parent.
         print(f"Extracting model to {model_dir.parent}...")
         extract_target = model_dir.parent.resolve()
         with zipfile.ZipFile(io.BytesIO(response.content)) as zip_ref:
-            # Validate all file paths before extraction to prevent zip slip attacks
+            # Validate all file paths before extraction to prevent zip slip attacks.
             for member in zip_ref.namelist():
-                # Resolve the member path and ensure it's within the target directory
+                # Resolve the member path and ensure it's within the target directory.
                 member_path = (extract_target / member).resolve()
                 if not str(member_path).startswith(str(extract_target)):
                     raise ValueError(f"Zip file contains unsafe path: {member}")
-            
-            # Safe to extract after validation
+
+            # Safe to extract after validation.
             zip_ref.extractall(extract_target)
-        
-        # Check if extraction was successful
+
+        # Check if extraction was successful.
         if model_file.exists():
             print(f"Model downloaded and extracted successfully to {model_file}")
             return True
         else:
             print(f"Warning: Model file not found after extraction at {model_file}")
             return False
-            
+
     except Exception as e:
         print(f"Error downloading model: {e}")
         return False
 
 
-def get_model_inference(model_path: Optional[str] = None, model_type: str = "dummy", 
-                       auto_download: bool = False, model_url: Optional[str] = None) -> ModelInference:
+def get_model_inference(model_path: Optional[str] = None, model_type: str = "fastai",
+                       auto_download: bool = False, model_url: Optional[str] = None, **kwargs) -> ModelInference:
     """
     Factory function to create a model inference instance.
-    
+
     Args:
         model_path: Optional path to the model file or directory.
         model_type: Type of model to use. Supports:
-            - "dummy": DummyModelInference for testing (default)
-            - "fastai": FastAI model from aifororcas-livesystem
+            - "fastai": FastAI model from aifororcas-livesystem (default)
+            - "huggingface": HuggingFace Wav2Vec2 model for multi-class classification
+            - "dummy": DummyModelInference for testing
         auto_download: If True and model_type is "fastai", automatically download model if not found
         model_url: Optional custom URL for downloading the model. If not provided, uses default model.
                   Can also be set via MODEL_URL environment variable.
-            
+        **kwargs: Additional arguments passed to model constructor (e.g., threshold, min_num_positive_calls_threshold)
+
     Returns:
         ModelInference instance
-        
+
     Note:
         The FastAI model can be downloaded from (default):
         https://trainedproductionmodels.blob.core.windows.net/dnnmodel/11-15-20.FastAI.R1-12.zip
-        
+
         To use a different model version, set the MODEL_URL environment variable:
         export MODEL_URL=https://trainedproductionmodels.blob.core.windows.net/dnnmodel/YOUR-MODEL.zip
-        
+
         Example usage:
-            # Use dummy model for testing
-            model = get_model_inference(model_type="dummy")
-            
-            # Use FastAI model (will try to download if auto_download=True)
-            model = get_model_inference(model_path="./model", model_type="fastai", auto_download=True)
-            
-            # Use specific model version
+            # Use FastAI model (default).
+            model = get_model_inference(model_path="./model")
+
+            # Use FastAI model with auto-download.
+            model = get_model_inference(model_path="./model", auto_download=True)
+
+            # Use HuggingFace model for multi-class classification.
             model = get_model_inference(
-                model_path="./model", 
-                model_type="fastai", 
+                model_path="path/to/huggingface/model",
+                model_type="huggingface",
+                threshold=0.5,
+                min_num_positive_calls_threshold=3
+            )
+
+            # Use dummy model for testing.
+            model = get_model_inference(model_type="dummy")
+
+            # Use specific FastAI model version.
+            model = get_model_inference(
+                model_path="./model",
+                model_type="fastai",
                 auto_download=True,
                 model_url="https://trainedproductionmodels.blob.core.windows.net/dnnmodel/NEW-MODEL.zip"
             )
     """
     if model_type == "dummy":
         return DummyModelInference(model_path)
+    elif model_type == "huggingface":
+        # HuggingFace models require explicit model path (no fallback to base model).
+        # The base model lacks id2label/label2id config required by HuggingFaceInference.
+        if model_path is None:
+            raise ValueError(
+                "model_path is required for huggingface model type. "
+                "Provide a path to a fine-tuned model directory or HuggingFace Hub model ID. "
+                "Train a model first using train_huggingface_model.py or specify a Hub model."
+            )
+
+        # Lazy import to avoid circular dependency.
+        from huggingface_inference import get_huggingface_inference
+
+        return get_huggingface_inference(model_path, **kwargs)
     elif model_type == "fastai":
         if model_path is None:
             model_path = "./model"
-        
-        # Check if model exists, download if requested
+
+        # Check if model exists, download if requested.
         model_file = Path(model_path) / "model.pkl"
         if not model_file.exists() and auto_download:
             if not download_model_if_needed(model_path, model_url):
@@ -509,11 +571,18 @@ def get_model_inference(model_path: Optional[str] = None, model_type: str = "dum
                     f"{model_url or os.environ.get('MODEL_URL', 'https://trainedproductionmodels.blob.core.windows.net/dnnmodel/11-15-20.FastAI.R1-12.zip')}\n"
                     f"and extract to {model_path}"
                 )
-        
-        return FastAIModel(model_path=model_path, model_name="model.pkl")
+
+        # Filter kwargs to only include parameters supported by FastAIModel.
+        # FastAIModel accepts: threshold, min_num_positive_calls_threshold.
+        fastai_kwargs = {
+            k: v for k, v in kwargs.items()
+            if k in ('threshold', 'min_num_positive_calls_threshold')
+        }
+
+        return FastAIModel(model_path=model_path, model_name="model.pkl", **fastai_kwargs)
     else:
         raise ValueError(
             f"Unknown model type: {model_type}. "
-            f"Supported types: 'dummy' (for testing), 'fastai' (for production). "
+            f"Supported types: 'dummy' (for testing), 'fastai' (for production), 'huggingface' (for HuggingFace models). "
             f"For production use with FastAI model, set MODEL_TYPE=fastai and ensure model is available."
         )

@@ -214,3 +214,7 @@ __marimo__/
 *.swp
 *.webp
 *.htm
+
+ModelTraining/model/binary/
+ModelTraining/model/binary_weighted/
+ModelTraining/output/checkpoint-*/

@@ -85,11 +85,11 @@ def subtract_segment_duration(timestamp_str: str, segment_duration: int = SEGMEN
 def generate_uri(original_uri: str, timestamp_str: str) -> str:
     """
     Generate a URI for the Orcasound bouts interface from a PST timestamp.
-    
+
     Args:
         original_uri: The original URI
         timestamp_str: PST timestamp string in format 'YYYY_MM_DD_HH_MM_SS_PST'
-    
+
     Returns:
         URI in format "https://live.orcasound.net/bouts/new/{node}?time={utc_time}"
     """
@@ -134,13 +134,13 @@ def sort_by_preference(detections: list[dict], manual_confidences: dict[str, str
     2. Manual timestamps with 100.0 confidence preferred over no manual entry
     3. Descriptions without quality issues (e.g., faint, distant) preferred
     4. Then by timestamp (oldest first)
-    
+
     Args:
         detections: List of detection dictionaries to sort
         manual_confidences: Dictionary mapping URIs to confidence strings (0.0-100.0).
             Detections with 100.0 confidence are prioritized. Detections with 0.0
             confidence should already have been removed before calling this function.
-    
+
     Returns:
         list[dict]: Sorted list of detection dictionaries, ordered by preference
             (preferred notes first, 100.0 confidence before no-entry,
@@ -176,13 +176,13 @@ def select_training_samples(organized_data: dict[str, dict[str, list[dict]]], ma
     - Spread evenly across nodes
     - Prefer certain note types
     - Minimize total rows
-    
+
     Args:
         organized_data: Nested dictionary with structure {category: {node: [detections]}}.
             Each detection is a dictionary with keys: Category, NodeName, Timestamp, URI, etc.
         manual_confidences: Dictionary mapping URIs to confidence strings (0.0-100.0).
             Used to prioritize detections with 100.0 confidence during sorting.
-    
+
     Returns:
         List[Dict]: Selected training sample dictionaries, each containing:
             - Category: Detection category (resident, transient, humpback, water, vessel, jingle, human)
@@ -195,15 +195,15 @@ def select_training_samples(organized_data: dict[str, dict[str, list[dict]]], ma
         Samples are distributed evenly across nodes per category and sorted by preference.
     """
     selected = []
-    
+
     for category in sorted(organized_data.keys()):
         nodes_data = organized_data[category]
-        
+
         # Sort and prepare detections for each node.
         node_detections = {}
         for node in nodes_data.keys():
             node_detections[node] = sort_by_preference(nodes_data[node], manual_confidences)
-        
+
         # Calculate target count for this category.
         total_available = sum(len(node_detections[node]) for node in node_detections)
         target_count = min(MIN_SAMPLES_PER_CATEGORY, total_available)
@@ -212,7 +212,7 @@ def select_training_samples(organized_data: dict[str, dict[str, list[dict]]], ma
         if category == 'humpback':
             target_count = max(0, target_count - OTHER_HUMPBACK_SAMPLES)
             print(f"  Adjusting humpback target: {target_count} (after subtracting {OTHER_HUMPBACK_SAMPLES} existing signal files)")
-        
+
         # Track how many samples selected per node.
         node_counts = defaultdict(int)
         category_samples = []
@@ -225,54 +225,54 @@ def select_training_samples(organized_data: dict[str, dict[str, list[dict]]], ma
             if node_detections[node]:
                 category_samples.append(node_detections[node][0])
                 node_counts[node] = 1
-        
+
         # Continue round-robin to reach target count.
         while len(category_samples) < target_count:
             added_this_round = False
-            
+
             # Sort nodes by how many samples they've contributed (fewest first).
             # This ensures even distribution.
             nodes_by_count = sorted(node_detections.keys(),
                                    key=lambda n: node_counts[n])
-            
+
             for node in nodes_by_count:
                 if len(category_samples) >= target_count:
                     break
-                    
+
                 # Check if this node has more samples to give.
                 if node_counts[node] < len(node_detections[node]):
                     idx = node_counts[node]
                     category_samples.append(node_detections[node][idx])
                     node_counts[node] += 1
                     added_this_round = True
-            
+
             # If no node could contribute, we've exhausted all samples.
             if not added_this_round:
                 break
-        
+
         # Add all selected samples for this category.
         selected.extend(category_samples)
-    
+
     return selected
 
 
 def get_aligned_end_time(timestamp_str: str) -> datetime:
     """
     Calculate the aligned end time for 60-second audio download window.
-    
+
     Snaps the given timestamp to the next 10-second boundary to align with
     HLS segment boundaries. This ensures we can download complete segments
     that cover the detection time.
-    
+
     Args:
         timestamp_str: PST timestamp string in format 'YYYY_MM_DD_HH_MM_SS_PST'
-    
+
     Returns:
         datetime: Aligned end time snapped to next 10-second boundary
             (rolls over to next minute if seconds become 60)
     """
     timestamp_pst = parse_timestamp(timestamp_str)
-    
+
     # We need 60 seconds of audio ending at or shortly after the given timestamp.
     raw_end = timestamp_pst
     snapped_sec = ((raw_end.second + 9) // 10) * 10
@@ -287,18 +287,18 @@ def get_aligned_end_time(timestamp_str: str) -> datetime:
 def download_60s_audio(node_name: str, timestamp_str: str, tmp_dir: str) -> Optional[str]:
     """
     Download 60 seconds of audio, starting 51-60 seconds preceding the given timestamp.
-    
+
     Args:
         node_name: The node name (e.g., "rpi_sunset_bay").
         timestamp_str: The detection timestamp in Pacific time.
         tmp_dir: Temporary directory to save the audio file.
-    
+
     Returns:
         Path to the downloaded wav file, or None if download failed.
     """
     end_time = get_aligned_end_time(timestamp_str)
     start_time = end_time - timedelta(seconds=60)
-    
+
     # Set up S3 bucket and folder information.
     hydrophone_stream_url = 'https://s3-us-west-2.amazonaws.com/audio-orcasound-net/' + node_name
     bucket_folder = hydrophone_stream_url.split("https://s3-us-west-2.amazonaws.com/")[1]
@@ -306,48 +306,48 @@ def download_60s_audio(node_name: str, timestamp_str: str, tmp_dir: str) -> Opti
     s3_bucket = tokens[0]
     folder_name = tokens[1]
     prefix = folder_name + "/hls/"
-    
+
     # Convert timestamps to unix time.
     start_unix_time = int(start_time.timestamp())
     end_unix_time = int(end_time.timestamp())
-    
+
     try:
         # Use cached folders per node/bucket/prefix.
         all_hydrophone_folders = get_cached_folders(s3_bucket, prefix=prefix)
         print(f"  Found {len(all_hydrophone_folders)} folders in total for {node_name}")
-        
+
         valid_folders = get_folders_between_timestamp(all_hydrophone_folders, start_unix_time, end_unix_time)
         print(f"  Found {len(valid_folders)} folders in date range")
-        
+
         if not valid_folders:
             print(f"  Warning: No folders found for timestamp {start_time}")
             return None
-        
+
         # Use the first valid folder.
         current_folder = int(valid_folders[0])
-        
+
     except Exception as e:
         print(f"  ERROR: Failed to query S3 bucket: {e}")
         return None
-    
+
     # Read the m3u8 file for the current folder.
     stream_url = f"{hydrophone_stream_url}/hls/{current_folder}/live.m3u8"
-    
+
     try:
         stream_obj = load_m3u8_with_retry(stream_url)
     except Exception as e:
         print(f"  ERROR: Failed to load m3u8 file: {e}")
         return None
-    
+
     num_total_segments = len(stream_obj.segments)
     if num_total_segments == 0:
         print(f"  ERROR: No segments found in m3u8 file")
         return None
-    
+
     # Calculate target duration (average segment duration).
     target_duration_exact = sum(item.duration for item in stream_obj.segments) / num_total_segments
     target_duration = round(target_duration_exact, 1)
-    
+
     # Calculate start and end indices based on time since folder start.
     # Note: there's typically a 2-second audio offset.
     audio_offset = 2
@@ -359,11 +359,11 @@ def download_60s_audio(node_name: str, timestamp_str: str, tmp_dir: str) -> Opti
 
     segment_start_index = max(0, math.floor(time_since_folder_start_for_start / target_duration))
     segment_end_index = min(num_total_segments, math.ceil(time_since_folder_start_for_end / target_duration))
-    
+
     if segment_end_index > num_total_segments:
         print(f"  ERROR: Not enough segments available")
         return None
-    
+
     # Download and process segments.
     try:
         file_names = []
@@ -374,11 +374,11 @@ def download_60s_audio(node_name: str, timestamp_str: str, tmp_dir: str) -> Opti
             audio_url = base_path + file_name
             download_from_url(audio_url, tmp_dir)
             file_names.append(file_name)
-        
+
         if not file_names:
             print("  ERROR: No segments were successfully downloaded")
             return None
-        
+
         # Concatenate all .ts files.
         clipname = f"temp_60s_{node_name}_{timestamp_str}"
         if len(file_names) > 1:
@@ -389,7 +389,7 @@ def download_60s_audio(node_name: str, timestamp_str: str, tmp_dir: str) -> Opti
                         shutil.copyfileobj(fd, wfd)
         else:
             hls_file = os.path.join(tmp_dir, file_names[0])
-        
+
         # Convert to wav using ffmpeg.
         wav_file_path = os.path.join(tmp_dir, f"{clipname}.wav")
 
@@ -409,10 +409,10 @@ def download_60s_audio(node_name: str, timestamp_str: str, tmp_dir: str) -> Opti
             ac=1
         )
         ffmpeg.run(stream, overwrite_output=True, quiet=True)
-        
+
         print(f"  Downloaded 60s audio: {wav_file_path}")
         return wav_file_path
-        
+
     except Exception as e:
         print(f"  Warning: Unable to retrieve audio clip: {e}")
         return None
@@ -426,69 +426,115 @@ def compute_correct_timestamp_for_tp_human_only(
 ) -> tuple[str, float]:
     """
     Compute the correct timestamp for a tp_human_only detection.
-    
+
     For tp_human_only detections, we download the preceding 50-60 seconds of audio,
     run the model on it to score each segment, find the highest scoring
     segment, and adjust the timestamp accordingly.
-    
+
     Args:
         sample: Detection sample dictionary
         model_inference: Model inference instance
         tmp_dir: Temporary directory for audio files
         segment_duration: Duration of each audio segment in seconds
-    
+
     Returns:
-        Tuple of (corrected timestamp string, max confidence score)
+        Tuple of (corrected timestamp string, max confidence score in range 0.0-100.0)
     """
     node_name = sample['NodeName']
     timestamp_str = sample['Timestamp']
-    
+
     print(f"Computing correct timestamp for tp_human_only: {node_name} - {timestamp_str}")
-    
+
     # Download 60 seconds of audio.
     wav_path = download_60s_audio(node_name, timestamp_str, tmp_dir)
-    
+
     if wav_path is None:
         print(f"  Failed to download audio, falling back to {segment_duration}-second offset")
         return subtract_segment_duration(timestamp_str, segment_duration), 0.0
     try:
-        # Run model inference
+        # Run model inference.
         print(f"  Running model inference...")
         prediction_results = model_inference.predict(wav_path)
-        
+
         local_confidences = prediction_results["local_confidences"]
-        for (i, score) in enumerate(local_confidences):
-            print(f"    Second {i}: Probability {score * 100}")
         
+        # Get hop_duration from model output if available, otherwise infer it using corrected formula.
+        # Models should return hop_duration and segment_duration to avoid inference errors.
+        if "hop_duration" in prediction_results and "segment_duration" in prediction_results:
+            hop_duration = prediction_results["hop_duration"]
+            segment_duration_used = prediction_results["segment_duration"]
+            print(f"  Model reported hop_duration={hop_duration}s, segment_duration={segment_duration_used}s")
+        else:
+            # Fallback: Infer hop duration using the corrected formula.
+            # Corrected formula: hop = (audio_duration - segment_duration) / (num_positions - 1)
+            # This accounts for the sliding window formula:
+            # num_positions = floor((duration - segment) / hop) + 1
+            try:
+                import librosa
+                audio, sr = librosa.load(wav_path, sr=None)
+                audio_duration = len(audio) / sr
+            except Exception as e:
+                print(f"  Warning: Could not determine audio duration: {e}")
+                audio_duration = 60.0  # Assume 60 seconds as fallback.
+
+            # Calculate inferred hop duration using corrected formula.
+            if len(local_confidences) > 1:
+                # Corrected formula avoids overestimating hop duration.
+                hop_duration = (audio_duration - segment_duration) / (len(local_confidences) - 1)
+            elif len(local_confidences) == 1:
+                hop_duration = audio_duration  # Single position covers entire audio.
+            else:
+                hop_duration = 1.0  # Default to 1 second if no confidences.
+            
+            print(f"  Warning: Model did not report hop_duration, inferred {hop_duration:.2f}s from {len(local_confidences)} positions")
+
+        print(f"  Received {len(local_confidences)} confidence values")
+        print(f"  Using hop duration: {hop_duration:.2f} seconds")
+
+        # Print confidences with their corresponding time ranges.
+        for (i, score) in enumerate(local_confidences):
+            time_start = i * hop_duration
+            time_end = time_start + hop_duration
+            print(f"    Position {i} (time {time_start:.1f}-{time_end:.1f}s): Probability {score * 100:.2f}")
+
         if not local_confidences:
             print(f"  No confidences returned, falling back to {segment_duration}-second offset")
             return subtract_segment_duration(timestamp_str, segment_duration), 0.0
-        
+
         # Find the index of the highest scoring segment.
         max_confidence_idx = local_confidences.index(max(local_confidences))
         max_confidence = local_confidences[max_confidence_idx]
 
-        print(f"  Highest score: {max_confidence} at second {max_confidence_idx}")
+        print(f"  Highest score: {max_confidence:.3f} at position {max_confidence_idx}")
 
-        # Find whether it's better here or 1 second earlier.
+        # Find whether it's better at the previous or next position.
         previous_confidence = local_confidences[max(0, max_confidence_idx - 1)]
         next_confidence = local_confidences[min(len(local_confidences) - 1, max_confidence_idx + 1)]
         if previous_confidence > next_confidence:
             max_confidence_idx = max(0, max_confidence_idx - 1)
             max_confidence = previous_confidence
-            print(f"  Adjusted to previous second: {max_confidence} at second {max_confidence_idx}")
-        
-        # max_confidence_idx represents seconds from the START of the downloaded 60-second WAV
+            print(f"  Adjusted to previous position: {max_confidence:.3f} at position {max_confidence_idx}")
+
+        # Convert position index to actual time offset in seconds.
+        # max_confidence_idx represents a position, and each position covers hop_duration seconds.
+        # The center of the position is at: max_confidence_idx * hop_duration + (hop_duration / 2).
+        # For simplicity, we use the start of the position: max_confidence_idx * hop_duration.
+        time_offset_seconds = max_confidence_idx * hop_duration
+
+        print(f"  Position {max_confidence_idx} corresponds to time offset {time_offset_seconds:.1f}s")
+
+        # max_confidence_idx represents a position in the downloaded 60-second WAV
         # We need to calculate what clock time that corresponds to
         # The WAV starts at (aligned_end - 60 - AUDIO_OFFSET_SECONDS) due to the 2-second offset in download.
         end_time = get_aligned_end_time(timestamp_str)
         wav_start_time = end_time - timedelta(seconds=60 + AUDIO_OFFSET_SECONDS)
-        # The detected call is at wav_start_time + max_confidence_idx
-        call_time = wav_start_time + timedelta(seconds=max_confidence_idx)
+
+        # The detected call is at wav_start_time + time_offset_seconds.
+        call_time = wav_start_time + timedelta(seconds=time_offset_seconds)
         print(f"  Call detected at: {call_time}")
 
         return format_timestamp(call_time), max_confidence * 100
-        
+
     except Exception as e:
         print(f"  Error during inference: {e}")
         print(f"  Falling back to {segment_duration}-second offset")
@@ -576,7 +622,7 @@ def write_training_samples(
 ):
     """
     Write selected samples to CSV with timestamps adjusted.
-    
+
     Args:
         samples: List of sample dictionaries
         output_path: Path to output CSV file
@@ -586,28 +632,29 @@ def write_training_samples(
         segment_duration: Duration of each audio segment in seconds
     """
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    
+
+    # Sort samples by Category, then NodeName, then Timestamp.
+    sorted_samples = sorted(samples, key=lambda s: (s['Category'], s['NodeName'], s['Timestamp']))
+
     # Create a temporary directory for audio downloads.
     with TemporaryDirectory() as tmp_dir:
         with open(output_path, 'w', newline='', encoding='utf-8') as f:
             # Use same columns as detections.csv.
             fieldnames = ['Category', 'NodeName', 'Timestamp', 'URI', 'Description', 'Notes', 'Confidence']
             writer = csv.DictWriter(f, fieldnames=fieldnames, lineterminator='\n')
-            
+
             writer.writeheader()
-            
-            total_samples = len(samples)
+
+            total_samples = len(sorted_samples)
             print(f"\nProcessing {total_samples} samples...")
-            
-            for idx, sample in enumerate(samples, start=1):
+
+            for idx, sample in enumerate(sorted_samples, start=1):
                 print(f"\n[{idx}/{total_samples}] Processing: {sample['Category']} - {sample['NodeName']} - {sample['Timestamp']}")
 
                 output_row = process_sample(
                     sample, manual_timestamps, manual_confidences, model_inference, tmp_dir, segment_duration
                 )
                 writer.writerow(output_row)
-
-
 
 
 def remove_zero_confidence_detections(
@@ -649,61 +696,61 @@ def remove_zero_confidence_detections(
 def load_manual_corrections(corrections_path: Path) -> tuple[dict[str, str], dict[str, str]]:
     """
     Load manual timestamp corrections and confidence values from CSV file.
-    
+
     Args:
         corrections_path: Path to manual_timestamps.csv file
-        
+
     Returns:
         Tuple of (manual_timestamps dict, manual_confidences dict)
         Returns empty dicts if file doesn't exist or has errors
     """
     manual_timestamps = {}
     manual_confidences = {}
-    
+
     if not corrections_path.exists():
         return manual_timestamps, manual_confidences
-    
+
     try:
         print(f"\nLoading manual timestamp corrections from {corrections_path}...")
         with open(corrections_path, 'r', encoding='utf-8') as f:
             reader = csv.DictReader(f)
-            
+
             # Validate required column.
             if 'SampleURI' not in reader.fieldnames:
                 print(f"  Warning: 'SampleURI' column not found in {corrections_path}. Skipping manual corrections.")
                 return {}, {}
-            
+
             for row_num, row in enumerate(reader, start=2):  # start=2 accounts for header.
                 try:
                     uri = row.get('SampleURI', '').strip()
                     if not uri:
                         continue  # Skip rows without URI.
-                    
+
                     timestamp = row.get('Timestamp', '').strip()
                     confidence = row.get('Confidence', '').strip()
-                    
+
                     # Only store timestamp if provided.
                     if timestamp:
                         manual_timestamps[uri] = timestamp
-                    
+
                     # Store confidence (use provided value or default to 100.0).
                     manual_confidences[uri] = confidence if confidence else '100.0'
-                    
+
                 except Exception as e:
                     print(f"  Warning: Skipping row {row_num} due to error: {e}")
                     continue
-        
+
         if manual_timestamps:
             print(f"  Loaded {len(manual_timestamps)} manual timestamp corrections")
         if manual_confidences:
             print(f"  Loaded {len(manual_confidences)} confidence values")
-            
+
     except Exception as e:
         print(f"  Warning: Failed to load manual corrections from {corrections_path}: {e}")
         return {}, {}
-    
+
     return manual_timestamps, manual_confidences
-    
+
 
 def main():
     """Main function to extract training samples."""
@@ -724,7 +771,7 @@ def main():
         help=f'Duration of each audio segment in seconds (default: {SEGMENT_DURATION_SECONDS})'
     )
     args = parser.parse_args()
-    
+
     # Paths.
     input_path = Path(args.input)
     if not input_path.is_absolute():
@@ -734,7 +781,7 @@ def main():
     # Load manual confidences for sorting.
     manual_corrections_path = REPO_ROOT / 'output' / 'csv' / 'manual_timestamps.csv'
     manual_timestamps, manual_confidences = load_manual_corrections(manual_corrections_path)
-    
+
     print(f"Loading detections from {input_path}...")
     detections = load_detections(input_path)
     print(f"Loaded {len(detections)} detections")
@@ -744,24 +791,24 @@ def main():
 
     print("\nOrganizing detections by category and node...")
     organized_data = organize_by_category_node(detections)
-    
+
     # Print summary.
     for category in sorted(organized_data.keys()):
         total = sum(len(nodes) for nodes in organized_data[category].values())
         print(f"  {category}: {total} detections across {len(organized_data[category])} nodes")
-    
+
     print("\nSelecting training samples...")
     samples = select_training_samples(organized_data, manual_confidences)
-    
+
     print(f"\nSelected {len(samples)} training samples")
-    
+
     # Print breakdown by category.
     category_counts = defaultdict(int)
     category_node_counts = defaultdict(lambda: defaultdict(int))
     for sample in samples:
         category_counts[sample['Category']] += 1
         category_node_counts[sample['Category']][sample['NodeName']] += 1
-    
+
     for category in sorted(category_counts.keys()):
         print(f"  {category}: {category_counts[category]} samples")
         for node in sorted(category_node_counts[category].keys()):
@@ -773,7 +820,7 @@ def main():
     for sample in samples:
         type_counts[sample['Notes']] += 1
         type_node_counts[sample['Notes']][sample['NodeName']] += 1
-    
+
     for type in sorted(type_counts.keys()):
         print(f"  {type}: {type_counts[type]} samples")
         for node in sorted(type_node_counts[type].keys()):
@@ -781,7 +828,7 @@ def main():
 
     # Initialize model inference for tp_human_only timestamp correction.
     print("\nInitializing model inference for tp_human_only timestamp correction...")
-    
+
     # Check for model configuration from environment variables.
     model_type = os.environ.get("MODEL_TYPE", "fastai")
     model_path = os.environ.get("MODEL_PATH", "./model")
@@ -790,7 +837,7 @@ def main():
     # Default to auto-download for fastai, false for dummy.
     auto_download_default = "true" if model_type == "fastai" else "false"
     auto_download = os.environ.get("MODEL_AUTO_DOWNLOAD", auto_download_default).lower() == "true"
-    
+
     print(f"  Model type: {model_type}")
     if model_type == "fastai":
         print(f"  Model path: {model_path}")
@@ -803,7 +850,7 @@ def main():
         print(f"    MODEL_PATH=./model (default)")
         print(f"    MODEL_AUTO_DOWNLOAD=true (default for fastai)")
         print(f"    MODEL_URL=<custom-url> (optional, to use a specific model version)")
-    
+
     try:
         model_inference = get_model_inference(
             model_path=model_path if model_type == "fastai" else None,

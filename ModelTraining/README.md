@@ -17,6 +17,7 @@ The `ModelTraining/src` directory has the following scripts for different steps 
    - For other detections, subtracts the segment duration from the timestamp
 4. **download_wavs.py**: Use `output/csv/training_samples.csv` and download wav files into subdirectories under `output/wav`
 5. **make_spectrograms.py**: Create a png file for each wav file in a subdirectory of `output/png`
+6. **train_huggingface_model.py**: A script to train a HuggingFace model on the generated training samples.
 
 ## Model-Based Timestamp Correction for tp_human_only
 
