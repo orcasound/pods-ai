@@ -66,8 +66,10 @@ def _make_huggingface_model_mock(num_local: int = 10) -> MagicMock:
         6: "human",
     }
     mock_model.label2id = {v: k for k, v in mock_model.id2label.items()}
+    mock_model.threshold = 0.5
 
-    # Simulate most windows predicting "resident" (1), a few predicting "water" (0).
+    # Simulate most windows predicting "resident" (1) with confidence above threshold,
+    # and a few predicting "water" (0) with confidence below threshold.
     local_predictions = [1] * (num_local - 2) + [0] * 2
     local_confidences = [0.7] * (num_local - 2) + [0.1] * 2
 
@@ -119,8 +121,8 @@ class TestRunInferenceHuggingFace:
         finally:
             Path(wav_path).unlink(missing_ok=True)
 
-    def test_probabilities_sum_to_one(self):
-        """Probabilities across all classes should sum to approximately 1.0."""
+    def test_predicted_class_probability_equals_global_confidence(self):
+        """The globally predicted class should have a probability equal to global_confidence."""
         wav_path = _make_wav()
         try:
             mock_model = _make_huggingface_model_mock(num_local=10)
@@ -128,8 +130,27 @@ class TestRunInferenceHuggingFace:
                 from run_inference import run_inference
                 result = run_inference(wav_path, model_type="huggingface", model_path="fake-path")
 
-            total = sum(result["probabilities"].values())
-            assert abs(total - 1.0) < 1e-3, f"Probabilities sum to {total}, expected ~1.0"
+            # "resident" windows (local_predictions==1) all have confidence 0.7 > threshold 0.5.
+            # So resident probability = mean([0.7]*8) = 0.7 = global_confidence.
+            assert abs(result["probabilities"]["resident"] - 0.7) < 1e-4
+            assert abs(result["probabilities"]["resident"] - result["global_confidence"]) < 1e-4
+        finally:
+            Path(wav_path).unlink(missing_ok=True)
+
+    def test_classes_below_threshold_have_zero_probability(self):
+        """Classes whose windows are all below the confidence threshold should have probability 0.0."""
+        wav_path = _make_wav()
+        try:
+            mock_model = _make_huggingface_model_mock(num_local=10)
+            with patch("run_inference.get_model_inference", return_value=mock_model):
+                from run_inference import run_inference
+                result = run_inference(wav_path, model_type="huggingface", model_path="fake-path")
+
+            # "water" windows (local_predictions==0) have confidence 0.1 < threshold 0.5 → 0.0.
+            assert result["probabilities"]["water"] == 0.0
+            # Classes never predicted also get 0.0.
+            for label in ["transient", "humpback", "vessel", "jingle", "human"]:
+                assert result["probabilities"][label] == 0.0
         finally:
             Path(wav_path).unlink(missing_ok=True)
 

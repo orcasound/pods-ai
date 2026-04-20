@@ -12,7 +12,6 @@ Usage:
 
 import argparse
 import sys
-from collections import Counter
 from pathlib import Path
 from typing import Optional
 
@@ -32,7 +31,9 @@ def run_inference(wav_path: str, model_type: str = "huggingface",
 
     Returns:
         Dictionary with:
-            - probabilities: dict mapping class label to probability (0.0-1.0)
+            - probabilities: dict mapping class label to probability (0.0-1.0).
+              Each value is the mean local_confidence for windows that predicted
+              that class and whose confidence exceeds the model's threshold.
             - global_prediction_label: predicted class label for the whole file
             - global_confidence: confidence score (0.0-1.0) for the global prediction
     """
@@ -43,21 +44,18 @@ def run_inference(wav_path: str, model_type: str = "huggingface",
         model = get_model_inference(model_type="fastai", model_path=model_path)
         result = model.predict(wav_path)
 
-        # FastAI is binary: local_confidences are per-second whale-call probabilities.
-        local_confidences = result.get("local_confidences", [])
-        if local_confidences:
-            whale_prob = float(sum(local_confidences) / len(local_confidences))
-        else:
-            whale_prob = 0.0
-        other_prob = 1.0 - whale_prob
+        # For the binary FastAI model, global_confidence is the mean of all
+        # local_confidences that exceed the threshold (whale windows).
+        whale_prob = float(result.get("global_confidence", 0.0))
+        other_prob = round(1.0 - whale_prob, 4)
 
         probabilities: dict[str, float] = {
-            "other": round(other_prob, 4),
+            "other": other_prob,
             "whale": round(whale_prob, 4),
         }
         global_prediction = result.get("global_prediction", 0)
         global_prediction_label = "whale" if global_prediction else "other"
-        global_confidence = float(result.get("global_confidence", 0.0))
+        global_confidence = whale_prob
 
     elif model_type == "huggingface":
         if model_path is None:
@@ -69,22 +67,21 @@ def run_inference(wav_path: str, model_type: str = "huggingface",
         result = model.predict(wav_path)
 
         local_predictions = result.get("local_predictions", [])
+        local_confidences = result.get("local_confidences", [])
         id2label: dict = model.id2label
+        threshold: float = getattr(model, "threshold", 0.5)
 
-        # Compute per-class probabilities as the fraction of windows that predicted each class.
-        if local_predictions:
-            counts = Counter(local_predictions)
-            total = len(local_predictions)
-            probabilities = {
-                id2label[class_id]: round(count / total, 4)
-                for class_id, count in counts.items()
-            }
-            # Fill in zero probability for any classes that were never predicted.
-            for label in id2label.values():
-                if label not in probabilities:
-                    probabilities[label] = 0.0
-        else:
-            probabilities = {label: 0.0 for label in id2label.values()}
+        # For each class, compute the mean local_confidence across windows where:
+        # - that class was predicted, and
+        # - the confidence exceeds the threshold.
+        # This mirrors how global_confidence is computed for the winning class.
+        probabilities = {}
+        for class_id, label in id2label.items():
+            class_confs = [
+                conf for pred, conf in zip(local_predictions, local_confidences)
+                if pred == class_id and conf > threshold
+            ]
+            probabilities[label] = round(sum(class_confs) / len(class_confs), 4) if class_confs else 0.0
 
         global_prediction_label = result.get("global_prediction_label", "")
         global_confidence = float(result.get("global_confidence", 0.0))
