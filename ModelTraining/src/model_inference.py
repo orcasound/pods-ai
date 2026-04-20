@@ -165,10 +165,6 @@ class ModelInference:
         - FastAIModel uses 1-second hop, producing one confidence per second
         - HuggingFaceInference uses configurable hop (default 2 seconds)
 
-        The timestamp correction logic automatically infers the hop duration from
-        len(local_confidences) and audio duration, so local_confidences[i] represents
-        the confidence at position i * hop_duration seconds from the start.
-
         Args:
             wav_file_path: Path to the wav file to score.
 
@@ -191,6 +187,9 @@ class ModelInference:
                                           Only provided by multi-class models.
                 - global_confidence: Overall confidence score (0.0-1.0) for the entire audio.
                                     Typically mean of positive local confidences (0.0-1.0).
+                - hop_duration: Actual hop duration in seconds used by the model.
+                               This eliminates the need for timestamp correction to infer hop size.
+                - segment_duration: Actual segment duration in seconds used by the model.
         """
         raise NotImplementedError("Subclasses must implement predict()")
 
@@ -336,7 +335,9 @@ class FastAIModel(ModelInference):
         result_json = dict(
             submission=submission,
             local_predictions=list((submission['confidence'] > self.threshold).astype(int)),
-            local_confidences=list(submission['confidence'])
+            local_confidences=list(submission['confidence']),
+            hop_duration=1.0,  # FastAI uses 1-second hop
+            segment_duration=3.0  # FastAI uses 3-second segments
         )
 
         result_json['global_prediction'] = int(sum(result_json["local_predictions"]) >= self.min_num_positive_calls_threshold)

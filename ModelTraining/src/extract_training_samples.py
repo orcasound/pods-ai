@@ -457,33 +457,44 @@ def compute_correct_timestamp_for_tp_human_only(
         prediction_results = model_inference.predict(wav_path)
 
         local_confidences = prediction_results["local_confidences"]
-
-        # Determine the hop duration from the model output.
-        # Different model implementations use different hop sizes:
-        # - FastAIModel: 1-second hop → ~60 confidences for 60s audio
-        # - HuggingFaceInference (default): 2-second hop → ~29 confidences for 60s audio
-        # We infer the hop duration from output length to handle both cases automatically.
-        try:
-            import librosa
-            audio, sr = librosa.load(wav_path, sr=None)
-            audio_duration = len(audio) / sr
-        except Exception as e:
-            print(f"  Warning: Could not determine audio duration: {e}")
-            audio_duration = 60.0  # Assume 60 seconds as fallback.
-
-        # Calculate inferred hop duration.
-        if len(local_confidences) > 0:
-            inferred_hop_duration = audio_duration / len(local_confidences)
+        
+        # Get hop_duration from model output if available, otherwise infer it using corrected formula.
+        # Models should return hop_duration and segment_duration to avoid inference errors.
+        if "hop_duration" in prediction_results and "segment_duration" in prediction_results:
+            hop_duration = prediction_results["hop_duration"]
+            segment_duration_used = prediction_results["segment_duration"]
+            print(f"  Model reported hop_duration={hop_duration}s, segment_duration={segment_duration_used}s")
         else:
-            inferred_hop_duration = 1.0  # Default to 1 second if no confidences.
+            # Fallback: Infer hop duration using the corrected formula.
+            # Corrected formula: hop = (audio_duration - segment_duration) / (num_positions - 1)
+            # This accounts for the sliding window formula:
+            # num_positions = floor((duration - segment) / hop) + 1
+            try:
+                import librosa
+                audio, sr = librosa.load(wav_path, sr=None)
+                audio_duration = len(audio) / sr
+            except Exception as e:
+                print(f"  Warning: Could not determine audio duration: {e}")
+                audio_duration = 60.0  # Assume 60 seconds as fallback.
 
-        print(f"  Received {len(local_confidences)} confidence values for {audio_duration:.1f}s audio")
-        print(f"  Inferred hop duration: {inferred_hop_duration:.2f} seconds")
+            # Calculate inferred hop duration using corrected formula.
+            if len(local_confidences) > 1:
+                # Corrected formula avoids overestimating hop duration.
+                hop_duration = (audio_duration - segment_duration) / (len(local_confidences) - 1)
+            elif len(local_confidences) == 1:
+                hop_duration = audio_duration  # Single position covers entire audio.
+            else:
+                hop_duration = 1.0  # Default to 1 second if no confidences.
+            
+            print(f"  Warning: Model did not report hop_duration, inferred {hop_duration:.2f}s from {len(local_confidences)} positions")
+
+        print(f"  Received {len(local_confidences)} confidence values")
+        print(f"  Using hop duration: {hop_duration:.2f} seconds")
 
         # Print confidences with their corresponding time ranges.
         for (i, score) in enumerate(local_confidences):
-            time_start = i * inferred_hop_duration
-            time_end = time_start + inferred_hop_duration
+            time_start = i * hop_duration
+            time_end = time_start + hop_duration
             print(f"    Position {i} (time {time_start:.1f}-{time_end:.1f}s): Probability {score * 100:.2f}")
 
         if not local_confidences:

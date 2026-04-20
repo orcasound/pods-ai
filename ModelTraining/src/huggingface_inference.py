@@ -326,6 +326,8 @@ class HuggingFaceInference(ModelInference):  # Inherit from ModelInference
             "global_prediction": global_prediction_id,
             "global_prediction_label": global_prediction_label,
             "global_confidence": global_confidence,
+            "hop_duration": float(hop_duration),  # Actual hop duration used
+            "segment_duration": float(segment_duration),  # Actual segment duration used
         }
 
 
