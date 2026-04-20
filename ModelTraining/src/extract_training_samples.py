@@ -516,10 +516,10 @@ def compute_correct_timestamp_for_tp_human_only(
             print(f"  Adjusted to previous position: {max_confidence:.3f} at position {max_confidence_idx}")
 
         # Convert position index to actual time offset in seconds.
-        # max_confidence_idx represents a position, and each position covers inferred_hop_duration seconds.
-        # The center of the position is at: max_confidence_idx * inferred_hop_duration + (inferred_hop_duration / 2).
-        # For simplicity, we use the start of the position: max_confidence_idx * inferred_hop_duration.
-        time_offset_seconds = max_confidence_idx * inferred_hop_duration
+        # max_confidence_idx represents a position, and each position covers hop_duration seconds.
+        # The center of the position is at: max_confidence_idx * hop_duration + (hop_duration / 2).
+        # For simplicity, we use the start of the position: max_confidence_idx * hop_duration.
+        time_offset_seconds = max_confidence_idx * hop_duration
 
         print(f"  Position {max_confidence_idx} corresponds to time offset {time_offset_seconds:.1f}s")
 
