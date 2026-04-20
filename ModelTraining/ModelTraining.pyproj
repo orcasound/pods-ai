@@ -4,7 +4,7 @@
     <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>374cfa2a-7626-4e39-a61f-20af1688caa5</ProjectGuid>
     <ProjectHome>.</ProjectHome>
-    <StartupFile>src\train_huggingface_model.py</StartupFile>
+    <StartupFile>tests\test_make_csv.py</StartupFile>
     <SearchPath>
     </SearchPath>
     <WorkingDirectory>.</WorkingDirectory>
@@ -14,8 +14,8 @@
     <LaunchProvider>Standard Python launcher</LaunchProvider>
     <!-- Command line arguments are intentionally left blank.
          Developers may customize this locally. -->
-    <CommandLineArguments>--output_dir output --epochs 10 --batch_size 8</CommandLineArguments>
-    <EnableNativeCodeDebugging>False</EnableNativeCodeDebugging>
+    <CommandLineArguments>--num_classes 2 --epochs 20 --output_dir model/binary</CommandLineArguments>
+    <EnableNativeCodeDebugging>True</EnableNativeCodeDebugging>
     <IsWindowsApplication>False</IsWindowsApplication>
     <InterpreterId>MSBuild|.venv|$(MSBuildProjectFullPath)</InterpreterId>
     <Environment>MODEL_TYPE=fastai
@@ -42,8 +42,14 @@ MODEL_URL=https://trainedproductionmodels.blob.core.windows.net/dnnmodel/11-15-2
     <Compile Include="src\process_humpback_wavs.py" />
     <Compile Include="src\spectrogram_visualizer.py" />
     <Compile Include="src\train_huggingface_model.py" />
+    <Compile Include="tests\conftest.py" />
+    <Compile Include="tests\test_extract_training_samples.py" />
+    <Compile Include="tests\test_get_best_timestamp.py" />
+    <Compile Include="tests\test_huggingface_inference.py" />
+    <Compile Include="tests\test_make_csv.py" />
   </ItemGroup>
   <ItemGroup>
+    <Folder Include="tests\" />
     <Folder Include="src\" />
   </ItemGroup>
   <ItemGroup>

@@ -30,7 +30,6 @@ from pathlib import Path
 from numpy import floor
 from audio.data import AudioConfig, SpectrogramConfig, AudioList
 import torchaudio
-from huggingface_inference import get_huggingface_inference
 
 from typing import Dict, List, Optional
 import warnings
@@ -553,6 +552,10 @@ def get_model_inference(model_path: Optional[str] = None, model_type: str = "fas
                 "Provide a path to a fine-tuned model directory or HuggingFace Hub model ID. "
                 "Train a model first using train_huggingface_model.py or specify a Hub model."
             )
+
+        # Lazy import to avoid circular dependency.
+        from huggingface_inference import get_huggingface_inference
+
         return get_huggingface_inference(model_path, **kwargs)
     elif model_type == "fastai":
         if model_path is None:
