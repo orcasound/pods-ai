@@ -293,8 +293,13 @@ class HuggingFaceInference(ModelInference):  # Inherit from ModelInference
             if class_id not in self.negative_class_ids and conf >= threshold
         ]
 
+        # Scale the positive calls threshold based on the number of segments.
+        # For 1-10 segments require 1 positive, 11-20 require 2, 21-30 require 3, etc.
+        total_segments = len(local_predictions)
+        scaled_threshold = max(1, (total_segments + 9) // 10)
+
         # If we have enough positive predictions, use majority vote among them.
-        if len(positive_predictions) >= min_num_positive_calls_threshold:
+        if len(positive_predictions) >= scaled_threshold:
             # Count votes for each positive class.
             class_votes: dict[int, list[float]] = {}
             for class_id, conf in positive_predictions:

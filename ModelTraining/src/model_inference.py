@@ -242,8 +242,14 @@ class FastAIModel(ModelInference):
 
         # Generate 3 sec proposal with 1 sec hop length.
         threeSecList = []
-        for i in range(int(floor(max_length)-2)):
-            threeSecList.append([i, i+3])
+        max_start = max(0, int(floor(max_length) - 2))
+
+        # If audio is shorter than 3 seconds, still create one segment from 0 to max_length.
+        if max_start == 0 and max_length > 0:
+            threeSecList.append([0, min(3, max_length)])
+        else:
+            for i in range(max_start):
+                threeSecList.append([i, i + 3])
 
         # Create a proposal dictionary.
         three_sec_dict = {}
@@ -340,7 +346,12 @@ class FastAIModel(ModelInference):
             segment_duration=3.0  # FastAI uses 3-second segments
         )
 
-        result_json['global_prediction'] = int(sum(result_json["local_predictions"]) >= self.min_num_positive_calls_threshold)
+        # Scale the positive calls threshold based on the number of segments.
+        # For 1-10 segments require 1 positive, 11-20 require 2, 21-30 require 3, etc.
+        total_segments = len(result_json["local_predictions"])
+        scaled_threshold = max(1, (total_segments + 9) // 10)
+
+        result_json['global_prediction'] = int(sum(result_json["local_predictions"]) >= scaled_threshold)
         result_json['global_confidence'] = submission.loc[(submission['confidence'] > self.threshold), 'confidence'].mean()
         if pd.isnull(result_json["global_confidence"]):
             result_json["global_confidence"] = 0
