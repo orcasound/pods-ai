@@ -212,7 +212,12 @@ class FastAIModel(ModelInference):
             model_path: Path to directory containing the model file
             model_name: Name of the model file (default: "model.pkl")
             threshold: Confidence threshold for positive predictions (default: 0.5)
-            min_num_positive_calls_threshold: Minimum positive predictions for global positive (default: 3)
+            min_num_positive_calls_threshold: Minimum positive predictions for global positive classification.
+                                             For short audio clips (< 30 segments), this is automatically
+                                             scaled down (1 per 10 segments) to avoid requiring too many
+                                             positives from very short clips. The effective threshold is
+                                             min(scaled_threshold, min_num_positive_calls_threshold).
+                                             Default: 3.
         """
         self.model = load_model(model_path, model_name)
         self.threshold = threshold
@@ -346,12 +351,15 @@ class FastAIModel(ModelInference):
             segment_duration=3.0  # FastAI uses 3-second segments
         )
 
-        # Scale the positive calls threshold based on the number of segments.
-        # For 1-10 segments require 1 positive, 11-20 require 2, 21-30 require 3, etc.
+        # Calculate the effective threshold by scaling for short clips.
+        # For clips with fewer segments than min_num_positive_calls_threshold,
+        # scale down proportionally: require 1 positive per 10 segments.
+        # For longer clips, use the configured min_num_positive_calls_threshold.
         total_segments = len(result_json["local_predictions"])
         scaled_threshold = max(1, (total_segments + 9) // 10)
+        effective_threshold = min(scaled_threshold, self.min_num_positive_calls_threshold)
 
-        result_json['global_prediction'] = int(sum(result_json["local_predictions"]) >= scaled_threshold)
+        result_json['global_prediction'] = int(sum(result_json["local_predictions"]) >= effective_threshold)
         result_json['global_confidence'] = submission.loc[(submission['confidence'] > self.threshold), 'confidence'].mean()
         if pd.isnull(result_json["global_confidence"]):
             result_json["global_confidence"] = 0
@@ -502,7 +510,7 @@ def download_model_if_needed(model_path: str = "./model",
 
 
 def get_model_inference(model_path: Optional[str] = None, model_type: str = "fastai",
-                       auto_download: bool = False, model_url: Optional[str] = None, **kwargs) -> ModelInference:
+                        auto_download: bool = False, model_url: Optional[str] = None, **kwargs) -> ModelInference:
     """
     Factory function to create a model inference instance.
 

@@ -17,6 +17,10 @@ from transformers import Wav2Vec2FeatureExtractor, Wav2Vec2ForSequenceClassifica
 # Import base class to establish inheritance
 from model_inference import ModelInference
 
+# Segment grouping size for scaling the positive calls threshold.
+# For every SEGMENT_GROUP_SIZE segments, require at least 1 positive prediction.
+SEGMENT_GROUP_SIZE = 10
+
 
 class HuggingFaceInference(ModelInference):  # Inherit from ModelInference
     """
@@ -35,7 +39,12 @@ class HuggingFaceInference(ModelInference):  # Inherit from ModelInference
             model_path: Path to model directory or HuggingFace Hub model ID
             device: Device to run inference on ('cuda', 'cpu', or None for auto)
             threshold: Confidence threshold for positive predictions (default: 0.5)
-            min_num_positive_calls_threshold: Minimum positive predictions for global positive (default: 3)
+            min_num_positive_calls_threshold: Minimum positive predictions for global positive classification.
+                                             The effective threshold scales with audio length: it requires
+                                             at least 1 positive per SEGMENT_GROUP_SIZE (10) segments, but
+                                             is capped at min_num_positive_calls_threshold. Formula:
+                                             min(ceil(segments/10), min_num_positive_calls_threshold).
+                                             Default: use instance value (typically 3).
         """
         super().__init__(model_path)  # Call parent constructor
         self.threshold = threshold
@@ -126,7 +135,12 @@ class HuggingFaceInference(ModelInference):  # Inherit from ModelInference
                          With hop_duration=2, a 60s audio produces ~29 confidence values.
                          With hop_duration=1, a 60s audio produces ~58 confidence values (matching FastAI).
             threshold: Confidence threshold for positive (non-other) predictions (default: use instance value)
-            min_num_positive_calls_threshold: Minimum positive predictions for global positive (default: use instance value)
+            min_num_positive_calls_threshold: Minimum positive predictions for global positive classification.
+                                             The effective threshold scales with audio length: it requires
+                                             at least 1 positive per SEGMENT_GROUP_SIZE (10) segments, but
+                                             is capped at min_num_positive_calls_threshold. Formula:
+                                             min(ceil(segments/10), min_num_positive_calls_threshold).
+                                             Default: use instance value (typically 3).
 
         Returns:
             Dictionary with keys:
@@ -294,12 +308,14 @@ class HuggingFaceInference(ModelInference):  # Inherit from ModelInference
         ]
 
         # Scale the positive calls threshold based on the number of segments.
-        # For 1-10 segments require 1 positive, 11-20 require 2, 21-30 require 3, etc.
+        # For every SEGMENT_GROUP_SIZE segments, require at least 1 positive prediction.
+        # Cap at min_num_positive_calls_threshold to avoid requiring too many for very long clips.
         total_segments = len(local_predictions)
-        scaled_threshold = max(1, (total_segments + 9) // 10)
+        scaled_threshold = (total_segments + SEGMENT_GROUP_SIZE - 1) // SEGMENT_GROUP_SIZE
+        effective_threshold = min(scaled_threshold, min_num_positive_calls_threshold)
 
         # If we have enough positive predictions, use majority vote among them.
-        if len(positive_predictions) >= scaled_threshold:
+        if len(positive_predictions) >= effective_threshold:
             # Count votes for each positive class.
             class_votes: dict[int, list[float]] = {}
             for class_id, conf in positive_predictions:

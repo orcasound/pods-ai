@@ -16,7 +16,7 @@ Tests cover:
 import sys
 import tempfile
 from pathlib import Path
-from typing import Dict, Set
+from typing import Dict
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -142,7 +142,7 @@ def _print_huggingface_result(result: Dict, label: str = "") -> None:
     print(f"\n{prefix}")
     print(f"  Global prediction: {result['global_prediction_label']}")
     print(f"  Global confidence: {result['global_confidence']:.4f}")
-    print(f"  Probabilities:")
+    print("  Probabilities:")
     for class_label, prob in sorted(result["probabilities"].items()):
         print(f"    {class_label}: {prob:.4f}")
 
@@ -506,7 +506,7 @@ class TestIntegrationWithRealModels:
 
     # Shared fixtures for model paths.
     @pytest.fixture
-    def fastai_model_path(self):
+    def fastai_model_path(self) -> str:
         """Path to the FastAI model directory."""
         path = Path("model")
         if not path.exists():
@@ -514,7 +514,7 @@ class TestIntegrationWithRealModels:
         return str(path)
 
     @pytest.fixture
-    def huggingface_model_path(self):
+    def huggingface_model_path(self) -> str:
         """Path to the HuggingFace multiclass model directory."""
         path = Path("model/multiclass")
         if not path.exists():
@@ -523,7 +523,7 @@ class TestIntegrationWithRealModels:
 
     # Fixtures for test wav files (one per audio type).
     @pytest.fixture
-    def resident_wav_path(self):
+    def resident_wav_path(self) -> str:
         """Path to a real resident orca wav file for testing."""
         path = Path("output/wav/resident/rpi-andrews-bay_2026_02_16_22_52_59_PST.wav")
         if not path.exists():
@@ -531,7 +531,7 @@ class TestIntegrationWithRealModels:
         return str(path)
 
     @pytest.fixture
-    def transient_wav_path(self):
+    def transient_wav_path(self) -> str:
         """Path to a real transient orca wav file for testing."""
         path = Path("output/wav/transient/rpi-sunset-bay_2024_12_19_12_39_03_PST.wav")
         if not path.exists():
@@ -539,7 +539,7 @@ class TestIntegrationWithRealModels:
         return str(path)
 
     @pytest.fixture
-    def humpback_wav_path(self):
+    def humpback_wav_path(self) -> str:
         """Path to a real humpback whale wav file for testing."""
         path = Path("output/wav/humpback/rpi-orcasound-lab_2025_12_19_04_55_55_PST.wav")
         if not path.exists():
@@ -547,7 +547,7 @@ class TestIntegrationWithRealModels:
         return str(path)
 
     @pytest.fixture
-    def vessel_wav_path(self):
+    def vessel_wav_path(self) -> str:
         """Path to a real vessel noise wav file for testing."""
         path = Path("output/wav/vessel/rpi-mast-center_2026_01_26_19_01_25_PST.wav")
         if not path.exists():
@@ -555,7 +555,7 @@ class TestIntegrationWithRealModels:
         return str(path)
 
     @pytest.fixture
-    def water_wav_path(self):
+    def water_wav_path(self) -> str:
         """Path to a real water/ambient noise wav file for testing."""
         path = Path("output/wav/water/rpi-bush-point_2025_06_29_04_19_09_PST.wav")
         if not path.exists():
@@ -563,7 +563,7 @@ class TestIntegrationWithRealModels:
         return str(path)
 
     @pytest.fixture
-    def human_wav_path(self):
+    def human_wav_path(self) -> str:
         """Path to a real human voice wav file for testing."""
         path = Path("output/wav/human/rpi-sunset-bay_2024_07_23_11_32_48_PST.wav")
         if not path.exists():
@@ -571,7 +571,7 @@ class TestIntegrationWithRealModels:
         return str(path)
 
     @pytest.fixture
-    def jingle_wav_path(self):
+    def jingle_wav_path(self) -> str:
         """Path to a real jingle/signal wav file for testing."""
         path = Path("output/wav/jingle/rpi-north-sjc_2024_11_01_00_47_53_PST.wav")
         if not path.exists():
@@ -588,7 +588,13 @@ class TestIntegrationWithRealModels:
         ("human_wav_path", "human"),
         ("jingle_wav_path", "jingle"),
     ])
-    def test_fastai_model_inference(self, wav_fixture, label, fastai_model_path, request):
+    def test_fastai_model_inference(
+        self,
+        wav_fixture: str,
+        label: str,
+        fastai_model_path: str,
+        request: pytest.FixtureRequest
+    ) -> None:
         """Test FastAI model inference on various audio types."""
         from run_inference import run_inference
 
@@ -611,7 +617,14 @@ class TestIntegrationWithRealModels:
         ("human_wav_path", "human", True),  # Currently predicts "water", accept category match.
         ("jingle_wav_path", "jingle", True),  # Currently predicts "water", accept category match.
     ])
-    def test_huggingface_model_inference(self, wav_fixture, label, allow_category_match, huggingface_model_path, request):
+    def test_huggingface_model_inference(
+        self,
+        wav_fixture: str,
+        label: str,
+        allow_category_match: bool,
+        huggingface_model_path: str,
+        request: pytest.FixtureRequest
+    ) -> None:
         """Test HuggingFace model inference on various audio types."""
         from run_inference import run_inference
 
@@ -639,7 +652,13 @@ class TestIntegrationWithRealModels:
         ("jingle_wav_path", "fastai", "fastai_model_path"),
         ("jingle_wav_path", "huggingface", "huggingface_model_path"),
     ])
-    def test_cli_integration(self, wav_fixture, model_type, model_path_fixture, request):
+    def test_cli_integration(
+        self,
+        wav_fixture: str,
+        model_type: str,
+        model_path_fixture: str,
+        request: pytest.FixtureRequest
+    ) -> None:
         """Test CLI integration with various audio types and models."""
         from run_inference import main
 
