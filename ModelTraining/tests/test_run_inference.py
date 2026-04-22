@@ -16,7 +16,7 @@ Tests cover:
 import sys
 import tempfile
 from pathlib import Path
-from typing import Dict
+from typing import Dict, Optional
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -606,33 +606,38 @@ class TestIntegrationWithRealModels:
         _print_fastai_result(result, label)
 
     # Parametrized tests for HuggingFace model on different audio types.
-    # By default, exact match is required for all classes.
-    # Set allow_category_match=True for specific files where exact match would fail.
-    @pytest.mark.parametrize("wav_fixture,label,allow_category_match", [
-        ("resident_wav_path", "resident", False),
-        ("transient_wav_path", "transient", False),
-        ("humpback_wav_path", "humpback", False),
-        ("vessel_wav_path", "vessel", True),  # Currently predicts "water", accept category match.
-        ("water_wav_path", "water", False),
-        ("human_wav_path", "human", True),  # Currently predicts "water", accept category match.
-        ("jingle_wav_path", "jingle", True),  # Currently predicts "water", accept category match.
+    # Tests marked with xfail indicate known model defects that should be fixed.
+    # When the model is improved, these will fail (which is good!) and should be unmarked.
+    @pytest.mark.parametrize("wav_fixture,label,xfail_reason", [
+        ("resident_wav_path", "resident", None),
+        ("transient_wav_path", "transient", None),
+        ("humpback_wav_path", "humpback", None),
+        ("vessel_wav_path", "vessel", "Model currently predicts 'water' instead of 'vessel'"),
+        ("water_wav_path", "water", None),
+        ("human_wav_path", "human", "Model currently predicts 'water' instead of 'human'"),
+        ("jingle_wav_path", "jingle", "Model currently predicts 'water' instead of 'jingle'"),
     ])
     def test_huggingface_model_inference(
         self,
         wav_fixture: str,
         label: str,
-        allow_category_match: bool,
+        xfail_reason: Optional[str],
         huggingface_model_path: str,
         request: pytest.FixtureRequest
     ) -> None:
         """Test HuggingFace model inference on various audio types."""
         from run_inference import run_inference
+        
+        # Apply xfail marker if this test case is expected to fail.
+        if xfail_reason:
+            request.node.add_marker(pytest.mark.xfail(reason=xfail_reason, strict=True))
 
         wav_path = request.getfixturevalue(wav_fixture)
         result = run_inference(wav_path, model_type="huggingface", model_path=huggingface_model_path)
 
         _verify_huggingface_result_structure(result)
-        _verify_huggingface_prediction(result, label, allow_category_match=allow_category_match)
+        # Always require exact match - no category matching allowed.
+        _verify_huggingface_prediction(result, label, allow_category_match=False)
         _print_huggingface_result(result, label)
 
     # Parametrized CLI integration tests.

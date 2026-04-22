@@ -311,7 +311,7 @@ class HuggingFaceInference(ModelInference):  # Inherit from ModelInference
         # For every SEGMENT_GROUP_SIZE segments, require at least 1 positive prediction.
         # Cap at min_num_positive_calls_threshold to avoid requiring too many for very long clips.
         total_segments = len(local_predictions)
-        scaled_threshold = (total_segments + SEGMENT_GROUP_SIZE - 1) // SEGMENT_GROUP_SIZE
+        scaled_threshold = max(1, (total_segments + SEGMENT_GROUP_SIZE - 1) // SEGMENT_GROUP_SIZE)
         effective_threshold = min(scaled_threshold, min_num_positive_calls_threshold)
 
         # If we have enough positive predictions, use majority vote among them.
