@@ -11,6 +11,7 @@ that implements the interface expected by PODS-AI's model_inference system.
 import torch
 import librosa
 import numpy as np
+from collections import Counter
 from typing import Optional
 from transformers import Wav2Vec2FeatureExtractor, Wav2Vec2ForSequenceClassification
 
@@ -299,8 +300,11 @@ class HuggingFaceInference(ModelInference):  # Inherit from ModelInference
             local_predictions.append(predicted_class)
             local_confidences.append(float(call_likelihood))
 
-        # Determine global prediction based on voting among high-confidence positive predictions.
-        # Filter for positive (non-negative) predictions with confidence above threshold.
+        # Determine global prediction based on voting among high-confidence predictions.
+        # For positive (whale) classes, we require multiple high-confidence predictions.
+        # For negative (background) classes, we use the most common prediction.
+
+        # Filter for positive (whale) predictions with confidence above threshold.
         positive_predictions = [
             (class_id, conf)
             for class_id, conf in zip(local_predictions, local_confidences)
@@ -330,13 +334,18 @@ class HuggingFaceInference(ModelInference):  # Inherit from ModelInference
             )
             global_confidence = float(np.mean(class_votes[global_prediction_id]))
         else:
-            # Not enough positive predictions - classify as negative.
-            if "other" in self.label2id:
-                global_prediction_id = self.label2id["other"]
-            else:
-                # Use the first negative class
-                global_prediction_id = min(self.negative_class_ids)
-            global_confidence = 0.0
+            # Not enough whale predictions - determine which background class is most likely.
+            # Use the most common predicted class across all segments.
+            from collections import Counter
+            class_counts = Counter(local_predictions)
+
+            # Get the most common class.
+            global_prediction_id = class_counts.most_common(1)[0][0]
+
+            # Compute confidence as the mean probability of the predicted class across all segments.
+            global_confidence = float(np.mean([
+                probs[global_prediction_id] for probs in smoothed_probs
+            ]))
 
         # Convert global prediction ID to label name.
         global_prediction_label = self.id2label[global_prediction_id]
@@ -344,11 +353,12 @@ class HuggingFaceInference(ModelInference):  # Inherit from ModelInference
         return {
             "local_predictions": local_predictions,
             "local_confidences": local_confidences,
+            "local_probs": smoothed_probs,
             "global_prediction": global_prediction_id,
             "global_prediction_label": global_prediction_label,
             "global_confidence": global_confidence,
-            "hop_duration": float(hop_duration),  # Actual hop duration used
-            "segment_duration": float(segment_duration),  # Actual segment duration used
+            "hop_duration": float(hop_duration),
+            "segment_duration": float(segment_duration),
         }
 
 
