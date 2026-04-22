@@ -319,8 +319,8 @@ class TestHuggingFaceInferenceIndexing:
             # Should return empty predictions with negative class.
             assert result["local_predictions"] == []
             assert result["local_confidences"] == []
-            # global_prediction should be one of the negative classes (water=0, vessel=4, jingle=5, human=6)
-            assert result["global_prediction"] in [0, 4, 5, 6]
+            # global_prediction should be one of the negative classes (water=0, or other if present).
+            assert result["global_prediction"] in [0]
             assert result["global_confidence"] == 0.0
         finally:
             Path(audio_path).unlink(missing_ok=True)
@@ -396,8 +396,8 @@ class TestHuggingFaceInferenceErrorHandling:
         # Should return error response with negative prediction.
         assert result["local_predictions"] == []
         assert result["local_confidences"] == []
-        # Should be one of the negative classes (water=0, vessel=4, jingle=5, human=6)
-        assert result["global_prediction"] in [0, 4, 5, 6]
+        # Should be one of the negative classes (water=0, or other if present).
+        assert result["global_prediction"] in [0]
         assert result["global_confidence"] == 0.0
     
     @patch('huggingface_inference.Wav2Vec2ForSequenceClassification')
@@ -409,7 +409,7 @@ class TestHuggingFaceInferenceErrorHandling:
         mock_extractor = Mock()
         mock_extractor_class.from_pretrained = Mock(return_value=mock_extractor)
         
-        # Create model with only positive classes (no water, vessel, jingle, human, or other).
+        # Create model with only positive classes (no water or other).
         mock_model = Mock()
         mock_config = Mock()
         mock_config.id2label = {0: "resident", 1: "transient", 2: "humpback"}

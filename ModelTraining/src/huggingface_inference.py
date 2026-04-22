@@ -83,8 +83,8 @@ class HuggingFaceInference(ModelInference):  # Inherit from ModelInference
         print(f"Model loaded successfully. Label mapping: {self.label2id}")
 
         # Validate that model has at least one negative/background class.
-        # Accept either explicit "other" or treat specific classes as negative.
-        negative_classes = {"other", "water", "vessel", "jingle", "human"}
+        # For 7-class models, only "water" is background; vessel/jingle/human are valid target classes.
+        negative_classes = {"other", "water"}
         positive_classes = {"resident", "transient", "humpback"}
 
         found_negative = negative_classes & set(self.label2id.keys())
@@ -92,7 +92,7 @@ class HuggingFaceInference(ModelInference):  # Inherit from ModelInference
 
         if not found_negative:
             raise ValueError(
-                f"Model must include at least one negative/background class (other, water, vessel, jingle, or human). "
+                f"Model must include at least one negative/background class (other or water). "
                 f"Found labels: {list(self.label2id.keys())}. "
                 f"Please train the model with at least one negative class to distinguish from whale calls."
             )

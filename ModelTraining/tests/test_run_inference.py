@@ -612,10 +612,10 @@ class TestIntegrationWithRealModels:
         ("resident_wav_path", "resident", None),
         ("transient_wav_path", "transient", None),
         ("humpback_wav_path", "humpback", None),
-        ("vessel_wav_path", "vessel", "Model currently predicts 'water' instead of 'vessel'"),
+        ("vessel_wav_path", "vessel", None),
         ("water_wav_path", "water", None),
-        ("human_wav_path", "human", "Model currently predicts 'water' instead of 'human'"),
-        ("jingle_wav_path", "jingle", "Model currently predicts 'water' instead of 'jingle'"),
+        ("human_wav_path", "human", None),
+        ("jingle_wav_path", "jingle", None),
     ])
     def test_huggingface_model_inference(
         self,
