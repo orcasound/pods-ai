@@ -35,6 +35,11 @@ from typing import Dict, List, Optional
 import warnings
 
 
+# Segment grouping size for scaling the positive calls threshold.
+# For every SEGMENT_GROUP_SIZE segments, require at least 1 positive prediction.
+SEGMENT_GROUP_SIZE = 10
+
+
 # Monkey-patch torchaudio.load to avoid torchcodec dependency
 # torchaudio 2.9.0+ defaults to torchcodec backend which requires additional installation
 # This patch uses soundfile directly which is already installed
@@ -212,7 +217,12 @@ class FastAIModel(ModelInference):
             model_path: Path to directory containing the model file
             model_name: Name of the model file (default: "model.pkl")
             threshold: Confidence threshold for positive predictions (default: 0.5)
-            min_num_positive_calls_threshold: Minimum positive predictions for global positive (default: 3)
+            min_num_positive_calls_threshold: Minimum positive predictions for global positive classification.
+                                             For short audio clips (< 30 segments), this is automatically
+                                             scaled down (1 per 10 segments) to avoid requiring too many
+                                             positives from very short clips. The effective threshold is
+                                             min(scaled_threshold, min_num_positive_calls_threshold).
+                                             Default: 3.
         """
         self.model = load_model(model_path, model_name)
         self.threshold = threshold
@@ -242,8 +252,14 @@ class FastAIModel(ModelInference):
 
         # Generate 3 sec proposal with 1 sec hop length.
         threeSecList = []
-        for i in range(int(floor(max_length)-2)):
-            threeSecList.append([i, i+3])
+        max_start = max(0, int(floor(max_length) - 2))
+
+        # If audio is shorter than 3 seconds, still create one segment from 0 to max_length.
+        if max_start == 0 and max_length > 0:
+            threeSecList.append([0, min(3, max_length)])
+        else:
+            for i in range(max_start):
+                threeSecList.append([i, i + 3])
 
         # Create a proposal dictionary.
         three_sec_dict = {}
@@ -340,7 +356,14 @@ class FastAIModel(ModelInference):
             segment_duration=3.0  # FastAI uses 3-second segments
         )
 
-        result_json['global_prediction'] = int(sum(result_json["local_predictions"]) >= self.min_num_positive_calls_threshold)
+        # Scale the positive calls threshold based on the number of segments.
+        # For every SEGMENT_GROUP_SIZE segments, require at least 1 positive prediction.
+        # Cap at min_num_positive_calls_threshold to avoid requiring too many for very long clips.
+        total_segments = len(result_json["local_predictions"])
+        scaled_threshold = max(1, (total_segments + SEGMENT_GROUP_SIZE - 1) // SEGMENT_GROUP_SIZE)
+        effective_threshold = min(scaled_threshold, self.min_num_positive_calls_threshold)
+
+        result_json['global_prediction'] = int(sum(result_json["local_predictions"]) >= effective_threshold)
         result_json['global_confidence'] = submission.loc[(submission['confidence'] > self.threshold), 'confidence'].mean()
         if pd.isnull(result_json["global_confidence"]):
             result_json["global_confidence"] = 0
@@ -491,7 +514,7 @@ def download_model_if_needed(model_path: str = "./model",
 
 
 def get_model_inference(model_path: Optional[str] = None, model_type: str = "fastai",
-                       auto_download: bool = False, model_url: Optional[str] = None, **kwargs) -> ModelInference:
+                        auto_download: bool = False, model_url: Optional[str] = None, **kwargs) -> ModelInference:
     """
     Factory function to create a model inference instance.
 
