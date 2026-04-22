@@ -16,7 +16,7 @@ Tests cover:
 import sys
 import tempfile
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Optional
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -87,7 +87,7 @@ def _make_huggingface_model_mock(num_local: int = 10) -> MagicMock:
     return mock_model
 
 
-def _verify_fastai_result_structure(result: Dict) -> None:
+def _verify_fastai_result_structure(result: dict) -> None:
     """Verify FastAI result has expected structure and valid values."""
     assert "probabilities" in result
     assert "global_prediction_label" in result
@@ -108,7 +108,7 @@ def _verify_fastai_result_structure(result: Dict) -> None:
     assert result["global_prediction_label"] in {"other", "whale"}
 
 
-def _verify_huggingface_result_structure(result: Dict) -> None:
+def _verify_huggingface_result_structure(result: dict) -> None:
     """Verify HuggingFace result has expected structure and valid values."""
     expected_classes = {"water", "resident", "transient", "humpback", "vessel", "jingle", "human"}
 
@@ -127,7 +127,7 @@ def _verify_huggingface_result_structure(result: Dict) -> None:
     assert result["global_prediction_label"] in expected_classes
 
 
-def _print_fastai_result(result: Dict, label: str = "") -> None:
+def _print_fastai_result(result: dict, label: str = "") -> None:
     """Print FastAI inference results for debugging."""
     prefix = f"FastAI inference results{f' on {label}' if label else ''}:"
     print(f"\n{prefix}")
@@ -136,7 +136,7 @@ def _print_fastai_result(result: Dict, label: str = "") -> None:
     print(f"  Probabilities: {result['probabilities']}")
 
 
-def _print_huggingface_result(result: Dict, label: str = "") -> None:
+def _print_huggingface_result(result: dict, label: str = "") -> None:
     """Print HuggingFace inference results for debugging."""
     prefix = f"HuggingFace inference results{f' on {label}' if label else ''}:"
     print(f"\n{prefix}")
@@ -147,7 +147,7 @@ def _print_huggingface_result(result: Dict, label: str = "") -> None:
         print(f"    {class_label}: {prob:.4f}")
 
 
-def _verify_fastai_prediction(result: Dict, audio_type: str) -> None:
+def _verify_fastai_prediction(result: dict, audio_type: str) -> None:
     """
     Verify FastAI model predicted the correct class for the audio type.
 
@@ -164,7 +164,7 @@ def _verify_fastai_prediction(result: Dict, audio_type: str) -> None:
     )
 
 
-def _verify_huggingface_prediction(result: Dict, audio_type: str, allow_category_match: bool = False) -> None:
+def _verify_huggingface_prediction(result: dict, audio_type: str, allow_category_match: bool = False) -> None:
     """
     Verify HuggingFace model predicted the correct class for the audio type.
 

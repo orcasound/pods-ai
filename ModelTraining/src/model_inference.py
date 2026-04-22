@@ -35,6 +35,11 @@ from typing import Dict, List, Optional
 import warnings
 
 
+# Segment grouping size for scaling the positive calls threshold.
+# For every SEGMENT_GROUP_SIZE segments, require at least 1 positive prediction.
+SEGMENT_GROUP_SIZE = 10
+
+
 # Monkey-patch torchaudio.load to avoid torchcodec dependency
 # torchaudio 2.9.0+ defaults to torchcodec backend which requires additional installation
 # This patch uses soundfile directly which is already installed
@@ -351,12 +356,11 @@ class FastAIModel(ModelInference):
             segment_duration=3.0  # FastAI uses 3-second segments
         )
 
-        # Calculate the effective threshold by scaling for short clips.
-        # For clips with fewer segments than min_num_positive_calls_threshold,
-        # scale down proportionally: require 1 positive per 10 segments.
-        # For longer clips, use the configured min_num_positive_calls_threshold.
+        # Scale the positive calls threshold based on the number of segments.
+        # For every SEGMENT_GROUP_SIZE segments, require at least 1 positive prediction.
+        # Cap at min_num_positive_calls_threshold to avoid requiring too many for very long clips.
         total_segments = len(result_json["local_predictions"])
-        scaled_threshold = max(1, (total_segments + 9) // 10)
+        scaled_threshold = max(1, (total_segments + SEGMENT_GROUP_SIZE - 1) // SEGMENT_GROUP_SIZE)
         effective_threshold = min(scaled_threshold, self.min_num_positive_calls_threshold)
 
         result_json['global_prediction'] = int(sum(result_json["local_predictions"]) >= effective_threshold)
