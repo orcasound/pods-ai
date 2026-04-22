@@ -335,17 +335,29 @@ class HuggingFaceInference(ModelInference):  # Inherit from ModelInference
             global_confidence = float(np.mean(class_votes[global_prediction_id]))
         else:
             # Not enough whale predictions - determine which background class is most likely.
-            # Use the most common predicted class across all segments.
+            # Filter to only background/negative classes to ensure whale classes can't bypass
+            # the effective_threshold requirement.
             from collections import Counter
-            class_counts = Counter(local_predictions)
+            background_predictions = [c for c in local_predictions if c in self.negative_class_ids]
 
-            # Get the most common class.
-            global_prediction_id = class_counts.most_common(1)[0][0]
+            if background_predictions:
+                # Get the most common background class.
+                class_counts = Counter(background_predictions)
+                global_prediction_id = class_counts.most_common(1)[0][0]
 
-            # Compute confidence as the mean probability of the predicted class across all segments.
-            global_confidence = float(np.mean([
-                probs[global_prediction_id] for probs in smoothed_probs
-            ]))
+                # Compute confidence as the mean probability of the predicted class across all segments.
+                global_confidence = float(np.mean([
+                    probs[global_prediction_id] for probs in smoothed_probs
+                ]))
+            else:
+                # No background predictions found (all predictions were positive but below threshold).
+                # Fall back to a safe background default.
+                if "other" in self.label2id:
+                    global_prediction_id = self.label2id["other"]
+                else:
+                    # Use the first negative class (water is typically class 0).
+                    global_prediction_id = min(self.negative_class_ids)
+                global_confidence = 0.0
 
         # Convert global prediction ID to label name.
         global_prediction_label = self.id2label[global_prediction_id]

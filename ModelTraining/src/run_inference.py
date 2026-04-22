@@ -87,7 +87,7 @@ def run_inference(wav_path: str, model_type: str = "huggingface",
             else:
                 # Fallback to the old method if local_probs not available
                 class_confs = [
-                    conf for pred, conf in zip(local_predictions, local_confidences)
+                    conf for pred, conf in zip(local_predictions, local_confidences, strict=True)
                     if pred == class_id and conf > threshold
                 ]
                 probabilities[label] = round(sum(class_confs) / len(class_confs), 4) if class_confs else 0.0
