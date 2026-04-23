@@ -172,7 +172,7 @@ jobs:
         run: |
           python src/extract_training_samples.py
 
-      - name: Verify there are no changes in training_samples.csv
+      - name: Verify there are no changes in training_samples.csv or testing_samples.csv
         if: steps.skip_check.outputs.should_skip != 'true'
         run: |
           git diff --exit-code
