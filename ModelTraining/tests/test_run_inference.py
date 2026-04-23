@@ -729,19 +729,19 @@ class TestIntegrationWithRealModels:
         ("testing_human_wav_path", "human"),
         ("testing_jingle_wav_path", "jingle"),
     ])
-    def test_fastai_model_inference_on_testing_wavs(
+    def test_huggingface_model_inference_on_testing_wavs(
         self,
         wav_fixture: str,
         label: str,
-        fastai_model_path: str,
+        huggingface_model_path: str,
         request: pytest.FixtureRequest
     ) -> None:
-        """Test FastAI model inference on one 60-second testing wav per category."""
+        """Test HuggingFace inference on one 60-second testing wav per category."""
         from run_inference import run_inference
 
         wav_path = request.getfixturevalue(wav_fixture)
-        result = run_inference(wav_path, model_type="fastai", model_path=fastai_model_path)
+        result = run_inference(wav_path, model_type="huggingface", model_path=huggingface_model_path)
 
-        _verify_fastai_result_structure(result)
-        _verify_fastai_prediction(result, label)
-        _print_fastai_result(result, f"testing-{label}")
+        _verify_huggingface_result_structure(result)
+        _verify_huggingface_prediction(result, label, allow_category_match=False)
+        _print_huggingface_result(result, f"testing-{label}")
