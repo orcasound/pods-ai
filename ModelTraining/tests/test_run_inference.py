@@ -562,58 +562,37 @@ class TestIntegrationWithRealModels:
     @pytest.fixture
     def resident_wav_path(self) -> str:
         """Path to a real resident orca wav file for testing."""
-        path = Path("output/wav/resident/rpi-andrews-bay_2026_02_16_22_52_59_PST.wav")
-        if not path.exists():
-            pytest.skip(f"Test wav file not found: {path}")
-        return str(path)
+        return self._get_testing_wav_path("resident")
 
     @pytest.fixture
     def transient_wav_path(self) -> str:
         """Path to a real transient orca wav file for testing."""
-        path = Path("output/wav/transient/rpi-sunset-bay_2024_12_19_12_39_03_PST.wav")
-        if not path.exists():
-            pytest.skip(f"Test wav file not found: {path}")
-        return str(path)
+        return self._get_testing_wav_path("transient")
 
     @pytest.fixture
     def humpback_wav_path(self) -> str:
         """Path to a real humpback whale wav file for testing."""
-        path = Path("output/wav/humpback/rpi-orcasound-lab_2025_12_19_04_55_55_PST.wav")
-        if not path.exists():
-            pytest.skip(f"Test wav file not found: {path}")
-        return str(path)
+        return self._get_testing_wav_path("humpback")
 
     @pytest.fixture
     def vessel_wav_path(self) -> str:
         """Path to a real vessel noise wav file for testing."""
-        path = Path("output/wav/vessel/rpi-mast-center_2026_01_26_19_01_25_PST.wav")
-        if not path.exists():
-            pytest.skip(f"Test wav file not found: {path}")
-        return str(path)
+        return self._get_testing_wav_path("vessel")
 
     @pytest.fixture
     def water_wav_path(self) -> str:
         """Path to a real water/ambient noise wav file for testing."""
-        path = Path("output/wav/water/rpi-bush-point_2025_06_29_04_19_09_PST.wav")
-        if not path.exists():
-            pytest.skip(f"Test wav file not found: {path}")
-        return str(path)
+        return self._get_testing_wav_path("water")
 
     @pytest.fixture
     def human_wav_path(self) -> str:
         """Path to a real human voice wav file for testing."""
-        path = Path("output/wav/human/rpi-sunset-bay_2024_07_23_11_32_48_PST.wav")
-        if not path.exists():
-            pytest.skip(f"Test wav file not found: {path}")
-        return str(path)
+        return self._get_testing_wav_path("human")
 
     @pytest.fixture
     def jingle_wav_path(self) -> str:
         """Path to a real jingle/signal wav file for testing."""
-        path = Path("output/wav/jingle/rpi-north-sjc_2024_11_01_00_47_53_PST.wav")
-        if not path.exists():
-            pytest.skip(f"Test wav file not found: {path}")
-        return str(path)
+        return self._get_testing_wav_path("jingle")
 
     @pytest.fixture
     def testing_resident_wav_path(self) -> str:
