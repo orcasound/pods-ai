@@ -516,11 +516,18 @@ class TestIntegrationWithRealModels:
     @pytest.fixture
     def huggingface_model_path(self) -> str:
         """Path to the HuggingFace multiclass model directory, or Hub model ID as fallback."""
-        path = Path("model/multiclass")
-        if path.exists():
-            return str(path)
-        # Fall back to HuggingFace Hub model ID; from_pretrained handles the download.
-        return "davethaler/whale-call-detector"
+        local_path = Path("model/multiclass")
+        if local_path.exists():
+            return str(local_path)
+        # Fall back to HuggingFace Hub model ID, but verify it is accessible first
+        # so that an absent Hub model causes a skip rather than a test failure.
+        hub_id = "davethaler/whale-call-detector"
+        try:
+            from transformers import AutoConfig
+            AutoConfig.from_pretrained(hub_id)
+        except OSError:
+            pytest.skip(f"HuggingFace model not available locally (model/multiclass) or on Hub ({hub_id})")
+        return hub_id
 
     # Fixtures for test wav files (one per audio type).
     def _get_testing_wav_path(self, category: str) -> str:
