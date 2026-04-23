@@ -16,7 +16,9 @@ import pytest
 from extract_training_samples import (
     process_sample,
     remove_zero_confidence_detections,
+    select_testing_samples,
     sort_by_preference,
+    write_testing_samples,
     write_training_samples,
 )
 
@@ -319,6 +321,146 @@ class TestWriteTrainingSamples:
                 rows = _read_csv(output_path)
         assert len(rows) == 1
         assert rows[0] == TP_HUMAN_ONLY_EXPECTED
+
+
+# ---------------------------------------------------------------------------
+# testing_samples selection and output tests
+# ---------------------------------------------------------------------------
+
+class TestTestingSamples:
+    """Tests for testing sample selection and CSV writing."""
+
+    def test_select_testing_samples_applies_eligibility_rules(self):
+        """select_testing_samples should filter out ineligible rows and training rows."""
+        detections = [
+            # Eligible resident (not tp_machine_only).
+            {
+                'Category': 'resident',
+                'NodeName': 'rpi_test',
+                'Timestamp': '2025_01_01_00_00_00_PST',
+                'URI': 'https://example.org/resident-tp-human',
+                'Description': 'resident human detection',
+                'Notes': 'tp_human_only',
+                'Confidence': '',
+            },
+            # Ineligible: tp_machine_only + resident.
+            {
+                'Category': 'resident',
+                'NodeName': 'rpi_test',
+                'Timestamp': '2025_01_01_00_00_01_PST',
+                'URI': 'https://example.org/resident-tp-machine',
+                'Description': 'resident machine detection',
+                'Notes': 'tp_machine_only',
+                'Confidence': '',
+            },
+            # Ineligible: tp_human_only + negative category.
+            {
+                'Category': 'water',
+                'NodeName': 'rpi_test',
+                'Timestamp': '2025_01_01_00_00_02_PST',
+                'URI': 'https://example.org/water-tp-human',
+                'Description': 'water human detection',
+                'Notes': 'tp_human_only',
+                'Confidence': '',
+            },
+            # Ineligible: confidence 0.0.
+            {
+                'Category': 'transient',
+                'NodeName': 'rpi_test',
+                'Timestamp': '2025_01_01_00_00_03_PST',
+                'URI': 'https://example.org/transient-zero-confidence',
+                'Description': 'transient detection',
+                'Notes': 'tp_human_only',
+                'Confidence': '',
+            },
+            # Ineligible: already selected for training.
+            {
+                'Category': 'humpback',
+                'NodeName': 'rpi_test',
+                'Timestamp': '2025_01_01_00_00_04_PST',
+                'URI': 'https://example.org/training-selected',
+                'Description': 'humpback detection',
+                'Notes': 'tp_machine_only',
+                'Confidence': '',
+            },
+            # Eligible non-resident machine detection.
+            {
+                'Category': 'humpback',
+                'NodeName': 'rpi_test',
+                'Timestamp': '2025_01_01_00_00_05_PST',
+                'URI': 'https://example.org/humpback-tp-machine',
+                'Description': 'humpback machine detection',
+                'Notes': 'tp_machine_only',
+                'Confidence': '',
+            },
+        ]
+        training_samples = [
+            {
+                'Category': 'humpback',
+                'NodeName': 'rpi_test',
+                'Timestamp': '2025_01_01_00_00_04_PST',
+                'URI': 'https://example.org/training-selected',
+                'Description': 'humpback detection',
+                'Notes': 'tp_machine_only',
+                'Confidence': '',
+            }
+        ]
+        manual_confidences = {'https://example.org/transient-zero-confidence': '0.0'}
+
+        selected = select_testing_samples(detections, training_samples, manual_confidences)
+        selected_uris = {row['URI'] for row in selected}
+
+        assert 'https://example.org/resident-tp-human' in selected_uris
+        assert 'https://example.org/humpback-tp-machine' in selected_uris
+        assert 'https://example.org/resident-tp-machine' not in selected_uris
+        assert 'https://example.org/water-tp-human' not in selected_uris
+        assert 'https://example.org/transient-zero-confidence' not in selected_uris
+        assert 'https://example.org/training-selected' not in selected_uris
+
+    def test_select_testing_samples_limits_each_category_to_ten(self):
+        """select_testing_samples should cap each category at 10 rows."""
+        detections = []
+        for i in range(12):
+            detections.append({
+                'Category': 'humpback',
+                'NodeName': 'rpi_test',
+                'Timestamp': f'2025_01_01_00_00_{i:02d}_PST',
+                'URI': f'https://example.org/humpback-{i}',
+                'Description': f'humpback {i}',
+                'Notes': 'tp_machine_only',
+                'Confidence': '',
+            })
+
+        selected = select_testing_samples(detections, [], {})
+        assert len(selected) == 10
+
+    def test_write_testing_samples_uses_detection_csv_schema(self):
+        """write_testing_samples should emit rows with detections.csv columns."""
+        sample = {
+            'Category': 'resident',
+            'NodeName': 'rpi_test',
+            'Timestamp': '2025_01_01_00_00_00_PST',
+            'URI': 'https://example.org/sample',
+            'Description': 'sample row',
+            'Notes': 'tp_human_only',
+            'Confidence': '100.0',
+            'IgnoredColumn': 'ignored',
+        }
+        with TemporaryDirectory() as tmp:
+            output_path = Path(tmp) / 'testing_samples.csv'
+            write_testing_samples([sample], output_path)
+            rows = _read_csv(output_path)
+
+        assert len(rows) == 1
+        assert rows[0] == {
+            'Category': 'resident',
+            'NodeName': 'rpi_test',
+            'Timestamp': '2025_01_01_00_00_00_PST',
+            'URI': 'https://example.org/sample',
+            'Description': 'sample row',
+            'Notes': 'tp_human_only',
+            'Confidence': '100.0',
+        }
 
 
 # ---------------------------------------------------------------------------
