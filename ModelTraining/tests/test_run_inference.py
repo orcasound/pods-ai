@@ -523,11 +523,41 @@ class TestIntegrationWithRealModels:
 
     # Fixtures for test wav files (one per audio type).
     def _get_testing_wav_path(self, category: str) -> str:
-        """Return one testing wav path for the given category, or skip if unavailable."""
-        candidates = sorted(Path(f"output/testing-wav/{category}").glob("*.wav"))
-        if not candidates:
-            pytest.skip(f"No testing {category} wav file found in output/testing-wav/{category}")
-        return str(candidates[0])
+        """Download (if needed) and return one testing wav path for the given category.
+
+        If a WAV file already exists in output/testing-wav/{category}/, it is returned
+        immediately.  Otherwise the first matching row in testing_samples.csv is
+        downloaded via download_testing_sample().  The test is skipped when neither
+        the file nor the CSV is available, or when the download fails.
+        """
+        from download_wavs import download_testing_sample, parse_csv
+
+        output_root = Path("output/testing-wav")
+        category_dir = output_root / category
+
+        # Return early if a file was already downloaded.
+        candidates = sorted(category_dir.glob("*.wav"))
+        if candidates:
+            return str(candidates[0])
+
+        # Attempt to download one sample from the testing CSV.
+        testing_csv_path = Path("output/csv/testing_samples.csv")
+        if not testing_csv_path.exists():
+            pytest.skip(f"No testing samples CSV found at {testing_csv_path}")
+
+        rows = parse_csv(testing_csv_path)
+        category_rows = [row for row in rows if row.category == category]
+        if not category_rows:
+            pytest.skip(f"No testing samples for category '{category}' in {testing_csv_path}")
+
+        # Try each row until one downloads successfully.
+        for row in category_rows:
+            download_testing_sample(row, output_root)
+            candidates = sorted(category_dir.glob("*.wav"))
+            if candidates:
+                return str(candidates[0])
+
+        pytest.skip(f"Failed to download a testing wav for category '{category}'")
 
     @pytest.fixture
     def resident_wav_path(self) -> str:

@@ -91,11 +91,6 @@ jobs:
         run: |
           git diff --exit-code
 
-      - name: Download WAV files
-        working-directory: ModelTraining
-        run: |
-          python src/download_wavs.py
-
       - name: Run unit tests
         if: steps.skip_check.outputs.should_skip != 'true'
         working-directory: ModelTraining
@@ -176,11 +171,6 @@ jobs:
         if: steps.skip_check.outputs.should_skip != 'true'
         run: |
           git diff --exit-code
-
-      - name: Download WAV files
-        working-directory: ModelTraining
-        run: |
-          python src/download_wavs.py
 
       - name: Run unit tests
         if: steps.skip_check.outputs.should_skip != 'true'
