@@ -58,9 +58,9 @@ PACIFIC_TZ = timezone('US/Pacific')
 UTC_TZ = timezone('UTC')
 PREFERRED_NOTES = {'tp_machine_only', 'fp_machine_only'}
 QUALITY_FILTER_TERMS = {'faint', 'distant', 'quiet', 'noise'}
-MIN_SAMPLES_PER_CATEGORY = 30
+MIN_TRAINING_SAMPLES_PER_CATEGORY = 30
 # Maximum number of testing samples selected per category.
-TESTING_SAMPLES_PER_CATEGORY = 10
+MAX_TESTING_SAMPLES_PER_CATEGORY = 10
 # Categories where tp_human_only detections are excluded from testing samples.
 NEGATIVE_CATEGORIES = {'water', 'human', 'vessel', 'jingle'}
 
@@ -210,7 +210,7 @@ def select_training_samples(organized_data: dict[str, dict[str, list[dict]]], ma
 
         # Calculate target count for this category.
         total_available = sum(len(node_detections[node]) for node in node_detections)
-        target_count = min(MIN_SAMPLES_PER_CATEGORY, total_available)
+        target_count = min(MIN_TRAINING_SAMPLES_PER_CATEGORY, total_available)
 
         # For humpback category, subtract the number of existing signal files.
         if category == 'humpback':
@@ -274,7 +274,7 @@ def select_testing_samples(
     3. Exclude tp_human_only samples in negative categories.
     4. Exclude samples with manual confidence 0.0.
     5. Sort eligible samples using sort_by_preference.
-    6. Select up to TESTING_SAMPLES_PER_CATEGORY per category.
+    6. Select up to MAX_TESTING_SAMPLES_PER_CATEGORY per category.
 
     Args:
         detections: List of detection dictionaries.
@@ -320,7 +320,7 @@ def select_testing_samples(
             category_detections.extend(node_detections)
 
         sorted_detections = sort_by_preference(category_detections, manual_confidences)
-        selected_testing_samples.extend(sorted_detections[:TESTING_SAMPLES_PER_CATEGORY])
+        selected_testing_samples.extend(sorted_detections[:MAX_TESTING_SAMPLES_PER_CATEGORY])
 
     return selected_testing_samples
 

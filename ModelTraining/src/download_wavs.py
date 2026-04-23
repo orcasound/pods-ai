@@ -15,7 +15,7 @@ import ffmpeg
 import m3u8
 from pytz import timezone
 
-from extract_training_samples import download_60s_audio, subtract_segment_duration
+from extract_training_samples import download_60s_audio
 from audio_utils import (
     get_cached_folders,
     get_folders_between_timestamp,
@@ -89,6 +89,22 @@ def parse_timestamp_pst(timestamp_str: str) -> datetime:
     dt_aware = PACIFIC_TZ.localize(dt_naive)
 
     return dt_aware
+
+
+def add_seconds_to_timestamp_pst(timestamp_str: str, seconds: int) -> str:
+    """
+    Add seconds to a PST timestamp string and return the same formatted representation.
+
+    Parameters:
+        timestamp_str (str): Timestamp string (e.g., "2025_12_24_17_51_23_PST").
+        seconds (int): Number of seconds to add (or subtract if negative).
+
+    Returns:
+        str: Adjusted timestamp in the format YYYY_MM_DD_HH_MM_SS_PST.
+    """
+    adjusted = parse_timestamp_pst(timestamp_str) + timedelta(seconds=seconds)
+    return adjusted.strftime("%Y_%m_%d_%H_%M_%S_PST")
+
 
 def download_audio_segment(
     category: str,
@@ -282,28 +298,27 @@ def download_testing_sample(row: CSVRow, output_root: Path):
     Returns:
         None.
     """
-    if row.notes == "tp_human_only":
-        label_dir = output_root / row.category
-        label_dir.mkdir(parents=True, exist_ok=True)
-        node_name_in_filename = row.node_name.replace("_", "-")
-        wav_filename = f"{node_name_in_filename}_{row.timestamp_pst}.wav"
-        expected_path = label_dir / wav_filename
-        if expected_path.exists():
-            print(f"Skipping (already exists): {expected_path}")
-            return
-
-        with TemporaryDirectory() as tmp_dir:
-            wav_path = download_60s_audio(row.node_name, row.timestamp_pst, tmp_dir)
-            if wav_path is None:
-                print(f"Warning: Failed to download 60-second clip for {row.node_name} at {row.timestamp_pst}")
-                return
-            shutil.move(wav_path, expected_path)
-            print(f"Downloaded: {expected_path}")
+    label_dir = output_root / row.category
+    label_dir.mkdir(parents=True, exist_ok=True)
+    node_name_in_filename = row.node_name.replace("_", "-")
+    wav_filename = f"{node_name_in_filename}_{row.timestamp_pst}.wav"
+    expected_path = label_dir / wav_filename
+    if expected_path.exists():
+        print(f"Skipping (already exists): {expected_path}")
         return
 
-    # Non-tp_human_only testing rows follow the same 3-second machine-segment logic as training rows.
-    corrected_timestamp = subtract_segment_duration(row.timestamp_pst, N_SECONDS)
-    download_audio_segment(row.category, row.node_name, corrected_timestamp, output_root)
+    # For non-tp_human_only rows, shift by +30s so downloaded 60s clip is centered on row timestamp.
+    download_timestamp = row.timestamp_pst
+    if row.notes != "tp_human_only":
+        download_timestamp = add_seconds_to_timestamp_pst(row.timestamp_pst, 30)
+
+    with TemporaryDirectory() as tmp_dir:
+        wav_path = download_60s_audio(row.node_name, download_timestamp, tmp_dir)
+        if wav_path is None:
+            print(f"Warning: Failed to download 60-second clip for {row.node_name} at {row.timestamp_pst}")
+            return
+        shutil.move(wav_path, expected_path)
+        print(f"Downloaded: {expected_path}")
 
 
 def process_testing_csv(csv_path: Path, output_root: Path):

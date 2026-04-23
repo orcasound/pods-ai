@@ -19,7 +19,7 @@ The `ModelTraining/src` directory has the following scripts for different steps 
 4. **download_wavs.py**: Use `output/csv/training_samples.csv` and `output/csv/testing_samples.csv` to download wav files
    - Training samples are written to subdirectories under `output/wav`
    - Testing samples are written to subdirectories under `output/testing-wav`
-   - For testing samples, `tp_human_only` rows download 60-second wav files
+   - For testing samples, all rows download 60-second wav files (`tp_human_only` uses the row timestamp; others are centered on the row timestamp)
 5. **make_spectrograms.py**: Create a png file for each wav file in a subdirectory of `output/png`
 6. **train_huggingface_model.py**: A script to train a HuggingFace model on the generated training samples.
 
