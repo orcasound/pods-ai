@@ -743,5 +743,6 @@ class TestIntegrationWithRealModels:
         result = run_inference(wav_path, model_type="huggingface", model_path=huggingface_model_path)
 
         _verify_huggingface_result_structure(result)
+        # Require exact label match for per-category testing WAV fixtures.
         _verify_huggingface_prediction(result, label, allow_category_match=False)
         _print_huggingface_result(result, f"testing-{label}")
