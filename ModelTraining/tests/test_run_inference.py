@@ -522,6 +522,13 @@ class TestIntegrationWithRealModels:
         return str(path)
 
     # Fixtures for test wav files (one per audio type).
+    def _get_testing_wav_path(self, category: str) -> str:
+        """Return one testing wav path for the given category, or skip if unavailable."""
+        candidates = sorted(Path(f"output/testing-wav/{category}").glob("*.wav"))
+        if not candidates:
+            pytest.skip(f"No testing {category} wav file found in output/testing-wav/{category}")
+        return str(candidates[0])
+
     @pytest.fixture
     def resident_wav_path(self) -> str:
         """Path to a real resident orca wav file for testing."""
@@ -577,6 +584,41 @@ class TestIntegrationWithRealModels:
         if not path.exists():
             pytest.skip(f"Test wav file not found: {path}")
         return str(path)
+
+    @pytest.fixture
+    def testing_resident_wav_path(self) -> str:
+        """Path to a 60-second testing resident wav file."""
+        return self._get_testing_wav_path("resident")
+
+    @pytest.fixture
+    def testing_transient_wav_path(self) -> str:
+        """Path to a 60-second testing transient wav file."""
+        return self._get_testing_wav_path("transient")
+
+    @pytest.fixture
+    def testing_humpback_wav_path(self) -> str:
+        """Path to a 60-second testing humpback wav file."""
+        return self._get_testing_wav_path("humpback")
+
+    @pytest.fixture
+    def testing_vessel_wav_path(self) -> str:
+        """Path to a 60-second testing vessel wav file."""
+        return self._get_testing_wav_path("vessel")
+
+    @pytest.fixture
+    def testing_water_wav_path(self) -> str:
+        """Path to a 60-second testing water wav file."""
+        return self._get_testing_wav_path("water")
+
+    @pytest.fixture
+    def testing_human_wav_path(self) -> str:
+        """Path to a 60-second testing human wav file."""
+        return self._get_testing_wav_path("human")
+
+    @pytest.fixture
+    def testing_jingle_wav_path(self) -> str:
+        """Path to a 60-second testing jingle wav file."""
+        return self._get_testing_wav_path("jingle")
 
     # Parametrized tests for FastAI model on different audio types.
     @pytest.mark.parametrize("wav_fixture,label", [
@@ -677,3 +719,30 @@ class TestIntegrationWithRealModels:
             exit_code = main()
 
         assert exit_code == 0
+
+    @pytest.mark.parametrize("wav_fixture,label", [
+        ("testing_resident_wav_path", "resident"),
+        ("testing_transient_wav_path", "transient"),
+        ("testing_humpback_wav_path", "humpback"),
+        ("testing_vessel_wav_path", "vessel"),
+        ("testing_water_wav_path", "water"),
+        ("testing_human_wav_path", "human"),
+        ("testing_jingle_wav_path", "jingle"),
+    ])
+    def test_huggingface_model_inference_on_testing_wavs(
+        self,
+        wav_fixture: str,
+        label: str,
+        huggingface_model_path: str,
+        request: pytest.FixtureRequest
+    ) -> None:
+        """Test HuggingFace inference on one 60-second testing wav per category."""
+        from run_inference import run_inference
+
+        wav_path = request.getfixturevalue(wav_fixture)
+        result = run_inference(wav_path, model_type="huggingface", model_path=huggingface_model_path)
+
+        _verify_huggingface_result_structure(result)
+        # Require exact label match for per-category testing WAV fixtures.
+        _verify_huggingface_prediction(result, label, allow_category_match=False)
+        _print_huggingface_result(result, f"testing-{label}")

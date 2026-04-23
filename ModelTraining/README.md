@@ -11,11 +11,15 @@ The `ModelTraining/src` directory has the following scripts for different steps 
 2. **process_humpback_wavs.py**: Process files from the humpback submodule into the humpback subdirectory under `output/wav`.
    A custom segment duration can be specified with `--duration _seconds_` (default: 3 seconds).
 3. **extract_training_samples.py**: Use an input CSV file (`output/csv/detections.csv` by default)
-   to create `output/csv/training_samples.csv`. An alternate input filename can be specified with
+   to create `output/csv/training_samples.csv` and `output/csv/testing_samples.csv`. An alternate input filename can be specified with
    `--input _filename_`. A custom segment duration can be specified with `--duration _seconds_` (default: 3 seconds).
    - For `tp_human_only` detections, runs model inference on preceding 60 seconds to find correct timestamp
    - For other detections, subtracts the segment duration from the timestamp
-4. **download_wavs.py**: Use `output/csv/training_samples.csv` and download wav files into subdirectories under `output/wav`
+   - `testing_samples.csv` uses detections-format rows, excludes training rows, and includes up to 10 eligible samples per category
+4. **download_wavs.py**: Use `output/csv/training_samples.csv` and `output/csv/testing_samples.csv` to download wav files
+   - Training samples are written to subdirectories under `output/wav`
+   - Testing samples are written to subdirectories under `output/testing-wav`
+   - For testing samples, all rows download 60-second wav files (`tp_human_only` uses the row timestamp; others are centered on the row timestamp)
 5. **make_spectrograms.py**: Create a png file for each wav file in a subdirectory of `output/png`
 6. **train_huggingface_model.py**: A script to train a HuggingFace model on the generated training samples.
 

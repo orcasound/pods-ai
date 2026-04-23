@@ -58,7 +58,11 @@ PACIFIC_TZ = timezone('US/Pacific')
 UTC_TZ = timezone('UTC')
 PREFERRED_NOTES = {'tp_machine_only', 'fp_machine_only'}
 QUALITY_FILTER_TERMS = {'faint', 'distant', 'quiet', 'noise'}
-MIN_SAMPLES_PER_CATEGORY = 30
+MIN_TRAINING_SAMPLES_PER_CATEGORY = 30
+# Maximum number of testing samples selected per category.
+MAX_TESTING_SAMPLES_PER_CATEGORY = 10
+# Categories where tp_human_only detections are excluded from testing samples.
+NEGATIVE_CATEGORIES = {'water', 'human', 'vessel', 'jingle'}
 
 # Count existing humpback signal files.
 OTHER_HUMPBACK_SAMPLES = len(glob.glob(str(REPO_ROOT / 'output' / 'wav' / 'humpback' / 'signals-humpback_*.wav')))
@@ -206,7 +210,7 @@ def select_training_samples(organized_data: dict[str, dict[str, list[dict]]], ma
 
         # Calculate target count for this category.
         total_available = sum(len(node_detections[node]) for node in node_detections)
-        target_count = min(MIN_SAMPLES_PER_CATEGORY, total_available)
+        target_count = min(MIN_TRAINING_SAMPLES_PER_CATEGORY, total_available)
 
         # For humpback category, subtract the number of existing signal files.
         if category == 'humpback':
@@ -254,6 +258,71 @@ def select_training_samples(organized_data: dict[str, dict[str, list[dict]]], ma
         selected.extend(category_samples)
 
     return selected
+
+
+def select_testing_samples(
+    detections: list[dict],
+    training_samples: list[dict],
+    manual_confidences: dict[str, str]
+) -> list[dict]:
+    """
+    Select testing samples according to requirements.
+
+    Selection criteria:
+    1. Exclude samples already selected for training.
+    2. Exclude tp_machine_only samples in resident category.
+    3. Exclude tp_human_only samples in negative categories.
+    4. Exclude samples with manual confidence 0.0.
+    5. Sort eligible samples using sort_by_preference.
+    6. Select up to MAX_TESTING_SAMPLES_PER_CATEGORY per category.
+
+    Args:
+        detections: List of detection dictionaries.
+        training_samples: List of selected training sample dictionaries.
+        manual_confidences: Dictionary mapping URIs to confidence strings
+            (string values representing floats in range 0.0-100.0).
+
+    Returns:
+        list[dict]: Selected testing sample dictionaries.
+    """
+    training_uris = {sample['URI'] for sample in training_samples if sample.get('URI', '')}
+    eligible_detections = []
+
+    for detection in detections:
+        uri = detection.get('URI', '')
+        category = detection.get('Category', '')
+        notes = detection.get('Notes', '')
+
+        if uri in training_uris:
+            continue
+
+        if notes == 'tp_machine_only' and category == 'resident':
+            continue
+
+        if notes == 'tp_human_only' and category in NEGATIVE_CATEGORIES:
+            continue
+
+        if uri in manual_confidences:
+            try:
+                if float(manual_confidences[uri]) == 0.0:
+                    continue
+            except (ValueError, TypeError):
+                pass
+
+        eligible_detections.append(detection)
+
+    organized_data = organize_by_category_node(eligible_detections)
+    selected_testing_samples = []
+
+    for category in sorted(organized_data.keys()):
+        category_detections = []
+        for node_detections in organized_data[category].values():
+            category_detections.extend(node_detections)
+
+        sorted_detections = sort_by_preference(category_detections, manual_confidences)
+        selected_testing_samples.extend(sorted_detections[:MAX_TESTING_SAMPLES_PER_CATEGORY])
+
+    return selected_testing_samples
 
 
 def get_aligned_end_time(timestamp_str: str) -> datetime:
@@ -657,6 +726,27 @@ def write_training_samples(
                 writer.writerow(output_row)
 
 
+def write_testing_samples(samples: list[dict], output_path: Path):
+    """
+    Write selected testing samples to CSV using detections.csv format.
+
+    Args:
+        samples: List of sample dictionaries.
+        output_path: Path to output CSV file.
+    """
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    sorted_samples = sorted(samples, key=lambda s: (s['Category'], s['NodeName'], s['Timestamp']))
+    fieldnames = ['Category', 'NodeName', 'Timestamp', 'URI', 'Description', 'Notes', 'Confidence']
+
+    with open(output_path, 'w', newline='', encoding='utf-8') as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames, lineterminator='\n')
+        writer.writeheader()
+
+        for sample in sorted_samples:
+            writer.writerow({field: sample.get(field, '') for field in fieldnames})
+
+
 def remove_zero_confidence_detections(
     detections: list[dict],
     manual_confidences: dict[str, str]
@@ -777,6 +867,7 @@ def main():
     if not input_path.is_absolute():
         input_path = REPO_ROOT / input_path
     output_path = REPO_ROOT / 'output' / 'csv' / 'training_samples.csv'
+    testing_output_path = REPO_ROOT / 'output' / 'csv' / 'testing_samples.csv'
 
     # Load manual confidences for sorting.
     manual_corrections_path = REPO_ROOT / 'output' / 'csv' / 'manual_timestamps.csv'
@@ -799,6 +890,7 @@ def main():
 
     print("\nSelecting training samples...")
     samples = select_training_samples(organized_data, manual_confidences)
+    testing_samples = select_testing_samples(detections, samples, manual_confidences)
 
     print(f"\nSelected {len(samples)} training samples")
 
@@ -825,6 +917,8 @@ def main():
         print(f"  {type}: {type_counts[type]} samples")
         for node in sorted(type_node_counts[type].keys()):
             print(f"    {node}: {type_node_counts[type][node]}")
+
+    print(f"\nSelected {len(testing_samples)} testing samples")
 
     # Initialize model inference for tp_human_only timestamp correction.
     print("\nInitializing model inference for tp_human_only timestamp correction...")
@@ -865,6 +959,8 @@ def main():
 
     print(f"\nWriting training samples to {output_path}...")
     write_training_samples(samples, output_path, manual_timestamps, manual_confidences, model_inference, args.duration)
+    print(f"Writing testing samples to {testing_output_path}...")
+    write_testing_samples(testing_samples, testing_output_path)
     print("Done!")
 
 

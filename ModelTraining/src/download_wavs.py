@@ -15,6 +15,7 @@ import ffmpeg
 import m3u8
 from pytz import timezone
 
+from extract_training_samples import download_60s_audio
 from audio_utils import (
     get_cached_folders,
     get_folders_between_timestamp,
@@ -88,6 +89,22 @@ def parse_timestamp_pst(timestamp_str: str) -> datetime:
     dt_aware = PACIFIC_TZ.localize(dt_naive)
 
     return dt_aware
+
+
+def add_seconds_to_timestamp_pst(timestamp_str: str, seconds: int) -> str:
+    """
+    Add seconds to a PST timestamp string and return the same formatted representation.
+
+    Parameters:
+        timestamp_str (str): Timestamp string (e.g., "2025_12_24_17_51_23_PST").
+        seconds (int): Number of seconds to add (or subtract if negative).
+
+    Returns:
+        str: Adjusted timestamp in the format YYYY_MM_DD_HH_MM_SS_PST.
+    """
+    adjusted = parse_timestamp_pst(timestamp_str) + timedelta(seconds=seconds)
+    return adjusted.strftime("%Y_%m_%d_%H_%M_%S_PST")
+
 
 def download_audio_segment(
     category: str,
@@ -266,13 +283,74 @@ def process_csv(csv_path: Path, output_root: Path):
         print(f"Processing: {row.category} - {row.node_name} - {row.timestamp_pst}")
         download_audio_segment(row.category, row.node_name, row.timestamp_pst, output_root)
 
+
+def download_testing_sample(row: CSVRow, output_root: Path):
+    """
+    Download audio for a testing sample.
+
+    tp_human_only samples download a full 60-second clip.
+    Other samples use the machine-detection segment logic.
+
+    Args:
+        row: Parsed CSV row describing one testing sample.
+        output_root: Root directory where category subdirectories are created.
+
+    Returns:
+        None.
+    """
+    label_dir = output_root / row.category
+    label_dir.mkdir(parents=True, exist_ok=True)
+    node_name_in_filename = row.node_name.replace("_", "-")
+    wav_filename = f"{node_name_in_filename}_{row.timestamp_pst}.wav"
+    expected_path = label_dir / wav_filename
+    if expected_path.exists():
+        print(f"Skipping (already exists): {expected_path}")
+        return
+
+    # For non-tp_human_only rows, shift by +30s so downloaded 60s clip is centered on row timestamp.
+    download_timestamp = row.timestamp_pst
+    if row.notes != "tp_human_only":
+        download_timestamp = add_seconds_to_timestamp_pst(row.timestamp_pst, 30)
+
+    with TemporaryDirectory() as tmp_dir:
+        wav_path = download_60s_audio(row.node_name, download_timestamp, tmp_dir)
+        if wav_path is None:
+            print(f"Warning: Failed to download 60-second clip for {row.node_name} at {row.timestamp_pst}")
+            return
+        shutil.move(wav_path, expected_path)
+        print(f"Downloaded: {expected_path}")
+
+
+def process_testing_csv(csv_path: Path, output_root: Path):
+    """
+    Read the testing samples CSV file and download corresponding WAV files.
+
+    Args:
+        csv_path: Path to the testing_samples.csv file.
+        output_root: Root directory where testing WAV files are saved.
+    """
+    rows = parse_csv(csv_path)
+    print(f"Found {len(rows)} testing samples to process")
+
+    for row in rows:
+        print(f"Processing testing sample: {row.category} - {row.node_name} - {row.timestamp_pst} ({row.notes})")
+        download_testing_sample(row, output_root)
+
 if __name__ == "__main__":
-    csv_path = Path("output/csv/training_samples.csv")
-    output_root = Path("output/wav")
-    
-    if not csv_path.exists():
-        print(f"Error: CSV file not found at {csv_path}")
+    training_csv_path = Path("output/csv/training_samples.csv")
+    training_output_root = Path("output/wav")
+    testing_csv_path = Path("output/csv/testing_samples.csv")
+    testing_output_root = Path("output/testing-wav")
+
+    if not training_csv_path.exists():
+        print(f"Error: CSV file not found at {training_csv_path}")
         print("Please run extract_training_samples.py first to generate the training_samples.csv file.")
         sys.exit(1)
-    
-    process_csv(csv_path, output_root)
+
+    process_csv(training_csv_path, training_output_root)
+
+    if not testing_csv_path.exists():
+        print(f"Warning: CSV file not found at {testing_csv_path}")
+        print("Skipping testing WAV downloads. Run extract_training_samples.py to generate testing_samples.csv.")
+    else:
+        process_testing_csv(testing_csv_path, testing_output_root)
