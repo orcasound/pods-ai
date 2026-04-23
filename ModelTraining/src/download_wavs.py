@@ -274,6 +274,13 @@ def download_testing_sample(row: CSVRow, output_root: Path):
 
     tp_human_only samples download a full 60-second clip.
     Other samples use the machine-detection segment logic.
+
+    Args:
+        row: Parsed CSV row describing one testing sample.
+        output_root: Root directory where category subdirectories are created.
+
+    Returns:
+        None.
     """
     if row.notes == "tp_human_only":
         label_dir = output_root / row.category
@@ -294,12 +301,19 @@ def download_testing_sample(row: CSVRow, output_root: Path):
             print(f"Downloaded: {expected_path}")
         return
 
+    # Non-tp_human_only testing rows follow the same 3-second machine-segment logic as training rows.
     corrected_timestamp = subtract_segment_duration(row.timestamp_pst, N_SECONDS)
     download_audio_segment(row.category, row.node_name, corrected_timestamp, output_root)
 
 
 def process_testing_csv(csv_path: Path, output_root: Path):
-    """Read the testing samples CSV file and download corresponding WAV files."""
+    """
+    Read the testing samples CSV file and download corresponding WAV files.
+
+    Args:
+        csv_path: Path to the testing_samples.csv file.
+        output_root: Root directory where testing WAV files are saved.
+    """
     rows = parse_csv(csv_path)
     print(f"Found {len(rows)} testing samples to process")
 

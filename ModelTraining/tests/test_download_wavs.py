@@ -27,6 +27,7 @@ class TestDownloadTestingSample:
             output_root = Path(tmp) / "testing-wav"
 
             def _fake_download_60s_audio(node_name: str, timestamp_str: str, tmp_dir: str):
+                """Create and return a temporary fake 60-second WAV path."""
                 wav_path = Path(tmp_dir) / "temp_60s.wav"
                 wav_path.write_bytes(b"fake wav content")
                 return str(wav_path)
@@ -50,8 +51,10 @@ class TestDownloadTestingSample:
 
         with TemporaryDirectory() as tmp:
             output_root = Path(tmp) / "testing-wav"
-            with patch("download_wavs.subtract_segment_duration", return_value="2025_01_01_00_00_00_PST") as mock_subtract, \
-                 patch("download_wavs.download_audio_segment") as mock_download_audio_segment:
+            with (
+                patch("download_wavs.subtract_segment_duration", return_value="2025_01_01_00_00_00_PST") as mock_subtract,
+                patch("download_wavs.download_audio_segment") as mock_download_audio_segment,
+            ):
                 download_testing_sample(row, output_root)
 
             mock_subtract.assert_called_once_with("2025_01_01_00_00_03_PST", 3)

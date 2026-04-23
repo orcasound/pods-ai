@@ -522,6 +522,13 @@ class TestIntegrationWithRealModels:
         return str(path)
 
     # Fixtures for test wav files (one per audio type).
+    def _get_testing_wav_path(self, category: str) -> str:
+        """Return one testing wav path for the given category, or skip if unavailable."""
+        candidates = sorted(Path(f"output/testing-wav/{category}").glob("*.wav"))
+        if not candidates:
+            pytest.skip(f"No testing {category} wav file found in output/testing-wav/{category}")
+        return str(candidates[0])
+
     @pytest.fixture
     def resident_wav_path(self) -> str:
         """Path to a real resident orca wav file for testing."""
@@ -581,58 +588,37 @@ class TestIntegrationWithRealModels:
     @pytest.fixture
     def testing_resident_wav_path(self) -> str:
         """Path to a 60-second testing resident wav file."""
-        candidates = sorted(Path("output/testing-wav/resident").glob("*.wav"))
-        if not candidates:
-            pytest.skip("No testing resident wav file found in output/testing-wav/resident")
-        return str(candidates[0])
+        return self._get_testing_wav_path("resident")
 
     @pytest.fixture
     def testing_transient_wav_path(self) -> str:
         """Path to a 60-second testing transient wav file."""
-        candidates = sorted(Path("output/testing-wav/transient").glob("*.wav"))
-        if not candidates:
-            pytest.skip("No testing transient wav file found in output/testing-wav/transient")
-        return str(candidates[0])
+        return self._get_testing_wav_path("transient")
 
     @pytest.fixture
     def testing_humpback_wav_path(self) -> str:
         """Path to a 60-second testing humpback wav file."""
-        candidates = sorted(Path("output/testing-wav/humpback").glob("*.wav"))
-        if not candidates:
-            pytest.skip("No testing humpback wav file found in output/testing-wav/humpback")
-        return str(candidates[0])
+        return self._get_testing_wav_path("humpback")
 
     @pytest.fixture
     def testing_vessel_wav_path(self) -> str:
         """Path to a 60-second testing vessel wav file."""
-        candidates = sorted(Path("output/testing-wav/vessel").glob("*.wav"))
-        if not candidates:
-            pytest.skip("No testing vessel wav file found in output/testing-wav/vessel")
-        return str(candidates[0])
+        return self._get_testing_wav_path("vessel")
 
     @pytest.fixture
     def testing_water_wav_path(self) -> str:
         """Path to a 60-second testing water wav file."""
-        candidates = sorted(Path("output/testing-wav/water").glob("*.wav"))
-        if not candidates:
-            pytest.skip("No testing water wav file found in output/testing-wav/water")
-        return str(candidates[0])
+        return self._get_testing_wav_path("water")
 
     @pytest.fixture
     def testing_human_wav_path(self) -> str:
         """Path to a 60-second testing human wav file."""
-        candidates = sorted(Path("output/testing-wav/human").glob("*.wav"))
-        if not candidates:
-            pytest.skip("No testing human wav file found in output/testing-wav/human")
-        return str(candidates[0])
+        return self._get_testing_wav_path("human")
 
     @pytest.fixture
     def testing_jingle_wav_path(self) -> str:
         """Path to a 60-second testing jingle wav file."""
-        candidates = sorted(Path("output/testing-wav/jingle").glob("*.wav"))
-        if not candidates:
-            pytest.skip("No testing jingle wav file found in output/testing-wav/jingle")
-        return str(candidates[0])
+        return self._get_testing_wav_path("jingle")
 
     # Parametrized tests for FastAI model on different audio types.
     @pytest.mark.parametrize("wav_fixture,label", [

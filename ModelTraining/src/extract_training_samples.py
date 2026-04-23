@@ -59,7 +59,9 @@ UTC_TZ = timezone('UTC')
 PREFERRED_NOTES = {'tp_machine_only', 'fp_machine_only'}
 QUALITY_FILTER_TERMS = {'faint', 'distant', 'quiet', 'noise'}
 MIN_SAMPLES_PER_CATEGORY = 30
+# Maximum number of testing samples selected per category.
 TESTING_SAMPLES_PER_CATEGORY = 10
+# Categories where tp_human_only detections are excluded from testing samples.
 NEGATIVE_CATEGORIES = {'water', 'human', 'vessel', 'jingle'}
 
 # Count existing humpback signal files.
@@ -271,17 +273,19 @@ def select_testing_samples(
     2. Exclude tp_machine_only samples in resident category.
     3. Exclude tp_human_only samples in negative categories.
     4. Exclude samples with manual confidence 0.0.
-    5. Select up to TESTING_SAMPLES_PER_CATEGORY per category.
+    5. Sort eligible samples using sort_by_preference.
+    6. Select up to TESTING_SAMPLES_PER_CATEGORY per category.
 
     Args:
         detections: List of detection dictionaries.
         training_samples: List of selected training sample dictionaries.
-        manual_confidences: Dictionary mapping URIs to confidence strings (0.0-100.0).
+        manual_confidences: Dictionary mapping URIs to confidence strings
+            (string values representing floats in range 0.0-100.0).
 
     Returns:
         list[dict]: Selected testing sample dictionaries.
     """
-    training_uris = {sample.get('URI', '') for sample in training_samples if sample.get('URI')}
+    training_uris = {sample['URI'] for sample in training_samples if sample.get('URI', '')}
     eligible_detections = []
 
     for detection in detections:

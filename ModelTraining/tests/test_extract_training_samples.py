@@ -324,7 +324,7 @@ class TestWriteTrainingSamples:
 
 
 # ---------------------------------------------------------------------------
-# testing_samples selection and output tests
+# Testing samples selection and output tests.
 # ---------------------------------------------------------------------------
 
 class TestTestingSamples:
@@ -405,6 +405,7 @@ class TestTestingSamples:
                 'Confidence': '',
             }
         ]
+        # This row is excluded because manual_confidences maps its URI to 0.0.
         manual_confidences = {'https://example.org/transient-zero-confidence': '0.0'}
 
         selected = select_testing_samples(detections, training_samples, manual_confidences)
@@ -464,7 +465,7 @@ class TestTestingSamples:
 
 
 # ---------------------------------------------------------------------------
-# Helpers
+# Helpers.
 # ---------------------------------------------------------------------------
 
 def _read_csv(path: Path) -> list[dict]:
