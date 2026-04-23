@@ -63,12 +63,6 @@ jobs:
         working-directory: ModelTraining
         run: bash patch_fastai_audio.sh
 
-      - name: Run unit tests
-        if: steps.skip_check.outputs.should_skip != 'true'
-        working-directory: ModelTraining
-        run: |
-          python -m pytest tests/ -v
-
       - name: Make CSV
         if: steps.skip_check.outputs.should_skip != 'true'
         working-directory: ModelTraining
@@ -96,6 +90,18 @@ jobs:
         if: steps.skip_check.outputs.should_skip != 'true'
         run: |
           git diff --exit-code
+
+      - name: Download WAV files
+        working-directory: ModelTraining
+        run: |
+          python src/download_wavs.py
+
+      - name: Run unit tests
+        if: steps.skip_check.outputs.should_skip != 'true'
+        working-directory: ModelTraining
+        run: |
+          python -m pytest tests/ -v
+
 
   make_csv_windows:
     if: github.actor != 'dependabot[bot]'
@@ -143,12 +149,6 @@ jobs:
         shell: cmd
         run: patch_fastai_audio.bat
 
-      - name: Run unit tests
-        if: steps.skip_check.outputs.should_skip != 'true'
-        working-directory: ModelTraining
-        run: |
-          python -m pytest tests/ -v
-
       - name: Make CSV
         if: steps.skip_check.outputs.should_skip != 'true'
         working-directory: ModelTraining
@@ -176,3 +176,14 @@ jobs:
         if: steps.skip_check.outputs.should_skip != 'true'
         run: |
           git diff --exit-code
+
+      - name: Download WAV files
+        working-directory: ModelTraining
+        run: |
+          python src/download_wavs.py
+
+      - name: Run unit tests
+        if: steps.skip_check.outputs.should_skip != 'true'
+        working-directory: ModelTraining
+        run: |
+          python -m pytest tests/ -v
