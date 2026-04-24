@@ -519,15 +519,24 @@ class TestIntegrationWithRealModels:
         local_path = Path("model/multiclass")
         if local_path.exists():
             return str(local_path)
-        # Fall back to HuggingFace Hub model ID, but verify the feature extractor is
-        # accessible first (the same call the inference code makes), so that a Hub model
-        # missing preprocessor_config.json causes a skip rather than a test failure.
+        # Fall back to HuggingFace Hub model ID.  Use a lightweight HEAD request via
+        # huggingface_hub.file_exists() to verify that preprocessor_config.json is
+        # present before returning the Hub ID.  If it is absent (e.g. because the model
+        # was published without running feature_extractor.push_to_hub()), the test is
+        # skipped with a clear message rather than failing with a RuntimeError inside
+        # HuggingFaceInference.__init__().  Re-run the Train Model workflow (which now
+        # calls feature_extractor.push_to_hub()) to upload the missing file and allow
+        # these tests to run in CI.
         hub_id = "davethaler/whale-call-detector"
         try:
-            from transformers import Wav2Vec2FeatureExtractor
-            Wav2Vec2FeatureExtractor.from_pretrained(hub_id)
-        except OSError:
-            pytest.skip(f"HuggingFace model not available locally (model/multiclass) or on Hub ({hub_id})")
+            from huggingface_hub import file_exists as hf_file_exists
+            if not hf_file_exists(hub_id, "preprocessor_config.json"):
+                pytest.skip(
+                    f"Hub model '{hub_id}' is missing preprocessor_config.json. "
+                    f"Re-run the Train Model workflow to push the feature extractor to Hub."
+                )
+        except Exception:
+            pytest.skip(f"HuggingFace Hub is not reachable; cannot load model '{hub_id}'")
         return hub_id
 
     # Fixtures for test wav files (one per audio type).
