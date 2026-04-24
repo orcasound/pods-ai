@@ -492,6 +492,11 @@ def main() -> None:
     print("Training complete!")
 
     if args.push_to_hub:
+        # The Trainer already pushed the model weights; also push the feature extractor
+        # so that inference code can call Wav2Vec2FeatureExtractor.from_pretrained()
+        # on the Hub model ID.
+        print(f"Pushing feature extractor to HuggingFace Hub: {args.hub_model_id}...")
+        feature_extractor.push_to_hub(args.hub_model_id)
         print(f"Model pushed to HuggingFace Hub: {args.hub_model_id}")
 
 
