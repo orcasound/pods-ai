@@ -519,12 +519,13 @@ class TestIntegrationWithRealModels:
         local_path = Path("model/multiclass")
         if local_path.exists():
             return str(local_path)
-        # Fall back to HuggingFace Hub model ID, but verify it is accessible first
-        # so that an absent Hub model causes a skip rather than a test failure.
+        # Fall back to HuggingFace Hub model ID, but verify the feature extractor is
+        # accessible first (the same call the inference code makes), so that a Hub model
+        # missing preprocessor_config.json causes a skip rather than a test failure.
         hub_id = "davethaler/whale-call-detector"
         try:
-            from transformers import AutoConfig
-            AutoConfig.from_pretrained(hub_id)
+            from transformers import Wav2Vec2FeatureExtractor
+            Wav2Vec2FeatureExtractor.from_pretrained(hub_id)
         except OSError:
             pytest.skip(f"HuggingFace model not available locally (model/multiclass) or on Hub ({hub_id})")
         return hub_id
