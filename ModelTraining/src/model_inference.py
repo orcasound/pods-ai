@@ -22,13 +22,11 @@ import os
 import shutil
 import tempfile
 import torch
-from fastai.basic_train import load_learner
 import pandas as pd
 from pydub import AudioSegment
 from librosa import get_duration
 from pathlib import Path
 from numpy import floor
-from audio.data import AudioConfig, SpectrogramConfig, AudioList
 import torchaudio
 
 from typing import Dict, List, Optional
@@ -96,6 +94,7 @@ torch.load = _patched_torch_load
 
 
 def load_model(mPath, mName="stg2-rn18.pkl"):
+    from fastai.basic_train import load_learner
     return load_learner(mPath, mName)
 
 
@@ -275,6 +274,7 @@ class FastAIModel(ModelInference):
         )
 
         # Define Audio config needed to create on the fly mel spectograms.
+        from audio.data import AudioConfig, SpectrogramConfig, AudioList
         config = AudioConfig(standardize=False,
                              sg_cfg=SpectrogramConfig(
                                  f_min=0.0,  # Minimum frequency to Display.
