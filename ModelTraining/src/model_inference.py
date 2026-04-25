@@ -8,18 +8,17 @@ This module provides a simple interface for running model inference on audio fil
 to score segments using a sliding window approach. It can be extended to support
 different model types.
 
-For production use, this can be integrated with aifororcas-livesystem's
-LiveInferenceOrchestrator.py which uses DateRangeHLSStream to download and score
+For production use, this can be integrated with orcahello's
+LiveInferenceOrchestrator.py which uses OrcaHelloSRKWDetectorV1 to download and score
 audio from specific time ranges. See:
-https://github.com/orcasound/aifororcas-livesystem/blob/main/InferenceSystem/src/LiveInferenceOrchestrator.py
-https://github.com/orcasound/aifororcas-livesystem/blob/main/InferenceSystem/config/Test/Positive/FastAI_DateRangeHLS_AndrewsBay.yml
+https://github.com/orcasound/orcahello/blob/main/InferenceSystem/src/LiveInferenceOrchestrator.py
+https://github.com/orcasound/orcahello/blob/main/InferenceSystem/src/model/inference.py
 
 The pretrained FastAI model is typically named "model.pkl" and should be placed in
 a "model" directory.
 """
 
 import os
-import shutil
 import tempfile
 import torch
 import pandas as pd
@@ -117,17 +116,18 @@ def extract_segments(audioPath, sampleDict, destnPath, suffix):
     '''
     Function to extract segments given an audio path folder and proposal segments
     '''
-    # List the local audio files.
-    local_audio_files = str(audioPath) + '/'
+    # Use Path objects to avoid string concatenation.
+    audio_dir = Path(audioPath)
+    dest_dir = Path(destnPath)
     for wav_file in sampleDict.keys():
-        audio_file = get_wave_file(local_audio_files + wav_file)
+        audio_file = get_wave_file(audio_dir / wav_file)
         for begin_time, end_time in sampleDict[wav_file]:
             output_file_name = wav_file.lower().replace(
                 '.wav', '') + '_' + str(begin_time) + '_' + str(
                     end_time) + suffix + '.wav'
-            output_file_path = destnPath + output_file_name
+            output_file_path = dest_dir / output_file_name
             export_wave_file(audio_file, begin_time,
-                             end_time, output_file_path)
+                             end_time, str(output_file_path))
 
 
 class ModelInference:
@@ -235,90 +235,85 @@ class FastAIModel(ModelInference):
         Processes 3-second segments with 1-second hop, applies rolling average,
         and returns per-second predictions (0.0-1.0) and a global confidence (0.0-1.0).
         '''
-
-        # Create local directory to save 3 second clips.
-        local_dir = tempfile.mkdtemp()+"/"
-        if os.path.exists(local_dir):
-            shutil.rmtree(local_dir, ignore_errors=False, onerror=None)
-            os.makedirs(local_dir)
-        else:
-            os.makedirs(local_dir)
+        wav_path = Path(wav_file_path)
 
         # Infer clip length.
         max_length = get_duration(path=wav_file_path)
-        print(os.path.basename(wav_file_path))
+        print(wav_path.name)
         print("Length of Audio Clip:{0}".format(max_length))
 
-        # Generate 3 sec proposal with 1 sec hop length.
-        threeSecList = []
+        # Generate 3 sec proposals with 1 sec hop length.
         max_start = max(0, int(floor(max_length) - 2))
 
         # If audio is shorter than 3 seconds, still create one segment from 0 to max_length.
         if max_start == 0 and max_length > 0:
-            threeSecList.append([0, min(3, max_length)])
+            segments = [(0, min(3, max_length))]
         else:
-            for i in range(max_start):
-                threeSecList.append([i, i + 3])
+            segments = [(i, i + 3) for i in range(max_start)]
 
         # Create a proposal dictionary.
-        three_sec_dict = {}
-        three_sec_dict[Path(wav_file_path).name] = threeSecList
+        three_sec_dict = {wav_path.name: segments}
+
+        # Build a mapping from segment filename stem → start_time_s during creation,
+        # to avoid re-parsing filenames later.
+        start_time_by_stem = {
+            wav_path.stem.lower() + '_' + str(begin) + '_' + str(end): begin
+            for begin, end in segments
+        }
 
         # Create 3 sec segments from the defined wavefile using proposals built above.
         # "use_a_real_wavname.wav" will generate -> "use_a_real_wavname_0_3.wav", "use_a_real_wavname_1_4.wav" etc. files in local directory.
-        extract_segments(
-            str(Path(wav_file_path).parent),
-            three_sec_dict,
-            local_dir,
-            ""
-        )
+        # Use TemporaryDirectory for automatic cleanup on exit.
+        with tempfile.TemporaryDirectory() as temp_dir:
+            local_dir = Path(temp_dir)
 
-        # Define Audio config needed to create on the fly mel spectograms.
-        from audio.data import AudioConfig, SpectrogramConfig, AudioList
-        config = AudioConfig(standardize=False,
-                             sg_cfg=SpectrogramConfig(
-                                 f_min=0.0,  # Minimum frequency to Display.
-                                 f_max=10000,  # Maximum Frequency to Display.
-                                 hop_length=256,
-                                 n_fft=2560,  # Number of Samples for Fourier.
-                                 n_mels=256,  # Mel bins.
-                                 pad=0,
-                                 to_db_scale=True,  # Converting to DB scale.
-                                 top_db=100,  # Top decibel sound.
-                                 win_length=None,
-                                 n_mfcc=20)
-                             )
-        config.duration = 4000  # 4 sec padding or snip.
-        config.resample_to = 20000  # Every sample at 20000 frequency.
-        config.downmix=True
-        config.pad_mode = "zeros-after"  # Make deterministic: zeros at end only
+            extract_segments(wav_path.parent, three_sec_dict, local_dir, "")
 
-        # Create an Audio DataLoader.
-        test_data_folder = Path(local_dir)
-        tfms = None
-        test = AudioList.from_folder(
-            test_data_folder, config=config).split_none().label_empty()
-        testdb = test.transform(tfms).databunch(bs=32)
+            # Define Audio config needed to create on the fly mel spectograms.
+            from audio.data import AudioConfig, SpectrogramConfig, AudioList
+            config = AudioConfig(standardize=False,
+                                 sg_cfg=SpectrogramConfig(
+                                     f_min=0.0,  # Minimum frequency to Display.
+                                     f_max=10000,  # Maximum Frequency to Display.
+                                     hop_length=256,
+                                     n_fft=2560,  # Number of Samples for Fourier.
+                                     n_mels=256,  # Mel bins.
+                                     pad=0,
+                                     to_db_scale=True,  # Converting to DB scale.
+                                     top_db=100,  # Top decibel sound.
+                                     win_length=None,
+                                     n_mfcc=20)
+                                 )
+            config.duration = 4000  # 4 sec padding or snip.
+            config.resample_to = 20000  # Every sample at 20000 frequency.
+            config.downmix = True
+            config.pad_mode = "zeros-after"  # Make deterministic: zeros at end only
 
-        # Score each 3 second clip.
-        predictions = []
-        pathList = list(pd.Series(test_data_folder.ls()).astype('str'))
-        for item in testdb.x:
-            predictions.append(self.model.predict(item)[2][1])
+            # Create an Audio DataLoader.
+            tfms = None
+            test = AudioList.from_folder(
+                local_dir, config=config).split_none().label_empty()
+            testdb = test.transform(tfms).databunch(bs=32)
 
-        # Clean folder.
-        shutil.rmtree(local_dir)
+            # Score each 3 second clip.
+            predictions = []
+            path_list = [str(p) for p in local_dir.ls()]
+            for item in testdb.x:
+                predictions.append(self.model.predict(item)[2][1])
+        # Temp directory and segment files are automatically cleaned up here.
 
         # Aggregate predictions.
 
         # Create a DataFrame.
-        prediction = pd.DataFrame({'FilePath': pathList, 'confidence': predictions})
+        prediction = pd.DataFrame({'FilePath': path_list, 'confidence': predictions})
 
         # Convert prediction to float.
         prediction['confidence'] = prediction.confidence.astype(float)
 
-        # Extract starting time from file name.
-        prediction['start_time_s'] = prediction.FilePath.apply(lambda x: int(x.split('_')[-2]))
+        # Extract starting time from the pre-built lookup; fall back to filename parsing if needed.
+        prediction['start_time_s'] = prediction.FilePath.apply(
+            lambda x: start_time_by_stem.get(Path(x).stem, int(Path(x).stem.split('_')[-2]))
+        )
 
         # Sort the file based on start_time_s.
         prediction = prediction.sort_values(
@@ -327,7 +322,7 @@ class FastAIModel(ModelInference):
         # Rolling Window (to average at per second level).
         submission = pd.DataFrame(
                 {
-                    'wav_filename': Path(wav_file_path).name,
+                    'wav_filename': wav_path.name,
                     'duration_s': 1.0,
                     'confidence': list(prediction.rolling(2)['confidence'].mean().values)
                 }
@@ -338,7 +333,7 @@ class FastAIModel(ModelInference):
 
         # Add last row.
         lastLine = pd.DataFrame({
-            'wav_filename': Path(wav_file_path).name,
+            'wav_filename': wav_path.name,
             'start_time_s': [submission.start_time_s.max()+1],
             'duration_s': 1.0,
             'confidence': [prediction.confidence[prediction.shape[0]-1]]
