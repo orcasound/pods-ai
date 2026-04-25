@@ -100,7 +100,8 @@ def load_model(mPath, mName="stg2-rn18.pkl"):
 
 # Regex anchored to end of filename; captures start time before end time.
 # End time may be integer or float (e.g. _0_3.wav or _0_2.5.wav).
-_START_TIME_RE = re.compile(r"_(\d+)_\d+(?:\.\d+)?\.wav$", re.IGNORECASE)
+# Filenames are always lowercased by extract_segments, so case-sensitive match is sufficient.
+_START_TIME_RE = re.compile(r"_(\d+)_\d+(?:\.\d+)?\.wav$")
 
 
 def _extract_start_time_seconds_from_segment_path(path_str: str) -> int:
