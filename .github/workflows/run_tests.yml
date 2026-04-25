@@ -66,12 +66,6 @@ jobs:
         working-directory: ModelTraining
         run: bash patch_fastai_audio.sh
 
-      - name: Download WAV files
-        if: steps.skip_check.outputs.should_skip != 'true'
-        working-directory: ModelTraining
-        run: |
-          python src/download_wavs.py
-
       - name: Run unit tests
         if: steps.skip_check.outputs.should_skip != 'true'
         working-directory: ModelTraining
@@ -121,12 +115,6 @@ jobs:
         working-directory: ModelTraining
         shell: cmd
         run: patch_fastai_audio.bat
-
-      - name: Download WAV files
-        if: steps.skip_check.outputs.should_skip != 'true'
-        working-directory: ModelTraining
-        run: |
-          python src/download_wavs.py
 
       - name: Run unit tests
         if: steps.skip_check.outputs.should_skip != 'true'
