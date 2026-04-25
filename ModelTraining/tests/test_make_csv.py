@@ -3,16 +3,17 @@
 """
 Unit tests for make_csv.py.
 
-Tests cover parse_pst_timestamp() and the timestamp-range filtering logic
-inside process_all_feeds().
+Tests cover parse_pst_timestamp(), the timestamp-range filtering logic
+inside process_all_feeds(), and the fail-fast behaviour of get_orcasite_feeds().
 """
 from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
 import pytest
+import requests
 from pytz import timezone as pytz_timezone
 
-from make_csv import parse_pst_timestamp, process_all_feeds, PACIFIC_TZ
+from make_csv import parse_pst_timestamp, process_all_feeds, get_orcasite_feeds, PACIFIC_TZ
 
 
 # ---------------------------------------------------------------------------
@@ -241,3 +242,25 @@ class TestCliEndArgument:
         args = parser.parse_args(["--end", "NOW"])
         end_time = None if (args.end or "").lower() == "now" else parse_pst_timestamp(args.end)
         assert end_time is None
+
+
+# ---------------------------------------------------------------------------
+# get_orcasite_feeds – fail-fast on network errors
+# ---------------------------------------------------------------------------
+
+class TestGetOrcasiteFeedsFailFast:
+    """get_orcasite_feeds() should propagate exceptions so CI fails immediately."""
+
+    def test_reraises_on_request_exception(self):
+        """A network error must propagate rather than returning an empty list."""
+        with patch("make_csv.requests.get", side_effect=requests.exceptions.Timeout("timed out")):
+            with pytest.raises(requests.exceptions.Timeout):
+                get_orcasite_feeds()
+
+    def test_reraises_on_http_error(self):
+        """An HTTP error (e.g. 503) must propagate rather than returning an empty list."""
+        mock_response = MagicMock()
+        mock_response.raise_for_status.side_effect = requests.exceptions.HTTPError("503")
+        with patch("make_csv.requests.get", return_value=mock_response):
+            with pytest.raises(requests.exceptions.HTTPError):
+                get_orcasite_feeds()

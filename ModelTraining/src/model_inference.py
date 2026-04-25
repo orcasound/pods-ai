@@ -223,6 +223,7 @@ class FastAIModel(ModelInference):
                                              min(scaled_threshold, min_num_positive_calls_threshold).
                                              Default: 3.
         """
+        super().__init__(model_path=model_path)
         self.model = load_model(model_path, model_name)
         self.threshold = threshold
         self.min_num_positive_calls_threshold = min_num_positive_calls_threshold
@@ -338,7 +339,7 @@ class FastAIModel(ModelInference):
             'duration_s': 1.0,
             'confidence': [prediction.confidence[prediction.shape[0]-1]]
             })
-        submission = submission.append(lastLine, ignore_index=True)
+        submission = pd.concat([submission, lastLine], ignore_index=True)
         submission = submission[['wav_filename', 'start_time_s', 'duration_s', 'confidence']]
 
         # Initialize output JSON.
