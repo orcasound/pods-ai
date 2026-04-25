@@ -17,9 +17,6 @@ COSMOS_URL = os.environ.get("COSMOS_URL", "").strip() or "https://aifororcasmeta
 COSMOS_KEY = os.environ.get("COSMOS_KEY", "<your-primary-key>")
 COSMOS_DB = os.environ.get("COSMOS_DB", "predictions")
 COSMOS_CONTAINER = os.environ.get("COSMOS_CONTAINER", "metadata")
-client = CosmosClient(COSMOS_URL, credential=COSMOS_KEY)
-database = client.get_database_client(COSMOS_DB)
-container = database.get_container_client(COSMOS_CONTAINER)
 
 @dataclass
 class OrcasiteFeed:
@@ -216,10 +213,14 @@ def get_orcasite_feeds() -> List[OrcasiteFeed]:
     """
     Fetch feeds from the Orcasite API and parse them into a list of OrcasiteFeed objects.
     
-    Each feed includes metadata such as id, name, node_name, slug, storage bucket info, visibility, geographic location (latitude, longitude), and optional image and CloudFront URLs. If the API request fails or the response cannot be parsed, an empty list is returned.
-    
+    Each feed includes metadata such as id, name, node_name, slug, storage bucket info, visibility, geographic location (latitude, longitude), and optional image and CloudFront URLs.
+
     Returns:
-        List[OrcasiteFeed]: A list of parsed feed objects; empty if fetching or parsing fails.
+        List[OrcasiteFeed]: A list of parsed feed objects.
+
+    Raises:
+        Exception: Re-raises any exception encountered during the HTTP request or response
+            parsing so the caller can detect and report the failure.
     """
     url = "https://live.orcasound.net/api/json/feeds"
 
@@ -254,7 +255,7 @@ def get_orcasite_feeds() -> List[OrcasiteFeed]:
 
     except Exception as e:
         print("Error fetching Orcasite feeds:", e)
-        return []
+        raise
 
 def get_orcasite_detections(feed: OrcasiteFeed) -> List[OrcasiteDetection]:
     """
@@ -359,6 +360,13 @@ def get_orcahello_detections(feed: OrcasiteFeed) -> List[OrcaHelloDetection]:
         List[OrcaHelloDetection]: A list of detections associated with the feed. Each detection's `timestamp` is a `datetime` or `None` if parsing failed, and `status` is one of `"confirmed"`, `"rejected"`, or `"unreviewed"`.
     """
     node_name = get_node_name_for_feed(feed)      # e.g., "rpi_sunset_bay"
+
+    # Build Cosmos DB container client on demand so that importing this module
+    # does not require a valid COSMOS_KEY (which matters for unit tests and
+    # local development without Cosmos credentials).
+    cosmos_client = CosmosClient(COSMOS_URL, credential=COSMOS_KEY)
+    cosmos_database = cosmos_client.get_database_client(COSMOS_DB)
+    container = cosmos_database.get_container_client(COSMOS_CONTAINER)
 
     # Cosmos DB SQL query
     query = """
