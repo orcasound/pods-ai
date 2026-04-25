@@ -1,36 +1,33 @@
 # Copyright (c) PODS-AI contributors
 # SPDX-License-Identifier: MIT
 ---
-name: Check CSV
+name: Run Tests
 
 on:
   pull_request:
     paths:
-      - 'ModelTraining/src/make_csv.py'
-      - 'ModelTraining/src/extract_training_samples.py'
-      - 'ModelTraining/src/process_humpback_wavs.py'
       - 'ModelTraining/output/csv/**'
-      - 'ModelTraining/requirements.txt'
-      - '.github/workflows/check_csv.yml'
+      - 'ModelTraining/tests/**'
+      - 'ModelTraining/src/**'
+      - '.github/workflows/run_tests.yml'
+  workflow_dispatch:
 
 concurrency:
   # Cancel any CI/CD workflow currently in progress for the same PR.
   # Allow running concurrently with any other commits.
-  group: build-${{ github.event.pull_request.number || github.sha }}
+  group: tests-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
-  make_csv_ubuntu:
+  run_tests_ubuntu:
     if: github.actor != 'dependabot[bot]'
     permissions:
       actions: write  # for fkirc/skip-duplicate-actions to skip or stop workflow runs
       contents: read  # for actions/checkout to fetch code
     runs-on: ubuntu-latest
-    env:
-      COSMOS_KEY: ${{ secrets.COSMOS_KEY }}
 
     steps:
       - name: Harden Runner
@@ -69,43 +66,25 @@ jobs:
         working-directory: ModelTraining
         run: bash patch_fastai_audio.sh
 
-      - name: Make CSV
+      - name: Download WAV files
         if: steps.skip_check.outputs.should_skip != 'true'
         working-directory: ModelTraining
         run: |
-          python src/make_csv.py --end 2026_03_17_00_00_00_PST
+          python src/download_wavs.py
 
-      - name: Verify there are no changes in detections.csv
-        if: steps.skip_check.outputs.should_skip != 'true'
-        run: |
-          git diff --exit-code
-
-      - name: Process humpback wavs
+      - name: Run unit tests
         if: steps.skip_check.outputs.should_skip != 'true'
         working-directory: ModelTraining
         run: |
-          python src/process_humpback_wavs.py
-
-      - name: Extract training samples
-        if: steps.skip_check.outputs.should_skip != 'true'
-        working-directory: ModelTraining
-        run: |
-          python src/extract_training_samples.py
-
-      - name: Verify there are no changes in training_samples.csv
-        if: steps.skip_check.outputs.should_skip != 'true'
-        run: |
-          git diff --exit-code
+          python -m pytest tests/ -v
 
 
-  make_csv_windows:
+  run_tests_windows:
     if: github.actor != 'dependabot[bot]'
     permissions:
       actions: write  # for fkirc/skip-duplicate-actions to skip or stop workflow runs
       contents: read  # for actions/checkout to fetch code
     runs-on: windows-latest
-    env:
-      COSMOS_KEY: ${{ secrets.COSMOS_KEY }}
 
     steps:
       - name: Harden Runner
@@ -143,30 +122,14 @@ jobs:
         shell: cmd
         run: patch_fastai_audio.bat
 
-      - name: Make CSV
+      - name: Download WAV files
         if: steps.skip_check.outputs.should_skip != 'true'
         working-directory: ModelTraining
         run: |
-          python src/make_csv.py --end 2026_03_17_00_00_00_PST
+          python src/download_wavs.py
 
-      - name: Verify there are no changes in detections.csv
-        if: steps.skip_check.outputs.should_skip != 'true'
-        run: |
-          git diff --exit-code
-
-      - name: Process humpback wavs
+      - name: Run unit tests
         if: steps.skip_check.outputs.should_skip != 'true'
         working-directory: ModelTraining
         run: |
-          python src/process_humpback_wavs.py
-
-      - name: Extract training samples
-        if: steps.skip_check.outputs.should_skip != 'true'
-        working-directory: ModelTraining
-        run: |
-          python src/extract_training_samples.py
-
-      - name: Verify there are no changes in training_samples.csv or testing_samples.csv
-        if: steps.skip_check.outputs.should_skip != 'true'
-        run: |
-          git diff --exit-code
+          python -m pytest tests/ -v
