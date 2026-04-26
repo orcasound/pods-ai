@@ -87,6 +87,24 @@ def _make_huggingface_model_mock(num_local: int = 10) -> MagicMock:
     return mock_model
 
 
+def _make_orcahello_model_mock(global_prediction: int = 1, global_confidence: float = 0.75,
+                               num_local: int = 5) -> MagicMock:
+    """Return a mock OrcaHello model whose predict() returns a binary result."""
+    mock_model = MagicMock()
+    local_confidences = [0.8] * num_local
+    mock_model.predict.return_value = {
+        "local_predictions": [global_prediction] * num_local,
+        "local_confidences": local_confidences,
+        "global_prediction": global_prediction,
+        "global_prediction_label": "whale" if global_prediction else "other",
+        "global_confidence": global_confidence,
+        "hop_duration": 1.0,
+        "segment_duration": 2.0,
+    }
+    return mock_model
+
+
+
 def _verify_fastai_result_structure(result: dict) -> None:
     """Verify FastAI result has expected structure and valid values."""
     assert "probabilities" in result
@@ -423,6 +441,103 @@ class TestRunInferenceFastAI:
                    (call_kwargs.args and "./model" in call_kwargs.args)
         finally:
             Path(wav_path).unlink(missing_ok=True)
+
+
+class TestRunInferenceOrcaHello:
+    """Tests for run_inference() with a mocked OrcaHello SRKW model."""
+
+    def test_returns_expected_keys(self):
+        """run_inference with orcahello returns a dict with the required keys."""
+        wav_path = _make_wav()
+        try:
+            mock_model = _make_orcahello_model_mock()
+            with patch("run_inference.get_model_inference", return_value=mock_model):
+                from run_inference import run_inference
+                result = run_inference(wav_path, model_type="orcahello",
+                                       model_path="orcasound/orcahello-srkw-detector-v1")
+
+            assert "probabilities" in result
+            assert "global_prediction_label" in result
+            assert "global_confidence" in result
+        finally:
+            Path(wav_path).unlink(missing_ok=True)
+
+    def test_probabilities_contain_two_classes(self):
+        """OrcaHello output should contain exactly 'other' and 'whale' classes."""
+        wav_path = _make_wav()
+        try:
+            mock_model = _make_orcahello_model_mock()
+            with patch("run_inference.get_model_inference", return_value=mock_model):
+                from run_inference import run_inference
+                result = run_inference(wav_path, model_type="orcahello",
+                                       model_path="orcasound/orcahello-srkw-detector-v1")
+
+            assert set(result["probabilities"].keys()) == {"other", "whale"}
+        finally:
+            Path(wav_path).unlink(missing_ok=True)
+
+    def test_orcahello_probabilities_sum_to_one(self):
+        """'other' and 'whale' probabilities should sum to 1.0."""
+        wav_path = _make_wav()
+        try:
+            mock_model = _make_orcahello_model_mock(global_confidence=0.75, num_local=5)
+            with patch("run_inference.get_model_inference", return_value=mock_model):
+                from run_inference import run_inference
+                result = run_inference(wav_path, model_type="orcahello",
+                                       model_path="orcasound/orcahello-srkw-detector-v1")
+
+            total = sum(result["probabilities"].values())
+            assert abs(total - 1.0) < 1e-3
+        finally:
+            Path(wav_path).unlink(missing_ok=True)
+
+    def test_global_prediction_whale_when_positive(self):
+        """When global_prediction=1, global_prediction_label should be 'whale'."""
+        wav_path = _make_wav()
+        try:
+            mock_model = _make_orcahello_model_mock(global_prediction=1, global_confidence=0.8)
+            with patch("run_inference.get_model_inference", return_value=mock_model):
+                from run_inference import run_inference
+                result = run_inference(wav_path, model_type="orcahello",
+                                       model_path="orcasound/orcahello-srkw-detector-v1")
+
+            assert result["global_prediction_label"] == "whale"
+            assert abs(result["global_confidence"] - 0.8) < 1e-6
+        finally:
+            Path(wav_path).unlink(missing_ok=True)
+
+    def test_global_prediction_other_when_negative(self):
+        """When global_prediction=0, global_prediction_label should be 'other'."""
+        wav_path = _make_wav()
+        try:
+            mock_model = _make_orcahello_model_mock(global_prediction=0, global_confidence=0.0)
+            with patch("run_inference.get_model_inference", return_value=mock_model):
+                from run_inference import run_inference
+                result = run_inference(wav_path, model_type="orcahello",
+                                       model_path="orcasound/orcahello-srkw-detector-v1")
+
+            assert result["global_prediction_label"] == "other"
+        finally:
+            Path(wav_path).unlink(missing_ok=True)
+
+    def test_defaults_model_path_to_orcahello_hub(self):
+        """When model_path is None for orcahello, get_model_inference uses orcahello-srkw-detector-v1."""
+        wav_path = _make_wav()
+        try:
+            mock_model = _make_orcahello_model_mock()
+            with patch("run_inference.get_model_inference", return_value=mock_model) as mock_factory:
+                from run_inference import run_inference
+                run_inference(wav_path, model_type="orcahello", model_path=None)
+
+            mock_factory.assert_called_once()
+            call_kwargs = mock_factory.call_args
+            model_path_arg = call_kwargs.kwargs.get("model_path") or (
+                call_kwargs.args[0] if call_kwargs.args else None
+            )
+            assert model_path_arg == "orcasound/orcahello-srkw-detector-v1"
+        finally:
+            Path(wav_path).unlink(missing_ok=True)
+
 
 
 class TestRunInferenceErrors:
@@ -792,3 +907,55 @@ class TestIntegrationWithRealModels:
         # Require exact label match for per-category testing WAV fixtures.
         _verify_huggingface_prediction(result, label, allow_category_match=False)
         _print_huggingface_result(result, f"testing-{label}")
+
+    @pytest.fixture
+    def orcahello_model_path(self) -> str:
+        """HuggingFace Hub model ID for the OrcaHello SRKW detector."""
+        hub_id = "orcasound/orcahello-srkw-detector-v1"
+        try:
+            from huggingface_hub import file_exists as hf_file_exists
+            if not hf_file_exists(hub_id, "config.json"):
+                pytest.skip(
+                    f"Hub model '{hub_id}' is not accessible. "
+                    f"Check your internet connection and HuggingFace Hub availability."
+                )
+        except Exception:
+            pytest.skip(f"HuggingFace Hub is not reachable; cannot load model '{hub_id}'")
+        return hub_id
+
+    @pytest.mark.parametrize("wav_fixture,label,xfail_reason", [
+        ("resident_wav_path", "resident", None),
+        ("transient_wav_path", "transient", None),
+        ("humpback_wav_path", "humpback",
+         "OrcaHello SRKW detector may not reliably classify humpback as whale"),
+        ("vessel_wav_path", "vessel",
+         "OrcaHello SRKW detector may predict whale on vessel noise clips"),
+        ("water_wav_path", "water",
+         "OrcaHello SRKW detector may predict whale on ambient water clips"),
+        ("human_wav_path", "human",
+         "OrcaHello SRKW detector may predict whale on human voice clips"),
+        ("jingle_wav_path", "jingle",
+         "OrcaHello SRKW detector may predict whale on jingle clips"),
+    ])
+    def test_orcahello_model_inference(
+        self,
+        wav_fixture: str,
+        label: str,
+        xfail_reason: Optional[str],
+        orcahello_model_path: str,
+        request: pytest.FixtureRequest,
+    ) -> None:
+        """Test OrcaHello SRKW detector inference on various audio types."""
+        from run_inference import run_inference
+
+        if xfail_reason:
+            request.node.add_marker(pytest.mark.xfail(reason=xfail_reason, strict=False))
+
+        wav_path = request.getfixturevalue(wav_fixture)
+        result = run_inference(wav_path, model_type="orcahello", model_path=orcahello_model_path)
+
+        # OrcaHello is a binary model: "whale" or "other".
+        _verify_fastai_result_structure(result)
+        _verify_fastai_prediction(result, label)
+        _print_fastai_result(result, f"orcahello-{label}")
+
