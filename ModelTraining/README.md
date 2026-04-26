@@ -214,6 +214,14 @@ Uses the [`orcasound/orcahello-srkw-detector-v1`](https://huggingface.co/orcasou
 model from HuggingFace Hub. This is a binary SRKW (Southern Resident Killer Whale) detector
 based on the new OrcaHello inference pipeline (ResNet50 + mel spectrograms, no fastai_audio dependency).
 
+The model implementation is loaded from the `orcasound/orcahello` submodule. Initialize it first:
+
+```bash
+git submodule update --init external/orcahello
+```
+
+Then run inference:
+
 ```bash
 cd src
 python run_inference.py sample.wav --model orcahello
