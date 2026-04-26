@@ -511,8 +511,8 @@ class TestIntegrationWithRealModels:
         path = Path("model")
         if not path.exists():
             # Attempt to download the model automatically before skipping.
+            from model_inference import download_model_if_needed
             try:
-                from model_inference import download_model_if_needed
                 download_model_if_needed(str(path))
             except Exception as e:
                 pytest.skip(f"FastAI model download failed: {e}")
