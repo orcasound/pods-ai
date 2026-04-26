@@ -181,9 +181,12 @@ class HuggingFaceInference(ModelInference):  # Inherit from ModelInference
             return {
                 "local_predictions": [],
                 "local_confidences": [],
+                "local_probs": [],
                 "global_prediction": primary_negative_id,
                 "global_prediction_label": self.id2label[primary_negative_id],
                 "global_confidence": 0.0,
+                "hop_duration": float(hop_duration),
+                "segment_duration": float(segment_duration),
             }
 
         # Handle empty audio. This can happen if the file is corrupted or has no valid audio data.
@@ -192,9 +195,12 @@ class HuggingFaceInference(ModelInference):  # Inherit from ModelInference
             return {
                 "local_predictions": [],
                 "local_confidences": [],
+                "local_probs": [],
                 "global_prediction": primary_negative_id,
                 "global_prediction_label": self.id2label[primary_negative_id],
                 "global_confidence": 0.0,
+                "hop_duration": float(hop_duration),
+                "segment_duration": float(segment_duration),
             }
 
         # Calculate segment and hop sizes in samples.
@@ -261,9 +267,12 @@ class HuggingFaceInference(ModelInference):  # Inherit from ModelInference
             return {
                 "local_predictions": [],
                 "local_confidences": [],
+                "local_probs": [],
                 "global_prediction": primary_negative_id,
                 "global_prediction_label": self.id2label[primary_negative_id],
                 "global_confidence": 0.0,
+                "hop_duration": float(hop_duration),
+                "segment_duration": float(segment_duration),
             }
 
         # Apply rolling average to smooth predictions (matching FastAI behavior).

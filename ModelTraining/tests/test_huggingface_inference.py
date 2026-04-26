@@ -276,6 +276,8 @@ class TestHuggingFaceInferenceIndexing:
         assert "global_prediction" in result
         assert "global_confidence" in result
         assert "global_prediction_label" in result
+        assert "hop_duration" in result
+        assert "segment_duration" in result
         
         # Check types.
         assert isinstance(result["local_predictions"], list)
@@ -283,6 +285,8 @@ class TestHuggingFaceInferenceIndexing:
         assert isinstance(result["global_prediction"], int)
         assert isinstance(result["global_confidence"], float)
         assert isinstance(result["global_prediction_label"], str)
+        assert isinstance(result["hop_duration"], float)
+        assert isinstance(result["segment_duration"], float)
         
         # Check lengths match.
         assert len(result["local_predictions"]) == len(result["local_confidences"])
@@ -291,6 +295,8 @@ class TestHuggingFaceInferenceIndexing:
         assert 0.0 <= result["global_confidence"] <= 1.0
         assert all(0.0 <= c <= 1.0 for c in result["local_confidences"])
         assert all(isinstance(p, int) for p in result["local_predictions"])
+        assert result["hop_duration"] == 2.0
+        assert result["segment_duration"] == 3.0
     
     @patch('huggingface_inference.Wav2Vec2ForSequenceClassification')
     @patch('huggingface_inference.Wav2Vec2FeatureExtractor')
@@ -319,9 +325,13 @@ class TestHuggingFaceInferenceIndexing:
             # Should return empty predictions with negative class.
             assert result["local_predictions"] == []
             assert result["local_confidences"] == []
+            assert result["local_probs"] == []
             # global_prediction should be one of the negative classes (water=0, vessel=4, jingle=5, human=6)
             assert result["global_prediction"] in [0, 4, 5, 6]
             assert result["global_confidence"] == 0.0
+            # Error returns must always include hop_duration and segment_duration (matching orcahello behavior).
+            assert result["hop_duration"] == 2.0
+            assert result["segment_duration"] == 3.0
         finally:
             Path(audio_path).unlink(missing_ok=True)
     
@@ -396,9 +406,13 @@ class TestHuggingFaceInferenceErrorHandling:
         # Should return error response with negative prediction.
         assert result["local_predictions"] == []
         assert result["local_confidences"] == []
+        assert result["local_probs"] == []
         # Should be one of the negative classes (water=0, vessel=4, jingle=5, human=6)
         assert result["global_prediction"] in [0, 4, 5, 6]
         assert result["global_confidence"] == 0.0
+        # Error returns must always include hop_duration and segment_duration (matching orcahello behavior).
+        assert result["hop_duration"] == 2.0
+        assert result["segment_duration"] == 3.0
     
     @patch('huggingface_inference.Wav2Vec2ForSequenceClassification')
     @patch('huggingface_inference.Wav2Vec2FeatureExtractor')
