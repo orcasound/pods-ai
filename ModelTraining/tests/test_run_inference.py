@@ -105,6 +105,7 @@ def _make_orcahello_model_mock(global_prediction: int = 1, global_confidence: fl
 
 
 
+def _verify_fastai_result_structure(result: dict) -> None:
     """Verify FastAI result has expected structure and valid values."""
     assert "probabilities" in result
     assert "global_prediction_label" in result

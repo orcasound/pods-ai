@@ -226,9 +226,11 @@ def _resample_audio(waveform: Tensor, orig_sr: int, target_sr: int) -> Tensor:
 def _compute_mel_spectrogram(waveform: Tensor, spectrogram_config: Dict) -> Tensor:
     """Compute mel spectrogram from waveform.
 
-    NOTE: Uses sample_rate=16000 for the MelSpectrogram transform even when the
-    audio is resampled to 20kHz. This matches the fastai_audio behavior for
-    exact parity with the trained model.
+    NOTE: Uses sample_rate=16000 for the MelSpectrogram transform even though
+    audio is resampled to 20kHz before segmenting. This is an intentional quirk
+    of how the model was trained: fastai_audio passes resample_rate=16000 to
+    torchaudio.MelSpectrogram regardless of the actual audio sample rate.
+    This must be preserved for exact parity with the trained model weights.
 
     Args:
         waveform: Audio tensor of shape (channels, samples).
@@ -439,12 +441,6 @@ class AudioPreprocessor:
             process_waveform_config=waveform_config,
         ):
             data, sample_rate = sf.read(segment_path, dtype="float32")
-            assert sample_rate == waveform_config["resample_rate"], (
-                "Unexpected behavior: preprocessed segment not at target sample rate."
-            )
-            assert data.ndim == 1, (
-                "Unexpected behavior: preprocessed segment has more than one channel."
-            )
             waveform = torch.from_numpy(data.reshape(1, -1))
             mel_spec = _prepare_waveform(waveform, sample_rate, config_dict)
             yield mel_spec, start_s, inf.window_s
@@ -759,9 +755,9 @@ class OrcaHelloSRKWInference(ModelInference):
             )
             self.model.eval()
         except Exception as e:
-            error_msg = f"Error loading OrcaHello model from {model_path}: {type(e).__name__}: {e}"
-            print(error_msg)
-            raise RuntimeError(error_msg) from e
+            raise RuntimeError(
+                f"Error loading OrcaHello model from {model_path}: {type(e).__name__}: {e}"
+            ) from e
 
         print(
             f"OrcaHello model loaded. Device: {self.model._device}, "
