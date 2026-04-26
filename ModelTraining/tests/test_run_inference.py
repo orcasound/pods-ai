@@ -510,7 +510,14 @@ class TestIntegrationWithRealModels:
         """Path to the FastAI model directory."""
         path = Path("model")
         if not path.exists():
-            pytest.skip(f"FastAI model directory not found: {path}")
+            # Attempt to download the model automatically before skipping.
+            try:
+                from model_inference import download_model_if_needed
+                download_model_if_needed(str(path))
+            except Exception as e:
+                pytest.skip(f"FastAI model download failed: {e}")
+            if not path.exists():
+                pytest.skip(f"FastAI model directory not found: {path}")
         return str(path)
 
     @pytest.fixture

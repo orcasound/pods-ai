@@ -457,7 +457,7 @@ def download_model_if_needed(model_path: str = "./model",
     import io
 
     model_dir = Path(model_path)
-    model_file = model_dir / "model.pkl"
+    model_file = model_dir / "stg2-rn18.pkl"
 
     # Check if model already exists.
     if model_file.exists():
@@ -582,7 +582,7 @@ def get_model_inference(model_path: Optional[str] = None, model_type: str = "fas
             model_path = "./model"
 
         # Check if model exists, download if requested.
-        model_file = Path(model_path) / "model.pkl"
+        model_file = Path(model_path) / "stg2-rn18.pkl"
         if not model_file.exists() and auto_download:
             if not download_model_if_needed(model_path, model_url):
                 raise FileNotFoundError(
@@ -598,7 +598,7 @@ def get_model_inference(model_path: Optional[str] = None, model_type: str = "fas
             if k in ('threshold', 'min_num_positive_calls_threshold')
         }
 
-        return FastAIModel(model_path=model_path, model_name="model.pkl", **fastai_kwargs)
+        return FastAIModel(model_path=model_path, **fastai_kwargs)
     else:
         raise ValueError(
             f"Unknown model type: {model_type}. "
