@@ -18,6 +18,7 @@ The pretrained FastAI model is typically named "model.pkl" and should be placed 
 a "model" directory.
 """
 
+import gc
 import os
 import tempfile
 import torch
@@ -205,10 +206,16 @@ class FastAIModel(ModelInference):
     This implementation uses the FastAI model architecture from aifororcas-livesystem.
     The model processes 3-second segments with 1-second hop to generate per-second scores.
     The model file (typically model.pkl) should be available in the model_path directory.
+
+    When the orcahello submodule is initialized, get_model_inference() will prefer
+    LegacyFastAIInference (from fastai_inference.py) which supports GPU acceleration.
+    This class serves as a CPU-only fallback when the submodule is unavailable.
     """
 
     def __init__(self, model_path: str = "./model", model_name: str = "stg2-rn18.pkl",
-                 threshold: float = 0.5, min_num_positive_calls_threshold: int = 3):
+                 threshold: float = 0.5, min_num_positive_calls_threshold: int = 3,
+                 use_gpu: bool = False, smooth_predictions: bool = True,
+                 batch_size: int = 32):
         """
         Initialize FastAI model inference.
 
@@ -222,19 +229,36 @@ class FastAIModel(ModelInference):
                                              positives from very short clips. The effective threshold is
                                              min(scaled_threshold, min_num_positive_calls_threshold).
                                              Default: 3.
+            use_gpu: If True, move the model to CUDA at initialization when a GPU is available.
+                     Avoids repeated host-to-device transfers during inference.  Default: False.
+            smooth_predictions: If True, apply a rolling-average window to smooth per-segment
+                                predictions before thresholding.  Default: True.
+            batch_size: Number of audio segments to score in each DataLoader batch.
+                        Larger values improve GPU throughput; reduce if you run out of memory.
+                        Default: 32.
         """
         super().__init__(model_path=model_path)
         self.model = load_model(model_path, model_name)
         self.threshold = threshold
         self.min_num_positive_calls_threshold = min_num_positive_calls_threshold
+        self.use_gpu = use_gpu
+        self.smooth_predictions = smooth_predictions
+        self.batch_size = batch_size
 
+        # Perform GPU device placement once at initialization to avoid repeated
+        # host-to-device transfers during inference (improvement from legacy code).
+        if self.use_gpu and torch.cuda.is_available():
+            self.model.model.cuda()
+        else:
+            self.model.model.cpu()
 
     def predict(self, wav_file_path):
         '''
         Function which generates local predictions using wavefile.
 
-        Processes 3-second segments with 1-second hop, applies rolling average,
-        and returns per-second predictions (0.0-1.0) and a global confidence (0.0-1.0).
+        Processes 3-second segments with 1-second hop, optionally applies rolling
+        average smoothing, and returns per-second predictions (0.0-1.0) and a global
+        confidence (0.0-1.0).
         '''
         wav_path = Path(wav_file_path)
 
@@ -294,13 +318,20 @@ class FastAIModel(ModelInference):
             tfms = None
             test = AudioList.from_folder(
                 local_dir, config=config).split_none().label_empty()
-            testdb = test.transform(tfms).databunch(bs=32)
+            testdb = test.transform(tfms).databunch(bs=self.batch_size)
 
             # Score each 3 second clip.
             predictions = []
             path_list = [str(p) for p in local_dir.ls()]
             for item in testdb.x:
                 predictions.append(self.model.predict(item)[2][1])
+
+            # Explicitly release fastai objects to encourage immediate memory reclamation.
+            del test
+            del testdb
+            gc.collect()
+            if self.use_gpu and torch.cuda.is_available():
+                torch.cuda.empty_cache()
         # Temp directory and segment files are automatically cleaned up here.
 
         # Aggregate predictions.
@@ -320,27 +351,36 @@ class FastAIModel(ModelInference):
         prediction = prediction.sort_values(
             ['start_time_s']).reset_index(drop=True)
 
-        # Rolling Window (to average at per second level).
-        submission = pd.DataFrame(
-                {
-                    'wav_filename': wav_path.name,
-                    'duration_s': 1.0,
-                    'confidence': list(prediction.rolling(2)['confidence'].mean().values)
-                }
-            ).reset_index().rename(columns={'index': 'start_time_s'})
+        if self.smooth_predictions:
+            # Rolling Window (to average at per second level).
+            submission = pd.DataFrame(
+                    {
+                        'wav_filename': wav_path.name,
+                        'duration_s': 1.0,
+                        'confidence': list(prediction.rolling(2)['confidence'].mean().values)
+                    }
+                ).reset_index().rename(columns={'index': 'start_time_s'})
 
-        # Update first row.
-        submission.loc[0, 'confidence'] = prediction.confidence[0]
+            # Update first row.
+            submission.loc[0, 'confidence'] = prediction.confidence[0]
 
-        # Add last row.
-        lastLine = pd.DataFrame({
-            'wav_filename': wav_path.name,
-            'start_time_s': [submission.start_time_s.max()+1],
-            'duration_s': 1.0,
-            'confidence': [prediction.confidence[prediction.shape[0]-1]]
+            # Add last row.
+            lastLine = pd.DataFrame({
+                'wav_filename': wav_path.name,
+                'start_time_s': [submission.start_time_s.max()+1],
+                'duration_s': 1.0,
+                'confidence': [prediction.confidence[prediction.shape[0]-1]]
+                })
+            submission = pd.concat([submission, lastLine], ignore_index=True)
+            submission = submission[['wav_filename', 'start_time_s', 'duration_s', 'confidence']]
+        else:
+            # No smoothing — use raw per-segment predictions directly.
+            submission = pd.DataFrame({
+                'wav_filename': wav_path.name,
+                'start_time_s': prediction['start_time_s'],
+                'duration_s': 3.0,  # Each segment is 3 seconds.
+                'confidence': prediction['confidence']
             })
-        submission = pd.concat([submission, lastLine], ignore_index=True)
-        submission = submission[['wav_filename', 'start_time_s', 'duration_s', 'confidence']]
 
         # Initialize output JSON.
         result_json = {}
@@ -612,12 +652,26 @@ def get_model_inference(model_path: Optional[str] = None, model_type: str = "fas
                 )
 
         # Filter kwargs to only include parameters supported by FastAIModel.
-        # FastAIModel accepts: threshold, min_num_positive_calls_threshold.
+        # FastAIModel accepts: threshold, min_num_positive_calls_threshold, use_gpu, smooth_predictions, batch_size.
         fastai_kwargs = {
             k: v for k, v in kwargs.items()
-            if k in ('threshold', 'min_num_positive_calls_threshold')
+            if k in ('threshold', 'min_num_positive_calls_threshold', 'use_gpu', 'smooth_predictions', 'batch_size')
         }
 
+        # Prefer the legacy FastAIModel from the orcahello submodule when it is
+        # available.  The legacy model supports GPU device placement at init and
+        # configurable prediction smoothing, providing better performance.  Fall
+        # back to the built-in FastAIModel when the submodule is not initialized.
+        try:
+            from fastai_inference import get_legacy_fastai_inference  # noqa: PLC0415
+
+            return get_legacy_fastai_inference(
+                model_path=model_path, model_name="model.pkl", **fastai_kwargs
+            )
+        except ImportError:
+            pass
+
+        # Built-in fallback (no submodule required).
         return FastAIModel(model_path=model_path, model_name="model.pkl", **fastai_kwargs)
     else:
         raise ValueError(

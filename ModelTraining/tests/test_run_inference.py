@@ -443,8 +443,168 @@ class TestRunInferenceFastAI:
             Path(wav_path).unlink(missing_ok=True)
 
 
+# ---------------------------------------------------------------------------
+# Tests for LegacyFastAIInference (fastai_inference.py wrapper)
+# ---------------------------------------------------------------------------
+
+class TestLegacyFastAIInference:
+    """Tests for LegacyFastAIInference — the wrapper around the orcahello legacy model."""
+
+    def _make_legacy_model_mock(self, global_confidence_pct: float = 75.0,
+                                global_prediction: int = 1, num_local: int = 5) -> MagicMock:
+        """Return a mock legacy FastAIModel whose predict() uses the legacy output format.
+
+        The legacy model returns global_confidence as a percentage (0-100) and does
+        not include hop_duration or segment_duration in its output.
+        """
+        mock = MagicMock()
+        local_confidences = [0.8] * num_local
+        mock.predict.return_value = {
+            "local_predictions": [global_prediction] * num_local,
+            "local_confidences": local_confidences,
+            "global_prediction": global_prediction,
+            "global_confidence": global_confidence_pct,  # legacy returns 0-100
+        }
+        return mock
+
+    def _make_legacy_class_mock(self, instance_mock: MagicMock) -> MagicMock:
+        """Wrap an instance mock in a class mock so construction returns the instance."""
+        cls_mock = MagicMock(return_value=instance_mock)
+        return cls_mock
+
+    def test_predict_converts_global_confidence_to_fraction(self):
+        """LegacyFastAIInference.predict() converts legacy 0-100 confidence to 0-1."""
+        instance = self._make_legacy_model_mock(global_confidence_pct=75.0)
+        cls_mock = self._make_legacy_class_mock(instance)
+
+        with patch("fastai_inference._get_legacy_fastai_model_class", return_value=cls_mock):
+            from fastai_inference import LegacyFastAIInference
+            wrapper = LegacyFastAIInference.__new__(LegacyFastAIInference)
+            wrapper._legacy = instance
+            wrapper.threshold = 0.5
+            wrapper.min_num_positive_calls_threshold = 3
+
+        result = wrapper.predict("/fake/path.wav")
+        assert result["global_confidence"] <= 1.0, (
+            f"Expected global_confidence in 0-1 range, got {result['global_confidence']}"
+        )
+        assert abs(result["global_confidence"] - 0.75) < 1e-4
+
+    def test_predict_adds_hop_and_segment_duration(self):
+        """LegacyFastAIInference.predict() adds hop_duration and segment_duration."""
+        instance = self._make_legacy_model_mock()
+        cls_mock = self._make_legacy_class_mock(instance)
+
+        with patch("fastai_inference._get_legacy_fastai_model_class", return_value=cls_mock):
+            from fastai_inference import LegacyFastAIInference
+            wrapper = LegacyFastAIInference.__new__(LegacyFastAIInference)
+            wrapper._legacy = instance
+            wrapper.threshold = 0.5
+            wrapper.min_num_positive_calls_threshold = 3
+
+        result = wrapper.predict("/fake/path.wav")
+        assert "hop_duration" in result
+        assert "segment_duration" in result
+        assert result["hop_duration"] == 1.0
+        assert result["segment_duration"] == 2.0
+
+    def test_predict_preserves_local_predictions_and_confidences(self):
+        """LegacyFastAIInference.predict() passes through local predictions and confidences."""
+        local_preds = [1, 0, 1, 1, 0]
+        local_confs = [0.9, 0.3, 0.8, 0.7, 0.2]
+        instance = MagicMock()
+        instance.predict.return_value = {
+            "local_predictions": local_preds,
+            "local_confidences": local_confs,
+            "global_prediction": 1,
+            "global_confidence": 70.0,
+        }
+
+        with patch("fastai_inference._get_legacy_fastai_model_class", return_value=MagicMock()):
+            from fastai_inference import LegacyFastAIInference
+            wrapper = LegacyFastAIInference.__new__(LegacyFastAIInference)
+            wrapper._legacy = instance
+            wrapper.threshold = 0.5
+            wrapper.min_num_positive_calls_threshold = 3
+
+        result = wrapper.predict("/fake/path.wav")
+        assert result["local_predictions"] == local_preds
+        assert result["local_confidences"] == local_confs
+
+    def test_predict_applies_segment_group_size_scaling(self):
+        """LegacyFastAIInference applies SEGMENT_GROUP_SIZE threshold scaling."""
+        # With only 5 segments (< SEGMENT_GROUP_SIZE=10), scaled_threshold=1.
+        # Sum of predictions=1 >= effective_threshold=1 → global_prediction=1.
+        instance = MagicMock()
+        instance.predict.return_value = {
+            "local_predictions": [1, 0, 0, 0, 0],  # only 1 positive
+            "local_confidences": [0.8, 0.2, 0.2, 0.2, 0.2],
+            "global_prediction": 0,
+            "global_confidence": 50.0,
+        }
+
+        with patch("fastai_inference._get_legacy_fastai_model_class", return_value=MagicMock()):
+            from fastai_inference import LegacyFastAIInference
+            wrapper = LegacyFastAIInference.__new__(LegacyFastAIInference)
+            wrapper._legacy = instance
+            wrapper.threshold = 0.5
+            wrapper.min_num_positive_calls_threshold = 3
+
+        result = wrapper.predict("/fake/path.wav")
+        # 5 segments → scaled_threshold=1, effective=min(1,3)=1; 1 positive >= 1 → prediction=1
+        assert result["global_prediction"] == 1
+
+    def test_get_model_inference_falls_back_when_legacy_unavailable(self):
+        """get_model_inference falls back to FastAIModel when fastai_inference raises ImportError."""
+        with patch("model_inference.FastAIModel") as mock_fastai_cls, \
+             patch("model_inference.Path") as mock_path_cls:
+            # Simulate model file existing so no download is attempted.
+            mock_path_instance = MagicMock()
+            mock_path_instance.__truediv__ = MagicMock(return_value=mock_path_instance)
+            mock_path_instance.exists.return_value = True
+            mock_path_cls.return_value = mock_path_instance
+
+            import sys
+            # Inject a fake 'fastai_inference' module that raises ImportError.
+            fake_module = MagicMock()
+            fake_module.get_legacy_fastai_inference.side_effect = ImportError("submodule not found")
+            sys.modules["fastai_inference"] = fake_module
+
+            try:
+                from model_inference import get_model_inference
+                get_model_inference(model_path="./model", model_type="fastai")
+                mock_fastai_cls.assert_called_once()
+            finally:
+                del sys.modules["fastai_inference"]
+
+    def test_get_model_inference_uses_legacy_when_available(self):
+        """get_model_inference uses LegacyFastAIInference when fastai_inference is importable."""
+        mock_legacy_model = MagicMock()
+        mock_get_legacy = MagicMock(return_value=mock_legacy_model)
+
+        import sys
+        fake_module = MagicMock()
+        fake_module.get_legacy_fastai_inference = mock_get_legacy
+        sys.modules["fastai_inference"] = fake_module
+
+        with patch("model_inference.Path") as mock_path_cls:
+            mock_path_instance = MagicMock()
+            mock_path_instance.__truediv__ = MagicMock(return_value=mock_path_instance)
+            mock_path_instance.exists.return_value = True
+            mock_path_cls.return_value = mock_path_instance
+
+            try:
+                from model_inference import get_model_inference
+                result = get_model_inference(model_path="./model", model_type="fastai")
+                mock_get_legacy.assert_called_once()
+                assert result is mock_legacy_model
+            finally:
+                del sys.modules["fastai_inference"]
+
+
 class TestRunInferenceOrcaHello:
     """Tests for run_inference() with a mocked OrcaHello SRKW model."""
+
 
     def test_returns_expected_keys(self):
         """run_inference with orcahello returns a dict with the required keys."""
