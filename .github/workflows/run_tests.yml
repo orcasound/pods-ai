@@ -66,6 +66,14 @@ jobs:
         working-directory: ModelTraining
         run: bash patch_fastai_audio.sh
 
+      - name: Download FastAI model
+        if: steps.skip_check.outputs.should_skip != 'true'
+        working-directory: ModelTraining
+        run: |
+          mkdir -p model
+          curl -o model.zip https://trainedproductionmodels.blob.core.windows.net/dnnmodel/11-15-20.FastAI.R1-12.zip
+          unzip model.zip -d .
+
       - name: Run unit tests
         if: steps.skip_check.outputs.should_skip != 'true'
         working-directory: ModelTraining
@@ -115,6 +123,14 @@ jobs:
         working-directory: ModelTraining
         shell: cmd
         run: patch_fastai_audio.bat
+
+      - name: Download FastAI model
+        if: steps.skip_check.outputs.should_skip != 'true'
+        working-directory: ModelTraining
+        run: |
+          New-Item -ItemType Directory -Force -Path model
+          Invoke-WebRequest -Uri https://trainedproductionmodels.blob.core.windows.net/dnnmodel/11-15-20.FastAI.R1-12.zip -OutFile model.zip
+          Expand-Archive -Path model.zip -DestinationPath . -Force
 
       - name: Run unit tests
         if: steps.skip_check.outputs.should_skip != 'true'
