@@ -1,3 +1,6 @@
 [submodule "external/signals-humpback"]
 	path = external/signals-humpback
 	url = https://github.com/orcasound/signals-humpback
+[submodule "external/orcahello"]
+	path = external/orcahello
+	url = https://github.com/orcasound/orcahello

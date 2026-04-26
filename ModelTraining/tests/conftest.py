@@ -26,6 +26,7 @@ _OPTIONAL_DEPS = [
     'torch',
     'torchvision',
     'torchaudio',
+    'torchaudio.transforms',
     'fastai',
     'fastai.basic_train',
     'pydub',
@@ -34,6 +35,9 @@ _OPTIONAL_DEPS = [
     'soundfile',
     'audio',
     'audio.data',
+    'scipy',
+    'scipy.signal',
+    'huggingface_hub',
 ]
 for _dep in _OPTIONAL_DEPS:
     if _dep not in sys.modules:

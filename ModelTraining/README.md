@@ -160,14 +160,14 @@ the model's threshold — the same statistic used for `global_confidence`.  For 
 binary model, `whale = global_confidence` and `other = 1 - global_confidence`.
 
 ```
-usage: python run_inference.py <wav_file> [--model {huggingface,fastai}] [--model-path PATH]
+usage: python run_inference.py <wav_file> [--model {huggingface,fastai,orcahello}] [--model-path PATH]
 ```
 
 | Argument | Description |
 |---|---|
 | `wav_file` | Path to the wav file to score |
-| `--model` | Model type: `huggingface` (default) or `fastai` |
-| `--model-path` | Path to model directory or HuggingFace Hub model ID. Required for `huggingface`; defaults to `./model` for `fastai` |
+| `--model` | Model type: `huggingface` (default), `fastai`, or `orcahello` |
+| `--model-path` | Path to model directory or HuggingFace Hub model ID. Required for `huggingface`; defaults to `./model` for `fastai`; defaults to `orcasound/orcahello-srkw-detector-v1` for `orcahello` |
 
 **Example — HuggingFace model**
 
@@ -207,6 +207,38 @@ Per-class probabilities:
   other: 0.2500
   whale: 0.7500
 ```
+
+**Example — OrcaHello SRKW Detector**
+
+Uses the [`orcasound/orcahello-srkw-detector-v1`](https://huggingface.co/orcasound/orcahello-srkw-detector-v1)
+model from HuggingFace Hub. This is a binary SRKW (Southern Resident Killer Whale) detector
+based on the new OrcaHello inference pipeline (ResNet50 + mel spectrograms, no fastai_audio dependency).
+
+The model implementation is loaded from the `orcasound/orcahello` submodule. Initialize it first:
+
+```bash
+git submodule update --init external/orcahello
+```
+
+Then run inference:
+
+```bash
+cd src
+python run_inference.py sample.wav --model orcahello
+```
+
+Output:
+```
+Model type: orcahello
+Global prediction: whale (confidence: 0.8000)
+
+Per-class probabilities:
+  other: 0.2000
+  whale: 0.8000
+```
+
+You can compare results between the FastAI model and the OrcaHello model by running both on the
+same file and comparing the output.
 
 ### get_best_timestamp.py
 

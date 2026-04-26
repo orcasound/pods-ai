@@ -12,6 +12,7 @@ pandas>=1.1.0,<2.0
 pydub==0.24.1
 pytz
 requests
+scipy
 soundfile
 spacy>=3.5.4
 fastai==1.0.61
