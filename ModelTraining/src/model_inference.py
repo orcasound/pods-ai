@@ -8,18 +8,17 @@ This module provides a simple interface for running model inference on audio fil
 to score segments using a sliding window approach. It can be extended to support
 different model types.
 
-For production use, this can be integrated with aifororcas-livesystem's
-LiveInferenceOrchestrator.py which uses DateRangeHLSStream to download and score
+For production use, this can be integrated with orcahello's
+LiveInferenceOrchestrator.py which uses OrcaHelloSRKWDetectorV1 to download and score
 audio from specific time ranges. See:
-https://github.com/orcasound/aifororcas-livesystem/blob/main/InferenceSystem/src/LiveInferenceOrchestrator.py
-https://github.com/orcasound/aifororcas-livesystem/blob/main/InferenceSystem/config/Test/Positive/FastAI_DateRangeHLS_AndrewsBay.yml
+https://github.com/orcasound/orcahello/blob/main/InferenceSystem/src/LiveInferenceOrchestrator.py
+https://github.com/orcasound/orcahello/blob/main/InferenceSystem/src/model/inference.py
 
 The pretrained FastAI model is typically named "model.pkl" and should be placed in
 a "model" directory.
 """
 
 import os
-import re
 import tempfile
 import torch
 import pandas as pd
@@ -98,37 +97,6 @@ def load_model(mPath, mName="stg2-rn18.pkl"):
     return load_learner(mPath, mName)
 
 
-# Regex anchored to end of filename; captures start time before end time.
-# End time may be integer or float (e.g. _0_3.wav or _0_2.5.wav).
-# Filenames are always lowercased by extract_segments, so case-sensitive match is sufficient.
-_START_TIME_RE = re.compile(r"_(\d+)_\d+(?:\.\d+)?\.wav$")
-
-
-def _extract_start_time_seconds_from_segment_path(path_str: str) -> int:
-    """
-    Extract the segment start time from a generated segment filename.
-
-    Expected suffix pattern (from extract_segments):
-      ..._<begin>_<end>.wav
-
-    Regex is anchored to the end so underscores in the base wav filename do not break parsing.
-
-    Args:
-        path_str: Path to the segment wav file.
-
-    Returns:
-        Start time in seconds as an integer.
-
-    Raises:
-        ValueError: If the start time cannot be parsed from the filename.
-    """
-    name = Path(path_str).name
-    m = _START_TIME_RE.search(name)
-    if not m:
-        raise ValueError(f"Could not parse segment start time from segment filename: {name}")
-    return int(m.group(1))
-
-
 def get_wave_file(wav_file):
     '''
     Function to load a wav file
@@ -148,17 +116,18 @@ def extract_segments(audioPath, sampleDict, destnPath, suffix):
     '''
     Function to extract segments given an audio path folder and proposal segments
     '''
-    # List the local audio files.
-    local_audio_files = str(audioPath) + '/'
+    # Use Path objects to avoid string concatenation.
+    audio_dir = Path(audioPath)
+    dest_dir = Path(destnPath)
     for wav_file in sampleDict.keys():
-        audio_file = get_wave_file(local_audio_files + wav_file)
+        audio_file = get_wave_file(audio_dir / wav_file)
         for begin_time, end_time in sampleDict[wav_file]:
             output_file_name = wav_file.lower().replace(
                 '.wav', '') + '_' + str(begin_time) + '_' + str(
                     end_time) + suffix + '.wav'
-            output_file_path = destnPath + output_file_name
+            output_file_path = dest_dir / output_file_name
             export_wave_file(audio_file, begin_time,
-                             end_time, output_file_path)
+                             end_time, str(output_file_path))
 
 
 class ModelInference:
@@ -267,39 +236,39 @@ class FastAIModel(ModelInference):
         Processes 3-second segments with 1-second hop, applies rolling average,
         and returns per-second predictions (0.0-1.0) and a global confidence (0.0-1.0).
         '''
+        wav_path = Path(wav_file_path)
 
         # Infer clip length.
         max_length = get_duration(path=wav_file_path)
-        print(os.path.basename(wav_file_path))
+        print(wav_path.name)
         print("Length of Audio Clip:{0}".format(max_length))
 
-        # Generate 3 sec proposal with 1 sec hop length.
-        threeSecList = []
+        # Generate 3 sec proposals with 1 sec hop length.
         max_start = max(0, int(floor(max_length) - 2))
 
         # If audio is shorter than 3 seconds, still create one segment from 0 to max_length.
         if max_start == 0 and max_length > 0:
-            threeSecList.append([0, min(3, max_length)])
+            segments = [(0, min(3, max_length))]
         else:
-            for i in range(max_start):
-                threeSecList.append([i, i + 3])
+            segments = [(i, i + 3) for i in range(max_start)]
 
         # Create a proposal dictionary.
-        three_sec_dict = {}
-        three_sec_dict[Path(wav_file_path).name] = threeSecList
+        three_sec_dict = {wav_path.name: segments}
 
-        # Use a context-manager temp dir; cleanup is guaranteed on exit.
-        with tempfile.TemporaryDirectory() as tmpdir:
-            local_dir = tmpdir + os.sep
+        # Build a mapping from segment filename stem → start_time_s during creation,
+        # to avoid re-parsing filenames later.
+        start_time_by_stem = {
+            wav_path.stem.lower() + '_' + str(begin) + '_' + str(end): begin
+            for begin, end in segments
+        }
 
-            # Create 3 sec segments from the defined wavefile using proposals built above.
-            # "use_a_real_wavname.wav" will generate -> "use_a_real_wavname_0_3.wav", "use_a_real_wavname_1_4.wav" etc. files in local directory.
-            extract_segments(
-                str(Path(wav_file_path).parent),
-                three_sec_dict,
-                local_dir,
-                ""
-            )
+        # Create 3 sec segments from the defined wavefile using proposals built above.
+        # "use_a_real_wavname.wav" will generate -> "use_a_real_wavname_0_3.wav", "use_a_real_wavname_1_4.wav" etc. files in local directory.
+        # Use TemporaryDirectory for automatic cleanup on exit.
+        with tempfile.TemporaryDirectory() as temp_dir:
+            local_dir = Path(temp_dir)
+
+            extract_segments(wav_path.parent, three_sec_dict, local_dir, "")
 
             # Define Audio config needed to create on the fly mel spectograms.
             from audio.data import AudioConfig, SpectrogramConfig, AudioList
@@ -318,33 +287,34 @@ class FastAIModel(ModelInference):
                                  )
             config.duration = 4000  # 4 sec padding or snip.
             config.resample_to = 20000  # Every sample at 20000 frequency.
-            config.downmix=True
+            config.downmix = True
             config.pad_mode = "zeros-after"  # Make deterministic: zeros at end only
 
             # Create an Audio DataLoader.
-            test_data_folder = Path(local_dir)
             tfms = None
             test = AudioList.from_folder(
-                test_data_folder, config=config).split_none().label_empty()
+                local_dir, config=config).split_none().label_empty()
             testdb = test.transform(tfms).databunch(bs=32)
 
             # Score each 3 second clip.
             predictions = []
-            pathList = list(pd.Series(test_data_folder.ls()).astype('str'))
+            path_list = [str(p) for p in local_dir.ls()]
             for item in testdb.x:
                 predictions.append(self.model.predict(item)[2][1])
+        # Temp directory and segment files are automatically cleaned up here.
 
         # Aggregate predictions.
 
         # Create a DataFrame.
-        prediction = pd.DataFrame({'FilePath': pathList, 'confidence': predictions})
+        prediction = pd.DataFrame({'FilePath': path_list, 'confidence': predictions})
 
         # Convert prediction to float.
         prediction['confidence'] = prediction.confidence.astype(float)
 
-        # Extract starting time from file name.
+        # Extract starting time from the pre-built lookup; fall back to filename parsing if needed.
         prediction['start_time_s'] = prediction.FilePath.apply(
-            _extract_start_time_seconds_from_segment_path)
+            lambda x: start_time_by_stem.get(Path(x).stem, int(Path(x).stem.split('_')[-2]))
+        )
 
         # Sort the file based on start_time_s.
         prediction = prediction.sort_values(
@@ -353,7 +323,7 @@ class FastAIModel(ModelInference):
         # Rolling Window (to average at per second level).
         submission = pd.DataFrame(
                 {
-                    'wav_filename': Path(wav_file_path).name,
+                    'wav_filename': wav_path.name,
                     'duration_s': 1.0,
                     'confidence': list(prediction.rolling(2)['confidence'].mean().values)
                 }
@@ -364,7 +334,7 @@ class FastAIModel(ModelInference):
 
         # Add last row.
         lastLine = pd.DataFrame({
-            'wav_filename': Path(wav_file_path).name,
+            'wav_filename': wav_path.name,
             'start_time_s': [submission.start_time_s.max()+1],
             'duration_s': 1.0,
             'confidence': [prediction.confidence[prediction.shape[0]-1]]
