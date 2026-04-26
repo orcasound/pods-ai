@@ -25,9 +25,10 @@ def run_inference(wav_path: str, model_type: str = "huggingface",
 
     Args:
         wav_path: Path to the wav file.
-        model_type: Type of model to use ('huggingface' or 'fastai').
+        model_type: Type of model to use ('huggingface', 'fastai', or 'orcahello').
         model_path: Path to the model directory or HuggingFace Hub model ID.
-                    Required for huggingface. Defaults to './model' for fastai.
+                    Required for huggingface. Defaults to './model' for fastai
+                    and 'orcasound/orcahello-srkw-detector-v1' for orcahello.
 
     Returns:
         Dictionary with:
@@ -50,6 +51,24 @@ def run_inference(wav_path: str, model_type: str = "huggingface",
         other_prob = round(1.0 - whale_prob, 4)
 
         probabilities: dict[str, float] = {
+            "other": other_prob,
+            "whale": round(whale_prob, 4),
+        }
+        global_prediction = result.get("global_prediction", 0)
+        global_prediction_label = "whale" if global_prediction else "other"
+        global_confidence = whale_prob
+
+    elif model_type == "orcahello":
+        if model_path is None:
+            model_path = "orcasound/orcahello-srkw-detector-v1"
+        model = get_model_inference(model_type="orcahello", model_path=model_path)
+        result = model.predict(wav_path)
+
+        # The OrcaHello SRKW detector is a binary classifier (other vs whale).
+        whale_prob = float(result.get("global_confidence", 0.0))
+        other_prob = round(1.0 - whale_prob, 4)
+
+        probabilities = {
             "other": other_prob,
             "whale": round(whale_prob, 4),
         }
@@ -97,7 +116,7 @@ def run_inference(wav_path: str, model_type: str = "huggingface",
 
     else:
         raise ValueError(
-            f"Unknown model type: {model_type!r}. Use 'huggingface' or 'fastai'."
+            f"Unknown model type: {model_type!r}. Use 'huggingface', 'fastai', or 'orcahello'."
         )
 
     return {
@@ -141,12 +160,13 @@ def main() -> int:
     )
     parser.add_argument(
         "--model",
-        choices=["huggingface", "fastai"],
+        choices=["huggingface", "fastai", "orcahello"],
         default="huggingface",
         help=(
             "Model type to use (default: huggingface). "
             "huggingface: 7-class model (water, resident, transient, humpback, vessel, jingle, human). "
-            "fastai: 2-class model (other, whale)."
+            "fastai: 2-class model (other, whale). "
+            "orcahello: 2-class SRKW detector (other, whale) using the OrcaHello ResNet50 model."
         ),
     )
     parser.add_argument(
@@ -155,7 +175,8 @@ def main() -> int:
         help=(
             "Path to model directory or HuggingFace Hub model ID. "
             "Required for --model huggingface. "
-            "Defaults to ./model for --model fastai."
+            "Defaults to ./model for --model fastai. "
+            "Defaults to orcasound/orcahello-srkw-detector-v1 for --model orcahello."
         ),
     )
 

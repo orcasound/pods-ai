@@ -519,6 +519,7 @@ def get_model_inference(model_path: Optional[str] = None, model_type: str = "fas
         model_type: Type of model to use. Supports:
             - "fastai": FastAI model from aifororcas-livesystem (default)
             - "huggingface": HuggingFace Wav2Vec2 model for multi-class classification
+            - "orcahello": OrcaHello SRKW detector (orcasound/orcahello-srkw-detector-v1)
             - "dummy": DummyModelInference for testing
         auto_download: If True and model_type is "fastai", automatically download model if not found
         model_url: Optional custom URL for downloading the model. If not provided, uses default model.
@@ -550,6 +551,12 @@ def get_model_inference(model_path: Optional[str] = None, model_type: str = "fas
                 min_num_positive_calls_threshold=3
             )
 
+            # Use OrcaHello SRKW detector (orcasound/orcahello-srkw-detector-v1).
+            model = get_model_inference(
+                model_path="orcasound/orcahello-srkw-detector-v1",
+                model_type="orcahello",
+            )
+
             # Use dummy model for testing.
             model = get_model_inference(model_type="dummy")
 
@@ -577,6 +584,19 @@ def get_model_inference(model_path: Optional[str] = None, model_type: str = "fas
         from huggingface_inference import get_huggingface_inference
 
         return get_huggingface_inference(model_path, **kwargs)
+    elif model_type == "orcahello":
+        # OrcaHello SRKW detector using new inference pipeline.
+        # Defaults to orcasound/orcahello-srkw-detector-v1 on HuggingFace Hub.
+        from orcahello_inference import get_orcahello_srkw_inference
+
+        if model_path is None:
+            from orcahello_inference import OrcaHelloSRKWInference
+            model_path = OrcaHelloSRKWInference.DEFAULT_MODEL_PATH
+
+        # Filter kwargs to only include parameters supported by OrcaHelloSRKWInference.
+        orcahello_kwargs = {k: v for k, v in kwargs.items() if k in ("config",)}
+
+        return get_orcahello_srkw_inference(model_path, **orcahello_kwargs)
     elif model_type == "fastai":
         if model_path is None:
             model_path = "./model"
@@ -602,6 +622,8 @@ def get_model_inference(model_path: Optional[str] = None, model_type: str = "fas
     else:
         raise ValueError(
             f"Unknown model type: {model_type}. "
-            f"Supported types: 'dummy' (for testing), 'fastai' (for production), 'huggingface' (for HuggingFace models). "
+            f"Supported types: 'dummy' (for testing), 'fastai' (for production), "
+            f"'huggingface' (for HuggingFace Wav2Vec2 models), "
+            f"'orcahello' (for OrcaHello SRKW detector). "
             f"For production use with FastAI model, set MODEL_TYPE=fastai and ensure model is available."
         )
