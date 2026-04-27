@@ -6,7 +6,7 @@ Run inference on a wav file and output per-class probabilities.
 
 Usage:
     python run_inference.py sample.wav
-    python run_inference.py sample.wav --model huggingface --model-path /path/to/hf-model
+    python run_inference.py sample.wav --model podsai --model-path /path/to/podsai-model
     python run_inference.py sample.wav --model fastai --model-path ../model
 """
 
@@ -18,16 +18,16 @@ from typing import Optional
 from model_inference import get_model_inference
 
 
-def run_inference(wav_path: str, model_type: str = "huggingface",
+def run_inference(wav_path: str, model_type: str = "podsai",
                   model_path: Optional[str] = None) -> dict:
     """
     Run inference on a wav file and return per-class probabilities.
 
     Args:
         wav_path: Path to the wav file.
-        model_type: Type of model to use ('huggingface', 'fastai', or 'orcahello').
+        model_type: Type of model to use ('podsai', 'fastai', or 'orcahello').
         model_path: Path to the model directory or HuggingFace Hub model ID.
-                    Required for huggingface. Defaults to './model' for fastai
+                    Required for podsai. Defaults to './model' for fastai
                     and 'orcasound/orcahello-srkw-detector-v1' for orcahello.
 
     Returns:
@@ -76,13 +76,13 @@ def run_inference(wav_path: str, model_type: str = "huggingface",
         global_prediction_label = "whale" if global_prediction else "other"
         global_confidence = whale_prob
 
-    elif model_type == "huggingface":
+    elif model_type == "podsai":
         if model_path is None:
             raise ValueError(
-                "model_path is required for --model huggingface. "
+                "model_path is required for --model podsai. "
                 "Provide a path to a fine-tuned model directory or a HuggingFace Hub model ID."
             )
-        model = get_model_inference(model_type="huggingface", model_path=model_path)
+        model = get_model_inference(model_type="podsai", model_path=model_path)
         result = model.predict(wav_path)
 
         local_predictions = result.get("local_predictions", [])
@@ -116,7 +116,7 @@ def run_inference(wav_path: str, model_type: str = "huggingface",
 
     else:
         raise ValueError(
-            f"Unknown model type: {model_type!r}. Use 'huggingface', 'fastai', or 'orcahello'."
+            f"Unknown model type: {model_type!r}. Use 'podsai', 'fastai', or 'orcahello'."
         )
 
     return {
@@ -160,11 +160,11 @@ def main() -> int:
     )
     parser.add_argument(
         "--model",
-        choices=["huggingface", "fastai", "orcahello"],
-        default="huggingface",
+        choices=["podsai", "fastai", "orcahello"],
+        default="podsai",
         help=(
-            "Model type to use (default: huggingface). "
-            "huggingface: 7-class model (water, resident, transient, humpback, vessel, jingle, human). "
+            "Model type to use (default: podsai). "
+            "podsai: 7-class model (water, resident, transient, humpback, vessel, jingle, human). "
             "fastai: 2-class model (other, whale). "
             "orcahello: 2-class SRKW detector (other, whale) using the OrcaHello ResNet50 model."
         ),
@@ -174,7 +174,7 @@ def main() -> int:
         default=None,
         help=(
             "Path to model directory or HuggingFace Hub model ID. "
-            "Required for --model huggingface. "
+            "Required for --model podsai. "
             "Defaults to ./model for --model fastai. "
             "Defaults to orcasound/orcahello-srkw-detector-v1 for --model orcahello."
         ),

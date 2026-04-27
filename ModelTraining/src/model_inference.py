@@ -141,7 +141,7 @@ class ModelInference:
     The inference uses overlapping segments (typically 3-second windows) to generate
     confidence scores. Different implementations may use different hop sizes:
     - FastAIModel: 1-second hop, produces per-second confidences
-    - HuggingFaceInference: Configurable hop (default 2 seconds)
+    - PodsAIInference: Configurable hop (default 2 seconds)
 
     The timestamp correction logic in extract_training_samples.py automatically infers
     the hop duration from the output length, so implementations are free to choose
@@ -168,7 +168,7 @@ class ModelInference:
         Uses a sliding window approach (typically 3-second segments) to generate predictions.
         The hop size between windows is implementation-specific:
         - FastAIModel uses 1-second hop, producing one confidence per second
-        - HuggingFaceInference uses configurable hop (default 2 seconds)
+        - PodsAIInference uses configurable hop (default 2 seconds)
 
         Args:
             wav_file_path: Path to the wav file to score.
@@ -183,7 +183,7 @@ class ModelInference:
                                     For multi-class models: whale-call likelihood (1 - P(negative classes))
                                     Used by timestamp correction to locate whale calls.
                                     Note: The number of entries depends on hop_duration. FastAI uses
-                                    1-second hop and produces ~N entries for N-second audio. HuggingFace
+                                    1-second hop and produces ~N entries for N-second audio. PODS-AI
                                     uses 2-second hop and produces ~N/2 entries.
                 - global_prediction: Overall prediction for the entire audio.
                                     For binary models: 0 or 1
@@ -555,7 +555,7 @@ def get_model_inference(model_path: Optional[str] = None, model_type: str = "fas
         model_path: Optional path to the model file or directory.
         model_type: Type of model to use. Supports:
             - "fastai": FastAI model from aifororcas-livesystem (default)
-            - "huggingface": HuggingFace Wav2Vec2 model for multi-class classification
+            - "podsai": PODS-AI Wav2Vec2 model for multi-class classification
             - "orcahello": OrcaHello SRKW detector (orcasound/orcahello-srkw-detector-v1)
             - "dummy": DummyModelInference for testing
         auto_download: If True and model_type is "fastai", automatically download model if not found
@@ -580,10 +580,10 @@ def get_model_inference(model_path: Optional[str] = None, model_type: str = "fas
             # Use FastAI model with auto-download.
             model = get_model_inference(model_path="./model", auto_download=True)
 
-            # Use HuggingFace model for multi-class classification.
+            # Use PODS-AI model for multi-class classification.
             model = get_model_inference(
-                model_path="path/to/huggingface/model",
-                model_type="huggingface",
+                model_path="path/to/podsai/model",
+                model_type="podsai",
                 threshold=0.5,
                 min_num_positive_calls_threshold=3
             )
@@ -607,20 +607,20 @@ def get_model_inference(model_path: Optional[str] = None, model_type: str = "fas
     """
     if model_type == "dummy":
         return DummyModelInference(model_path)
-    elif model_type == "huggingface":
-        # HuggingFace models require explicit model path (no fallback to base model).
-        # The base model lacks id2label/label2id config required by HuggingFaceInference.
+    elif model_type == "podsai":
+        # PODS-AI models require explicit model path (no fallback to base model).
+        # The base model lacks id2label/label2id config required by PodsAIInference.
         if model_path is None:
             raise ValueError(
-                "model_path is required for huggingface model type. "
+                "model_path is required for podsai model type. "
                 "Provide a path to a fine-tuned model directory or HuggingFace Hub model ID. "
-                "Train a model first using train_huggingface_model.py or specify a Hub model."
+                "Train a model first using train_podsai_model.py or specify a Hub model."
             )
 
         # Lazy import to avoid circular dependency.
-        from huggingface_inference import get_huggingface_inference
+        from podsai_inference import get_podsai_inference
 
-        return get_huggingface_inference(model_path, **kwargs)
+        return get_podsai_inference(model_path, **kwargs)
     elif model_type == "orcahello":
         # OrcaHello SRKW detector using new inference pipeline.
         # Defaults to orcasound/orcahello-srkw-detector-v1 on HuggingFace Hub.
@@ -660,7 +660,7 @@ def get_model_inference(model_path: Optional[str] = None, model_type: str = "fas
         raise ValueError(
             f"Unknown model type: {model_type}. "
             f"Supported types: 'dummy' (for testing), 'fastai' (for production), "
-            f"'huggingface' (for HuggingFace Wav2Vec2 models), "
+            f"'podsai' (for PODS-AI Wav2Vec2 models), "
             f"'orcahello' (for OrcaHello SRKW detector). "
             f"For production use with FastAI model, set MODEL_TYPE=fastai and ensure model is available."
         )
