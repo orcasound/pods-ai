@@ -210,7 +210,7 @@ class FastAIModel(ModelInference):
 
     def __init__(self, model_path: str = "./model", model_name: str = "stg2-rn18.pkl",
                  threshold: float = 0.5, min_num_positive_calls_threshold: int = 3,
-                 use_gpu: bool = False, smooth_predictions: bool = True,
+                 use_gpu: bool = True, smooth_predictions: bool = True,
                  batch_size: int = 32):
         """
         Initialize FastAI model inference.
@@ -226,7 +226,8 @@ class FastAIModel(ModelInference):
                                              min(scaled_threshold, min_num_positive_calls_threshold).
                                              Default: 3.
             use_gpu: If True, move the model to CUDA at initialization when a GPU is available.
-                     Avoids repeated host-to-device transfers during inference.  Default: False.
+                     Avoids repeated host-to-device transfers during inference.  If no GPU is
+                     present, falls back to CPU automatically.  Default: True.
             smooth_predictions: If True, apply a rolling-average window to smooth per-segment
                                 predictions before thresholding.  Default: True.
             batch_size: Number of audio segments to score in each DataLoader batch.
