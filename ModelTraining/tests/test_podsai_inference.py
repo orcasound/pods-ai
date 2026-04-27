@@ -2,9 +2,9 @@
 # Copyright (c) PODS-AI contributors
 # SPDX-License-Identifier: MIT
 """
-Unit tests for HuggingFaceInference timestamp correction semantics.
+Unit tests for PodsAIInference timestamp correction semantics.
 
-These tests verify that HuggingFaceInference.predict() produces output
+These tests verify that PodsAIInference.predict() produces output
 with correct length and indexing semantics for use in timestamp correction.
 """
 
@@ -18,13 +18,13 @@ import torch
 
 
 @pytest.fixture
-def mock_huggingface_model():
-    """Create a mock HuggingFace model for testing."""
+def mock_podsai_model():
+    """Create a mock PODS-AI model for testing."""
     mock_model = Mock()
     mock_config = Mock()
     
     # Define label mapping for multi-class model.
-    # Current schema matches train_huggingface_model.py:
+    # Current schema matches train_podsai_model.py:
     # ["water", "resident", "transient", "humpback", "vessel", "jingle", "human"]
     mock_config.id2label = {
         0: "water",
@@ -104,22 +104,22 @@ def synthetic_audio_60s():
     Path(f.name).unlink(missing_ok=True)
 
 
-class TestHuggingFaceInferenceIndexing:
+class TestPodsAIInferenceIndexing:
     """Test indexing semantics for timestamp correction."""
     
-    @patch('huggingface_inference.Wav2Vec2ForSequenceClassification')
-    @patch('huggingface_inference.Wav2Vec2FeatureExtractor')
+    @patch('podsai_inference.Wav2Vec2ForSequenceClassification')
+    @patch('podsai_inference.Wav2Vec2FeatureExtractor')
     def test_output_length_with_hop_duration_2(
         self, mock_extractor_class, mock_model_class,
-        mock_feature_extractor, mock_huggingface_model, synthetic_audio_60s
+        mock_feature_extractor, mock_podsai_model, synthetic_audio_60s
     ):
         """Test that local_confidences length is correct with 2-second hop."""
         mock_extractor_class.from_pretrained = Mock(return_value=mock_feature_extractor)
-        mock_model_class.from_pretrained = Mock(return_value=mock_huggingface_model)
+        mock_model_class.from_pretrained = Mock(return_value=mock_podsai_model)
         
-        from huggingface_inference import HuggingFaceInference
+        from podsai_inference import PodsAIInference
         
-        model = HuggingFaceInference("test-model-path")
+        model = PodsAIInference("test-model-path")
         result = model.predict(synthetic_audio_60s, segment_duration=3, hop_duration=2)
         
         # With hop_duration=2, a 60-second audio should produce 29 positions:
@@ -132,19 +132,19 @@ class TestHuggingFaceInferenceIndexing:
         # For timestamp correction to work as documented, extract_training_samples.py
         # must infer hop_duration = audio_duration / len(local_confidences).
     
-    @patch('huggingface_inference.Wav2Vec2ForSequenceClassification')
-    @patch('huggingface_inference.Wav2Vec2FeatureExtractor')
+    @patch('podsai_inference.Wav2Vec2ForSequenceClassification')
+    @patch('podsai_inference.Wav2Vec2FeatureExtractor')
     def test_output_length_with_hop_duration_1(
         self, mock_extractor_class, mock_model_class,
-        mock_feature_extractor, mock_huggingface_model, synthetic_audio_60s
+        mock_feature_extractor, mock_podsai_model, synthetic_audio_60s
     ):
         """Test with hop_duration=1 to match FastAI per-second behavior."""
         mock_extractor_class.from_pretrained = Mock(return_value=mock_feature_extractor)
-        mock_model_class.from_pretrained = Mock(return_value=mock_huggingface_model)
+        mock_model_class.from_pretrained = Mock(return_value=mock_podsai_model)
         
-        from huggingface_inference import HuggingFaceInference
+        from podsai_inference import PodsAIInference
         
-        model = HuggingFaceInference("test-model-path")
+        model = PodsAIInference("test-model-path")
         result = model.predict(synthetic_audio_60s, segment_duration=3, hop_duration=1)
         
         # With hop_duration=1: num_positions = floor((60 - 3) / 1) + 1 = 58
@@ -153,20 +153,20 @@ class TestHuggingFaceInferenceIndexing:
         
         # With 1-second hop, local_confidences[i] ≈ second i (close to FastAI behavior).
     
-    @patch('huggingface_inference.Wav2Vec2ForSequenceClassification')
-    @patch('huggingface_inference.Wav2Vec2FeatureExtractor')
+    @patch('podsai_inference.Wav2Vec2ForSequenceClassification')
+    @patch('podsai_inference.Wav2Vec2FeatureExtractor')
     def test_index_to_time_mapping(
         self, mock_extractor_class, mock_model_class,
-        mock_feature_extractor, mock_huggingface_model, synthetic_audio_60s
+        mock_feature_extractor, mock_podsai_model, synthetic_audio_60s
     ):
         """Test that we can correctly map index to timestamp."""
         mock_extractor_class.from_pretrained = Mock(return_value=mock_feature_extractor)
-        mock_model_class.from_pretrained = Mock(return_value=mock_huggingface_model)
+        mock_model_class.from_pretrained = Mock(return_value=mock_podsai_model)
         
-        from huggingface_inference import HuggingFaceInference
+        from podsai_inference import PodsAIInference
         import librosa
         
-        model = HuggingFaceInference("test-model-path")
+        model = PodsAIInference("test-model-path")
         
         # Test with different hop durations.
         for hop_duration in [1, 2]:
@@ -189,15 +189,15 @@ class TestHuggingFaceInferenceIndexing:
                 assert expected_time < audio_duration + hop_duration, \
                     f"Index {i} maps to {expected_time}s, beyond audio duration {audio_duration}s"
     
-    @patch('huggingface_inference.Wav2Vec2ForSequenceClassification')
-    @patch('huggingface_inference.Wav2Vec2FeatureExtractor')
+    @patch('podsai_inference.Wav2Vec2ForSequenceClassification')
+    @patch('podsai_inference.Wav2Vec2FeatureExtractor')
     def test_short_audio_handling(
         self, mock_extractor_class, mock_model_class,
-        mock_feature_extractor, mock_huggingface_model
+        mock_feature_extractor, mock_podsai_model
     ):
         """Test handling of audio shorter than segment_duration."""
         mock_extractor_class.from_pretrained = Mock(return_value=mock_feature_extractor)
-        mock_model_class.from_pretrained = Mock(return_value=mock_huggingface_model)
+        mock_model_class.from_pretrained = Mock(return_value=mock_podsai_model)
         
         # Create 2-second audio (shorter than 3-second segment).
         sr = 16000
@@ -208,9 +208,9 @@ class TestHuggingFaceInferenceIndexing:
             audio_path = f.name
         
         try:
-            from huggingface_inference import HuggingFaceInference
+            from podsai_inference import PodsAIInference
             
-            model = HuggingFaceInference("test-model-path")
+            model = PodsAIInference("test-model-path")
             result = model.predict(audio_path, segment_duration=3, hop_duration=2)
             
             # For 2-second audio with 3-second segment:
@@ -221,15 +221,15 @@ class TestHuggingFaceInferenceIndexing:
         finally:
             Path(audio_path).unlink(missing_ok=True)
     
-    @patch('huggingface_inference.Wav2Vec2ForSequenceClassification')
-    @patch('huggingface_inference.Wav2Vec2FeatureExtractor')
+    @patch('podsai_inference.Wav2Vec2ForSequenceClassification')
+    @patch('podsai_inference.Wav2Vec2FeatureExtractor')
     def test_exact_multiple_of_hop_duration(
         self, mock_extractor_class, mock_model_class,
-        mock_feature_extractor, mock_huggingface_model
+        mock_feature_extractor, mock_podsai_model
     ):
         """Test audio length that's exact multiple of hop_duration."""
         mock_extractor_class.from_pretrained = Mock(return_value=mock_feature_extractor)
-        mock_model_class.from_pretrained = Mock(return_value=mock_huggingface_model)
+        mock_model_class.from_pretrained = Mock(return_value=mock_podsai_model)
         
         # 60 seconds is exact multiple of hop_duration=2.
         sr = 16000
@@ -240,9 +240,9 @@ class TestHuggingFaceInferenceIndexing:
             audio_path = f.name
         
         try:
-            from huggingface_inference import HuggingFaceInference
+            from podsai_inference import PodsAIInference
             
-            model = HuggingFaceInference("test-model-path")
+            model = PodsAIInference("test-model-path")
             result = model.predict(audio_path, segment_duration=3, hop_duration=2)
             
             # num_positions = floor((60 - 3) / 2) + 1 = 29
@@ -255,19 +255,19 @@ class TestHuggingFaceInferenceIndexing:
         finally:
             Path(audio_path).unlink(missing_ok=True)
     
-    @patch('huggingface_inference.Wav2Vec2ForSequenceClassification')
-    @patch('huggingface_inference.Wav2Vec2FeatureExtractor')
+    @patch('podsai_inference.Wav2Vec2ForSequenceClassification')
+    @patch('podsai_inference.Wav2Vec2FeatureExtractor')
     def test_output_format_compatibility(
         self, mock_extractor_class, mock_model_class,
-        mock_feature_extractor, mock_huggingface_model, synthetic_audio_60s
+        mock_feature_extractor, mock_podsai_model, synthetic_audio_60s
     ):
         """Test that output format matches expected interface."""
         mock_extractor_class.from_pretrained = Mock(return_value=mock_feature_extractor)
-        mock_model_class.from_pretrained = Mock(return_value=mock_huggingface_model)
+        mock_model_class.from_pretrained = Mock(return_value=mock_podsai_model)
         
-        from huggingface_inference import HuggingFaceInference
+        from podsai_inference import PodsAIInference
         
-        model = HuggingFaceInference("test-model-path")
+        model = PodsAIInference("test-model-path")
         result = model.predict(synthetic_audio_60s, segment_duration=3, hop_duration=2)
         
         # Check required keys.
@@ -298,15 +298,15 @@ class TestHuggingFaceInferenceIndexing:
         assert result["hop_duration"] == 2.0
         assert result["segment_duration"] == 3.0
     
-    @patch('huggingface_inference.Wav2Vec2ForSequenceClassification')
-    @patch('huggingface_inference.Wav2Vec2FeatureExtractor')
+    @patch('podsai_inference.Wav2Vec2ForSequenceClassification')
+    @patch('podsai_inference.Wav2Vec2FeatureExtractor')
     def test_empty_audio_handling(
         self, mock_extractor_class, mock_model_class,
-        mock_feature_extractor, mock_huggingface_model
+        mock_feature_extractor, mock_podsai_model
     ):
         """Test handling of empty audio file."""
         mock_extractor_class.from_pretrained = Mock(return_value=mock_feature_extractor)
-        mock_model_class.from_pretrained = Mock(return_value=mock_huggingface_model)
+        mock_model_class.from_pretrained = Mock(return_value=mock_podsai_model)
         
         # Create empty audio.
         sr = 16000
@@ -317,9 +317,9 @@ class TestHuggingFaceInferenceIndexing:
             audio_path = f.name
         
         try:
-            from huggingface_inference import HuggingFaceInference
+            from podsai_inference import PodsAIInference
             
-            model = HuggingFaceInference("test-model-path")
+            model = PodsAIInference("test-model-path")
             result = model.predict(audio_path, segment_duration=3, hop_duration=2)
             
             # Should return empty predictions with negative class.
@@ -335,8 +335,8 @@ class TestHuggingFaceInferenceIndexing:
         finally:
             Path(audio_path).unlink(missing_ok=True)
     
-    @patch('huggingface_inference.Wav2Vec2ForSequenceClassification')
-    @patch('huggingface_inference.Wav2Vec2FeatureExtractor')
+    @patch('podsai_inference.Wav2Vec2ForSequenceClassification')
+    @patch('podsai_inference.Wav2Vec2FeatureExtractor')
     def test_call_likelihood_computation(
         self, mock_extractor_class, mock_model_class,
         mock_feature_extractor, synthetic_audio_60s
@@ -373,9 +373,9 @@ class TestHuggingFaceInferenceIndexing:
         mock_extractor_class.from_pretrained = Mock(return_value=mock_feature_extractor)
         mock_model_class.from_pretrained = Mock(return_value=mock_model)
         
-        from huggingface_inference import HuggingFaceInference
+        from podsai_inference import PodsAIInference
         
-        model = HuggingFaceInference("test-model-path")
+        model = PodsAIInference("test-model-path")
         result = model.predict(synthetic_audio_60s, segment_duration=3, hop_duration=2)
         
         # Call-likelihood should be 1 - P(negative classes).
@@ -385,22 +385,22 @@ class TestHuggingFaceInferenceIndexing:
         assert len(result["local_confidences"]) == 29  # 60s audio, 2s hop
 
 
-class TestHuggingFaceInferenceErrorHandling:
-    """Test error handling in HuggingFaceInference."""
+class TestPodsAIInferenceErrorHandling:
+    """Test error handling in PodsAIInference."""
     
-    @patch('huggingface_inference.Wav2Vec2ForSequenceClassification')
-    @patch('huggingface_inference.Wav2Vec2FeatureExtractor')
+    @patch('podsai_inference.Wav2Vec2ForSequenceClassification')
+    @patch('podsai_inference.Wav2Vec2FeatureExtractor')
     def test_invalid_audio_file(
         self, mock_extractor_class, mock_model_class,
-        mock_feature_extractor, mock_huggingface_model
+        mock_feature_extractor, mock_podsai_model
     ):
         """Test handling of invalid audio file."""
         mock_extractor_class.from_pretrained = Mock(return_value=mock_feature_extractor)
-        mock_model_class.from_pretrained = Mock(return_value=mock_huggingface_model)
+        mock_model_class.from_pretrained = Mock(return_value=mock_podsai_model)
         
-        from huggingface_inference import HuggingFaceInference
+        from podsai_inference import PodsAIInference
         
-        model = HuggingFaceInference("test-model-path")
+        model = PodsAIInference("test-model-path")
         result = model.predict("nonexistent.wav", segment_duration=3, hop_duration=2)
         
         # Should return error response with negative prediction.
@@ -414,8 +414,8 @@ class TestHuggingFaceInferenceErrorHandling:
         assert result["hop_duration"] == 2.0
         assert result["segment_duration"] == 3.0
     
-    @patch('huggingface_inference.Wav2Vec2ForSequenceClassification')
-    @patch('huggingface_inference.Wav2Vec2FeatureExtractor')
+    @patch('podsai_inference.Wav2Vec2ForSequenceClassification')
+    @patch('podsai_inference.Wav2Vec2FeatureExtractor')
     def test_model_missing_negative_class(
         self, mock_extractor_class, mock_model_class
     ):
@@ -432,8 +432,8 @@ class TestHuggingFaceInferenceErrorHandling:
         
         mock_model_class.from_pretrained = Mock(return_value=mock_model)
         
-        from huggingface_inference import HuggingFaceInference
+        from podsai_inference import PodsAIInference
         
         # Should raise ValueError for missing negative class.
         with pytest.raises(ValueError, match="must include at least one negative/background class"):
-            HuggingFaceInference("test-model-path")
+            PodsAIInference("test-model-path")
