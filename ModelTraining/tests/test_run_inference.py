@@ -96,7 +96,7 @@ def _make_orcahello_model_mock(global_prediction: int = 1, global_confidence: fl
         "local_predictions": [global_prediction] * num_local,
         "local_confidences": local_confidences,
         "global_prediction": global_prediction,
-        "global_prediction_label": "whale" if global_prediction else "other",
+        "global_prediction_label": "resident" if global_prediction else "other",
         "global_confidence": global_confidence,
         "hop_duration": 1.0,
         "segment_duration": 2.0,
@@ -112,7 +112,7 @@ def _verify_fastai_result_structure(result: dict) -> None:
     assert "global_confidence" in result
 
     # Verify binary classes.
-    assert set(result["probabilities"].keys()) == {"other", "whale"}
+    assert set(result["probabilities"].keys()) == {"other", "resident"}
 
     # Verify probabilities sum to 1.0.
     total_prob = sum(result["probabilities"].values())
@@ -123,7 +123,7 @@ def _verify_fastai_result_structure(result: dict) -> None:
         assert 0.0 <= prob <= 1.0
 
     assert 0.0 <= result["global_confidence"] <= 1.0
-    assert result["global_prediction_label"] in {"other", "whale"}
+    assert result["global_prediction_label"] in {"other", "resident"}
 
 
 def _verify_huggingface_result_structure(result: dict) -> None:
@@ -169,11 +169,11 @@ def _verify_fastai_prediction(result: dict, audio_type: str) -> None:
     """
     Verify FastAI model predicted the correct class for the audio type.
 
-    For whale audio (resident, transient, humpback), expect "whale".
-    For non-whale audio (water, vessel, human, jingle), expect "other".
+    For resident orca audio (resident, transient, humpback), expect "resident".
+    For non-resident audio (water, vessel, human, jingle), expect "other".
     """
-    whale_classes = {"resident", "transient", "humpback"}
-    expected = "whale" if audio_type in whale_classes else "other"
+    resident_classes = {"resident", "transient", "humpback"}
+    expected = "resident" if audio_type in resident_classes else "other"
 
     actual = result["global_prediction_label"]
     assert actual == expected, (
@@ -373,7 +373,7 @@ class TestRunInferenceFastAI:
             Path(wav_path).unlink(missing_ok=True)
 
     def test_probabilities_contain_two_classes(self):
-        """FastAI output should contain exactly 'other' and 'whale' classes."""
+        """FastAI output should contain exactly 'other' and 'resident' classes."""
         wav_path = _make_wav()
         try:
             mock_model = _make_fastai_model_mock()
@@ -381,12 +381,12 @@ class TestRunInferenceFastAI:
                 from run_inference import run_inference
                 result = run_inference(wav_path, model_type="fastai", model_path="./model")
 
-            assert set(result["probabilities"].keys()) == {"other", "whale"}
+            assert set(result["probabilities"].keys()) == {"other", "resident"}
         finally:
             Path(wav_path).unlink(missing_ok=True)
 
     def test_fastai_probabilities_sum_to_one(self):
-        """'other' and 'whale' probabilities should sum to 1.0."""
+        """'other' and 'resident' probabilities should sum to 1.0."""
         wav_path = _make_wav()
         try:
             mock_model = _make_fastai_model_mock(global_confidence=0.75, num_local=5)
@@ -399,8 +399,8 @@ class TestRunInferenceFastAI:
         finally:
             Path(wav_path).unlink(missing_ok=True)
 
-    def test_global_prediction_whale_when_positive(self):
-        """When global_prediction=1, global_prediction_label should be 'whale'."""
+    def test_global_prediction_resident_when_positive(self):
+        """When global_prediction=1, global_prediction_label should be 'resident'."""
         wav_path = _make_wav()
         try:
             mock_model = _make_fastai_model_mock(global_prediction=1, global_confidence=0.8)
@@ -408,7 +408,7 @@ class TestRunInferenceFastAI:
                 from run_inference import run_inference
                 result = run_inference(wav_path, model_type="fastai", model_path="./model")
 
-            assert result["global_prediction_label"] == "whale"
+            assert result["global_prediction_label"] == "resident"
             assert abs(result["global_confidence"] - 0.8) < 1e-6
         finally:
             Path(wav_path).unlink(missing_ok=True)
@@ -463,7 +463,7 @@ class TestRunInferenceOrcaHello:
             Path(wav_path).unlink(missing_ok=True)
 
     def test_probabilities_contain_two_classes(self):
-        """OrcaHello output should contain exactly 'other' and 'whale' classes."""
+        """OrcaHello output should contain exactly 'other' and 'resident' classes."""
         wav_path = _make_wav()
         try:
             mock_model = _make_orcahello_model_mock()
@@ -472,12 +472,12 @@ class TestRunInferenceOrcaHello:
                 result = run_inference(wav_path, model_type="orcahello",
                                        model_path="orcasound/orcahello-srkw-detector-v1")
 
-            assert set(result["probabilities"].keys()) == {"other", "whale"}
+            assert set(result["probabilities"].keys()) == {"other", "resident"}
         finally:
             Path(wav_path).unlink(missing_ok=True)
 
     def test_orcahello_probabilities_sum_to_one(self):
-        """'other' and 'whale' probabilities should sum to 1.0."""
+        """'other' and 'resident' probabilities should sum to 1.0."""
         wav_path = _make_wav()
         try:
             mock_model = _make_orcahello_model_mock(global_confidence=0.75, num_local=5)
@@ -491,8 +491,8 @@ class TestRunInferenceOrcaHello:
         finally:
             Path(wav_path).unlink(missing_ok=True)
 
-    def test_global_prediction_whale_when_positive(self):
-        """When global_prediction=1, global_prediction_label should be 'whale'."""
+    def test_global_prediction_resident_when_positive(self):
+        """When global_prediction=1, global_prediction_label should be 'resident'."""
         wav_path = _make_wav()
         try:
             mock_model = _make_orcahello_model_mock(global_prediction=1, global_confidence=0.8)
@@ -501,7 +501,7 @@ class TestRunInferenceOrcaHello:
                 result = run_inference(wav_path, model_type="orcahello",
                                        model_path="orcasound/orcahello-srkw-detector-v1")
 
-            assert result["global_prediction_label"] == "whale"
+            assert result["global_prediction_label"] == "resident"
             assert abs(result["global_confidence"] - 0.8) < 1e-6
         finally:
             Path(wav_path).unlink(missing_ok=True)
@@ -595,14 +595,14 @@ class TestMainCLI:
         """print_results() writes class names to stdout."""
         from run_inference import print_results
         results = {
-            "probabilities": {"other": 0.3, "whale": 0.7},
-            "global_prediction_label": "whale",
+            "probabilities": {"other": 0.3, "resident": 0.7},
+            "global_prediction_label": "resident",
             "global_confidence": 0.7,
         }
         print_results(results, "fastai")
         captured = capsys.readouterr()
         assert "other" in captured.out
-        assert "whale" in captured.out
+        assert "resident" in captured.out
         assert "fastai" in captured.out
         assert "0.7000" in captured.out
 
@@ -774,15 +774,15 @@ class TestIntegrationWithRealModels:
         ("resident_wav_path", "resident", None),
         ("transient_wav_path", "transient", None),
         ("humpback_wav_path", "humpback",
-         "FastAI binary model trained on SRKW may not reliably classify humpback as whale"),
+         "FastAI binary model trained on SRKW may not reliably classify humpback as resident"),
         ("vessel_wav_path", "vessel",
-         "FastAI binary model may predict whale on vessel noise clips"),
+         "FastAI binary model may predict resident on vessel noise clips"),
         ("water_wav_path", "water",
-         "FastAI binary model may predict whale on ambient water clips"),
+         "FastAI binary model may predict resident on ambient water clips"),
         ("human_wav_path", "human",
-         "FastAI binary model may predict whale on human voice clips"),
+         "FastAI binary model may predict resident on human voice clips"),
         ("jingle_wav_path", "jingle",
-         "FastAI binary model may predict whale on jingle clips"),
+         "FastAI binary model may predict resident on jingle clips"),
     ])
     def test_fastai_model_inference(
         self,
@@ -934,15 +934,15 @@ class TestIntegrationWithRealModels:
         ("resident_wav_path", "resident", None),
         ("transient_wav_path", "transient", None),
         ("humpback_wav_path", "humpback",
-         "OrcaHello SRKW detector may not reliably classify humpback as whale"),
+         "OrcaHello SRKW detector may not reliably classify humpback as resident"),
         ("vessel_wav_path", "vessel",
-         "OrcaHello SRKW detector may predict whale on vessel noise clips"),
+         "OrcaHello SRKW detector may predict resident on vessel noise clips"),
         ("water_wav_path", "water",
-         "OrcaHello SRKW detector may predict whale on ambient water clips"),
+         "OrcaHello SRKW detector may predict resident on ambient water clips"),
         ("human_wav_path", "human",
-         "OrcaHello SRKW detector may predict whale on human voice clips"),
+         "OrcaHello SRKW detector may predict resident on human voice clips"),
         ("jingle_wav_path", "jingle",
-         "OrcaHello SRKW detector may predict whale on jingle clips"),
+         "OrcaHello SRKW detector may predict resident on jingle clips"),
     ])
     def test_orcahello_model_inference(
         self,
@@ -961,7 +961,7 @@ class TestIntegrationWithRealModels:
         wav_path = request.getfixturevalue(wav_fixture)
         result = run_inference(wav_path, model_type="orcahello", model_path=orcahello_model_path)
 
-        # OrcaHello is a binary model: "whale" or "other".
+        # OrcaHello is a binary model: "resident" or "other".
         _verify_fastai_result_structure(result)
         _verify_fastai_prediction(result, label)
         _print_fastai_result(result, f"orcahello-{label}")
