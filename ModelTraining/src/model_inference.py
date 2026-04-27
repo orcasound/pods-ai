@@ -176,10 +176,10 @@ class ModelInference:
         Returns:
             Dictionary containing:
                 - local_predictions: List of predictions for each hop position.
-                                    For binary models: 0 or 1 (0=other, 1=whale call)
+                                    For binary models: 0 or 1 (0=other, 1=resident (SRKW))
                                     For multi-class models: class ID (e.g., 0-6)
                 - local_confidences: List of confidence scores (0.0-1.0) for each hop position.
-                                    For binary models: confidence that whale call is present
+                                    For binary models: confidence that resident call is present
                                     For multi-class models: whale-call likelihood (1 - P(negative classes))
                                     Used by timestamp correction to locate whale calls.
                                     Note: The number of entries depends on hop_duration. FastAI uses
