@@ -2,17 +2,17 @@
 # Copyright (c) PODS-AI contributors
 # SPDX-License-Identifier: MIT
 """
-Train a HuggingFace audio classification model for orca call detection.
+Train a PODS-AI audio classification model for orca call detection.
 
 This script uses the Wav2Vec2 model architecture fine-tuned on orca call audio.
 The trained model can be pushed to HuggingFace Hub or saved locally.
 
 Usage:
     # Binary classification (other vs any call)
-    python train_huggingface_model.py --num_classes 2 --output_dir ./model/binary
+    python train_podsai_model.py --num_classes 2 --output_dir ./model/binary
 
     # Multi-class classification (water, resident, transient, humpback, vessel, jingle, human)
-    python train_huggingface_model.py --num_classes 7 --output_dir ./model/multiclass
+    python train_podsai_model.py --num_classes 7 --output_dir ./model/multiclass
 """
 
 import argparse
@@ -334,7 +334,7 @@ def analyze_dataset(dataset: DatasetDict) -> None:
 def main() -> None:
     """Main training function."""
     parser = argparse.ArgumentParser(
-        description="Train HuggingFace audio classification model for orca calls"
+        description="Train PODS-AI audio classification model for orca calls"
     )
     parser.add_argument(
         "--num_classes",
@@ -352,8 +352,8 @@ def main() -> None:
     parser.add_argument(
         "--output_dir",
         type=str,
-        default="model/huggingface",
-        help="Directory to save the trained model (default: model/huggingface)",
+        default="model/podsai",
+        help="Directory to save the trained model (default: model/podsai)",
     )
     parser.add_argument(
         "--model_name",
