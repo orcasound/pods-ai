@@ -258,8 +258,8 @@ Evaluation uses a binary resident-vs-other framing that works across all three m
 - **False negative** – model predicted something other than "resident" when the label is "resident".
 
 ```
-usage: python compare_models.py [--testing-csv PATH] [--wav-dir PATH]
-                                [--models MODEL_LIST]
+usage: python compare_models.py [--detections-csv PATH] [--training-csv PATH]
+                                [--wav-dir PATH] [--models MODEL_LIST]
                                 [--fastai-model-path PATH]
                                 [--orcahello-model-path PATH]
                                 [--huggingface-model-path PATH]
@@ -267,7 +267,8 @@ usage: python compare_models.py [--testing-csv PATH] [--wav-dir PATH]
 
 | Argument | Description |
 |---|---|
-| `--testing-csv` | Path to `testing_samples.csv` (default: `../output/csv/testing_samples.csv`) |
+| `--detections-csv` | Path to `detections.csv` (default: `../output/csv/detections.csv`) |
+| `--training-csv` | Path to `training_samples.csv` (default: `../output/csv/training_samples.csv`) |
 | `--wav-dir` | Root directory of testing WAV files (default: `../output/testing-wav`) |
 | `--models` | Comma-separated list of models to evaluate (default: `fastai,orcahello,huggingface`) |
 | `--fastai-model-path` | Path to FastAI model directory. Defaults to `./model` (the `run_inference.py` default) when not specified |
@@ -286,7 +287,8 @@ python compare_models.py \
 
 Output:
 ```
-Loaded 62 testing samples from ../output/csv/testing_samples.csv
+Derived 2167 test samples from ../output/csv/detections.csv
+  (detections not found in ../output/csv/training_samples.csv)
 WAV directory: ../output/testing-wav
 Models to evaluate: fastai, orcahello, huggingface
 

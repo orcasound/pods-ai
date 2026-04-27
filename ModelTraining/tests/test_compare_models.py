@@ -5,7 +5,7 @@
 Unit tests for compare_models.py.
 
 Tests cover:
-- load_testing_samples() CSV parsing
+- derive_test_samples() CSV parsing and exclusion logic
 - find_wav_file() path construction
 - is_resident_prediction() label mapping
 - evaluate_model() with mocked run_inference
@@ -16,10 +16,8 @@ Tests cover:
 
 import csv
 import sys
-import tempfile
-from io import StringIO
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -28,17 +26,19 @@ import pytest
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _write_testing_csv(path: Path, rows: list[dict]) -> None:
-    """Write a testing_samples.csv file with the given rows."""
-    fieldnames = ["Category", "NodeName", "Timestamp", "URI", "Description", "Notes", "Confidence"]
+def _write_csv(path, rows, fieldnames=None):
+    """Write a CSV file with the given rows."""
+    if not fieldnames:
+        fieldnames = ["Category", "NodeName", "Timestamp", "URI", "Description", "Notes", "Confidence"]
     with open(path, "w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        import csv as _csv
+        writer = _csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
         writer.writeheader()
         writer.writerows(rows)
 
 
-def _make_sample_rows() -> list[dict]:
-    """Return a list of sample rows for testing."""
+def _make_detection_rows():
+    """Return a list of detection rows for testing."""
     return [
         {
             "Category": "resident",
@@ -71,45 +71,91 @@ def _make_sample_rows() -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
-# Tests for load_testing_samples()
+# Tests for derive_test_samples()
 # ---------------------------------------------------------------------------
 
-class TestLoadTestingSamples:
-    """Tests for load_testing_samples()."""
+class TestDeriveTestSamples:
+    """Tests for derive_test_samples()."""
 
-    def test_returns_correct_number_of_samples(self, tmp_path):
-        """load_testing_samples returns one TestSample per data row."""
-        from compare_models import load_testing_samples
-        csv_path = tmp_path / "testing_samples.csv"
-        _write_testing_csv(csv_path, _make_sample_rows())
-        samples = load_testing_samples(csv_path)
-        assert len(samples) == 3
+    def test_excludes_training_uris(self, tmp_path):
+        """derive_test_samples excludes rows whose URI appears in training_samples.csv."""
+        from compare_models import derive_test_samples
+        detections = _make_detection_rows()
+        training_rows = [detections[0]]
+
+        detections_csv = tmp_path / "detections.csv"
+        training_csv = tmp_path / "training_samples.csv"
+        _write_csv(detections_csv, detections)
+        _write_csv(training_csv, training_rows)
+
+        samples = derive_test_samples(detections_csv, training_csv)
+        assert len(samples) == 2
+        uris = {s.uri for s in samples}
+        assert "https://example.com/1" not in uris
+        assert "https://example.com/2" in uris
+        assert "https://example.com/3" in uris
+
+    def test_returns_all_detections_when_no_training_overlap(self, tmp_path):
+        """derive_test_samples returns all detections when training has different URIs."""
+        from compare_models import derive_test_samples
+        detections = _make_detection_rows()
+        training_rows = [{"URI": "https://example.com/999"}]
+
+        detections_csv = tmp_path / "detections.csv"
+        training_csv = tmp_path / "training_samples.csv"
+        _write_csv(detections_csv, detections)
+        _write_csv(training_csv, training_rows)
+
+        samples = derive_test_samples(detections_csv, training_csv)
+        assert len(samples) == len(detections)
 
     def test_parses_fields_correctly(self, tmp_path):
-        """load_testing_samples correctly maps CSV columns to TestSample fields."""
-        from compare_models import load_testing_samples
-        csv_path = tmp_path / "testing_samples.csv"
-        _write_testing_csv(csv_path, _make_sample_rows())
-        samples = load_testing_samples(csv_path)
+        """derive_test_samples correctly maps CSV columns to TestSample fields."""
+        from compare_models import derive_test_samples
+        detections = _make_detection_rows()
 
+        detections_csv = tmp_path / "detections.csv"
+        training_csv = tmp_path / "training_samples.csv"
+        _write_csv(detections_csv, detections)
+        _write_csv(training_csv, [])
+
+        samples = derive_test_samples(detections_csv, training_csv)
         first = samples[0]
         assert first.category == "resident"
         assert first.node_name == "rpi_orcasound_lab"
         assert first.timestamp == "2023_08_18_00_59_53_PST"
+        assert first.uri == "https://example.com/1"
         assert first.notes == "tp_human_only"
 
-    def test_returns_empty_list_for_missing_file(self):
-        """load_testing_samples returns [] and prints an error for a missing file."""
-        from compare_models import load_testing_samples
-        samples = load_testing_samples(Path("/nonexistent/path/testing_samples.csv"))
+    def test_returns_empty_list_for_missing_detections_file(self, tmp_path):
+        """derive_test_samples returns [] when detections.csv is missing."""
+        from compare_models import derive_test_samples
+        training_csv = tmp_path / "training_samples.csv"
+        _write_csv(training_csv, [])
+
+        samples = derive_test_samples(Path("/nonexistent/detections.csv"), training_csv)
         assert samples == []
 
-    def test_returns_empty_list_for_header_only_csv(self, tmp_path):
-        """load_testing_samples returns [] when the CSV contains only a header."""
-        from compare_models import load_testing_samples
-        csv_path = tmp_path / "testing_samples.csv"
-        _write_testing_csv(csv_path, [])
-        samples = load_testing_samples(csv_path)
+    def test_returns_all_when_training_file_missing(self, tmp_path):
+        """derive_test_samples returns all detections when training_samples.csv is missing."""
+        from compare_models import derive_test_samples
+        detections_csv = tmp_path / "detections.csv"
+        _write_csv(detections_csv, _make_detection_rows())
+
+        samples = derive_test_samples(detections_csv, Path("/nonexistent/training_samples.csv"))
+        assert len(samples) == len(_make_detection_rows())
+
+    def test_returns_empty_when_all_detections_in_training(self, tmp_path):
+        """derive_test_samples returns [] when all detections are in training."""
+        from compare_models import derive_test_samples
+        detections = _make_detection_rows()
+
+        detections_csv = tmp_path / "detections.csv"
+        training_csv = tmp_path / "training_samples.csv"
+        _write_csv(detections_csv, detections)
+        _write_csv(training_csv, detections)
+
+        samples = derive_test_samples(detections_csv, training_csv)
         assert samples == []
 
 
@@ -132,7 +178,6 @@ class TestFindWavFile:
             description="",
             notes="tp_human_only",
         )
-        # Create the expected WAV file.
         wav_dir = tmp_path / "testing-wav"
         expected = wav_dir / "resident" / "rpi-orcasound-lab_2023_08_18_00_59_53_PST.wav"
         expected.parent.mkdir(parents=True)
@@ -172,7 +217,6 @@ class TestFindWavFile:
             notes="fp_machine_only",
         )
         wav_dir = tmp_path / "testing-wav"
-        # File should use dashes in node name.
         expected = wav_dir / "human" / "rpi-sunset-bay_2024_08_07_11_23_23_PST.wav"
         expected.parent.mkdir(parents=True)
         expected.touch()
@@ -189,52 +233,52 @@ class TestIsResidentPrediction:
     """Tests for is_resident_prediction()."""
 
     def test_fastai_whale_is_resident(self):
-        """FastAI 'whale' prediction maps to resident."""
+        """FastAI "whale" prediction maps to resident."""
         from compare_models import is_resident_prediction
         assert is_resident_prediction("whale", "fastai") is True
 
     def test_fastai_other_is_not_resident(self):
-        """FastAI 'other' prediction maps to non-resident."""
+        """FastAI "other" prediction maps to non-resident."""
         from compare_models import is_resident_prediction
         assert is_resident_prediction("other", "fastai") is False
 
     def test_orcahello_whale_is_resident(self):
-        """OrcaHello 'whale' prediction maps to resident."""
+        """OrcaHello "whale" prediction maps to resident."""
         from compare_models import is_resident_prediction
         assert is_resident_prediction("whale", "orcahello") is True
 
     def test_orcahello_other_is_not_resident(self):
-        """OrcaHello 'other' prediction maps to non-resident."""
+        """OrcaHello "other" prediction maps to non-resident."""
         from compare_models import is_resident_prediction
         assert is_resident_prediction("other", "orcahello") is False
 
     def test_huggingface_resident_is_resident(self):
-        """HuggingFace 'resident' prediction maps to resident."""
+        """HuggingFace "resident" prediction maps to resident."""
         from compare_models import is_resident_prediction
         assert is_resident_prediction("resident", "huggingface") is True
 
     def test_huggingface_water_is_not_resident(self):
-        """HuggingFace 'water' prediction maps to non-resident."""
+        """HuggingFace "water" prediction maps to non-resident."""
         from compare_models import is_resident_prediction
         assert is_resident_prediction("water", "huggingface") is False
 
     def test_huggingface_transient_is_not_resident(self):
-        """HuggingFace 'transient' prediction maps to non-resident."""
+        """HuggingFace "transient" prediction maps to non-resident."""
         from compare_models import is_resident_prediction
         assert is_resident_prediction("transient", "huggingface") is False
 
     def test_huggingface_humpback_is_not_resident(self):
-        """HuggingFace 'humpback' prediction maps to non-resident."""
+        """HuggingFace "humpback" prediction maps to non-resident."""
         from compare_models import is_resident_prediction
         assert is_resident_prediction("humpback", "huggingface") is False
 
     def test_huggingface_human_is_not_resident(self):
-        """HuggingFace 'human' prediction maps to non-resident."""
+        """HuggingFace "human" prediction maps to non-resident."""
         from compare_models import is_resident_prediction
         assert is_resident_prediction("human", "huggingface") is False
 
     def test_huggingface_vessel_is_not_resident(self):
-        """HuggingFace 'vessel' prediction maps to non-resident."""
+        """HuggingFace "vessel" prediction maps to non-resident."""
         from compare_models import is_resident_prediction
         assert is_resident_prediction("vessel", "huggingface") is False
 
@@ -290,7 +334,7 @@ class TestModelResultProperties:
 class TestEvaluateModel:
     """Tests for evaluate_model() with mocked run_inference."""
 
-    def _make_wav_files(self, tmp_path: Path, samples) -> Path:
+    def _make_wav_files(self, tmp_path, samples):
         """Create dummy WAV files for the given samples under tmp_path/testing-wav."""
         wav_dir = tmp_path / "testing-wav"
         for sample in samples:
@@ -302,7 +346,7 @@ class TestEvaluateModel:
         return wav_dir
 
     def test_correct_resident_prediction_counted(self, tmp_path):
-        """A resident sample predicted as 'whale' (fastai) counts as correct."""
+        """A resident sample predicted as "whale" (fastai) counts as correct."""
         from compare_models import TestSample, evaluate_model
 
         sample = TestSample(
@@ -325,7 +369,7 @@ class TestEvaluateModel:
         assert result.skipped == 0
 
     def test_false_positive_counted(self, tmp_path):
-        """A non-resident sample predicted as 'whale' (fastai) counts as false positive."""
+        """A non-resident sample predicted as "whale" (fastai) counts as false positive."""
         from compare_models import TestSample, evaluate_model
 
         sample = TestSample(
@@ -347,7 +391,7 @@ class TestEvaluateModel:
         assert result.false_negatives == 0
 
     def test_false_negative_counted(self, tmp_path):
-        """A resident sample predicted as 'other' (fastai) counts as false negative."""
+        """A resident sample predicted as "other" (fastai) counts as false negative."""
         from compare_models import TestSample, evaluate_model
 
         sample = TestSample(
@@ -411,7 +455,7 @@ class TestEvaluateModel:
         assert result.correct == 0
 
     def test_huggingface_resident_prediction_correct(self, tmp_path):
-        """HuggingFace 'resident' prediction for a resident sample counts as correct."""
+        """HuggingFace "resident" prediction for a resident sample counts as correct."""
         from compare_models import TestSample, evaluate_model
 
         sample = TestSample(
@@ -433,7 +477,7 @@ class TestEvaluateModel:
         assert result.false_negatives == 0
 
     def test_huggingface_water_prediction_correct_for_non_resident(self, tmp_path):
-        """HuggingFace 'water' prediction for a non-resident sample counts as correct."""
+        """HuggingFace "water" prediction for a non-resident sample counts as correct."""
         from compare_models import TestSample, evaluate_model
 
         sample = TestSample(
@@ -479,7 +523,7 @@ class TestPrintSummary:
     """Tests for print_summary() output formatting."""
 
     def test_prints_header_and_separator(self, capsys):
-        """print_summary prints the 'Model Comparison Summary' header."""
+        """print_summary prints the "Model Comparison Summary" header."""
         from compare_models import ModelResult, print_summary
         results = [ModelResult(model_type="fastai", total=5, correct=4, skipped=0)]
         print_summary(results)
@@ -535,14 +579,43 @@ class TestPrintSummary:
 class TestMainCLI:
     """Tests for the main() entry point."""
 
-    def test_returns_1_for_missing_testing_csv(self, tmp_path):
-        """main() returns 1 when the testing CSV file does not exist."""
+    def _write_csvs(self, tmp_path, detection_rows, training_rows=None):
+        """Write detections.csv and training_samples.csv to tmp_path."""
+        det_csv = tmp_path / "detections.csv"
+        train_csv = tmp_path / "training_samples.csv"
+        _write_csv(det_csv, detection_rows)
+        _write_csv(train_csv, training_rows or [])
+        return det_csv, train_csv
+
+    def test_returns_1_for_missing_detections_csv(self, tmp_path):
+        """main() returns 1 when detections.csv does not exist."""
         from compare_models import main
         wav_dir = tmp_path / "testing-wav"
         wav_dir.mkdir()
+        training_csv = tmp_path / "training_samples.csv"
+        _write_csv(training_csv, [])
         test_args = [
             "compare_models.py",
-            "--testing-csv", str(tmp_path / "nonexistent.csv"),
+            "--detections-csv", str(tmp_path / "nonexistent.csv"),
+            "--training-csv", str(training_csv),
+            "--wav-dir", str(wav_dir),
+            "--models", "fastai",
+        ]
+        with patch.object(sys, "argv", test_args):
+            result = main()
+        assert result == 1
+
+    def test_returns_1_for_missing_training_csv(self, tmp_path):
+        """main() returns 1 when training_samples.csv does not exist."""
+        from compare_models import main
+        wav_dir = tmp_path / "testing-wav"
+        wav_dir.mkdir()
+        det_csv = tmp_path / "detections.csv"
+        _write_csv(det_csv, _make_detection_rows())
+        test_args = [
+            "compare_models.py",
+            "--detections-csv", str(det_csv),
+            "--training-csv", str(tmp_path / "nonexistent_training.csv"),
             "--wav-dir", str(wav_dir),
             "--models", "fastai",
         ]
@@ -554,12 +627,11 @@ class TestMainCLI:
         """main() returns 1 when the WAV directory does not exist."""
         from compare_models import main
 
-        csv_path = tmp_path / "testing_samples.csv"
-        _write_testing_csv(csv_path, _make_sample_rows())
-
+        det_csv, train_csv = self._write_csvs(tmp_path, _make_detection_rows())
         test_args = [
             "compare_models.py",
-            "--testing-csv", str(csv_path),
+            "--detections-csv", str(det_csv),
+            "--training-csv", str(train_csv),
             "--wav-dir", str(tmp_path / "nonexistent-wav-dir"),
             "--models", "fastai",
         ]
@@ -571,14 +643,13 @@ class TestMainCLI:
         """main() returns 1 when an unrecognised model type is specified."""
         from compare_models import main
 
-        csv_path = tmp_path / "testing_samples.csv"
-        _write_testing_csv(csv_path, _make_sample_rows())
+        det_csv, train_csv = self._write_csvs(tmp_path, _make_detection_rows())
         wav_dir = tmp_path / "testing-wav"
         wav_dir.mkdir()
-
         test_args = [
             "compare_models.py",
-            "--testing-csv", str(csv_path),
+            "--detections-csv", str(det_csv),
+            "--training-csv", str(train_csv),
             "--wav-dir", str(wav_dir),
             "--models", "unknown_model",
         ]
@@ -587,17 +658,16 @@ class TestMainCLI:
         assert result == 1
 
     def test_returns_1_for_huggingface_without_model_path(self, tmp_path):
-        """main() returns 1 when 'huggingface' is in --models but --huggingface-model-path is absent."""
+        """main() returns 1 when huggingface is in --models but --huggingface-model-path is absent."""
         from compare_models import main
 
-        csv_path = tmp_path / "testing_samples.csv"
-        _write_testing_csv(csv_path, _make_sample_rows())
+        det_csv, train_csv = self._write_csvs(tmp_path, _make_detection_rows())
         wav_dir = tmp_path / "testing-wav"
         wav_dir.mkdir()
-
         test_args = [
             "compare_models.py",
-            "--testing-csv", str(csv_path),
+            "--detections-csv", str(det_csv),
+            "--training-csv", str(train_csv),
             "--wav-dir", str(wav_dir),
             "--models", "huggingface",
         ]
@@ -606,31 +676,25 @@ class TestMainCLI:
         assert result == 1
 
     def test_returns_0_on_success_with_fastai(self, tmp_path):
-        """main() returns 0 when it successfully evaluates fastai on a test set."""
-        from compare_models import main, TestSample
+        """main() returns 0 when it successfully evaluates fastai on a derived test set."""
+        from compare_models import main
 
-        rows = [_make_sample_rows()[0]]  # One resident sample.
-        csv_path = tmp_path / "testing_samples.csv"
-        _write_testing_csv(csv_path, rows)
+        rows = _make_detection_rows()
+        # One training row excluded; the other two form the test set.
+        det_csv, train_csv = self._write_csvs(tmp_path, rows, training_rows=[rows[1]])
 
         wav_dir = tmp_path / "testing-wav"
-        sample = TestSample(
-            category=rows[0]["Category"],
-            node_name=rows[0]["NodeName"],
-            timestamp=rows[0]["Timestamp"],
-            uri="",
-            description="",
-            notes=rows[0]["Notes"],
-        )
-        node_name_in_filename = sample.node_name.replace("_", "-")
-        wav_file = wav_dir / sample.category / f"{node_name_in_filename}_{sample.timestamp}.wav"
-        wav_file.parent.mkdir(parents=True)
-        wav_file.touch()
+        for row in [rows[0], rows[2]]:
+            node = row["NodeName"].replace("_", "-")
+            wav = wav_dir / row["Category"] / f"{node}_{row['Timestamp']}.wav"
+            wav.parent.mkdir(parents=True, exist_ok=True)
+            wav.touch()
 
         mock_result = {"global_prediction_label": "whale", "global_confidence": 0.8}
         test_args = [
             "compare_models.py",
-            "--testing-csv", str(csv_path),
+            "--detections-csv", str(det_csv),
+            "--training-csv", str(train_csv),
             "--wav-dir", str(wav_dir),
             "--models", "fastai",
             "--fastai-model-path", "./model",
@@ -640,18 +704,18 @@ class TestMainCLI:
                 result = main()
         assert result == 0
 
-    def test_returns_1_for_empty_csv(self, tmp_path):
-        """main() returns 1 when testing_samples.csv has no data rows."""
+    def test_returns_1_when_all_detections_are_in_training(self, tmp_path):
+        """main() returns 1 when all detections are used for training (empty test set)."""
         from compare_models import main
 
-        csv_path = tmp_path / "testing_samples.csv"
-        _write_testing_csv(csv_path, [])
+        rows = _make_detection_rows()
+        det_csv, train_csv = self._write_csvs(tmp_path, rows, training_rows=rows)
         wav_dir = tmp_path / "testing-wav"
         wav_dir.mkdir()
-
         test_args = [
             "compare_models.py",
-            "--testing-csv", str(csv_path),
+            "--detections-csv", str(det_csv),
+            "--training-csv", str(train_csv),
             "--wav-dir", str(wav_dir),
             "--models", "fastai",
         ]
