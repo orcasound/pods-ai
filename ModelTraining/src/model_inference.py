@@ -206,10 +206,6 @@ class FastAIModel(ModelInference):
     This implementation uses the FastAI model architecture from aifororcas-livesystem.
     The model processes 3-second segments with 1-second hop to generate per-second scores.
     The model file (typically model.pkl) should be available in the model_path directory.
-
-    When the orcahello submodule is initialized, get_model_inference() will prefer
-    LegacyFastAIInference (from fastai_inference.py) which supports GPU acceleration.
-    This class serves as a CPU-only fallback when the submodule is unavailable.
     """
 
     def __init__(self, model_path: str = "./model", model_name: str = "stg2-rn18.pkl",
@@ -658,20 +654,6 @@ def get_model_inference(model_path: Optional[str] = None, model_type: str = "fas
             if k in ('threshold', 'min_num_positive_calls_threshold', 'use_gpu', 'smooth_predictions', 'batch_size')
         }
 
-        # Prefer the legacy FastAIModel from the orcahello submodule when it is
-        # available.  The legacy model supports GPU device placement at init and
-        # configurable prediction smoothing, providing better performance.  Fall
-        # back to the built-in FastAIModel when the submodule is not initialized.
-        try:
-            from fastai_inference import get_legacy_fastai_inference  # noqa: PLC0415
-
-            return get_legacy_fastai_inference(
-                model_path=model_path, model_name="model.pkl", **fastai_kwargs
-            )
-        except ImportError:
-            pass
-
-        # Built-in fallback (no submodule required).
         return FastAIModel(model_path=model_path, model_name="model.pkl", **fastai_kwargs)
     else:
         raise ValueError(
