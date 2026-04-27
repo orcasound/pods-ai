@@ -46,17 +46,17 @@ def run_inference(wav_path: str, model_type: str = "podsai",
         result = model.predict(wav_path)
 
         # For the binary FastAI model, global_confidence is the mean of all
-        # local_confidences that exceed the threshold (whale windows).
-        whale_prob = float(result.get("global_confidence", 0.0))
-        other_prob = round(1.0 - whale_prob, 4)
+        # local_confidences that exceed the threshold (resident windows).
+        resident_prob = float(result.get("global_confidence", 0.0))
+        other_prob = round(1.0 - resident_prob, 4)
 
         probabilities: dict[str, float] = {
             "other": other_prob,
-            "whale": round(whale_prob, 4),
+            "resident": round(resident_prob, 4),
         }
         global_prediction = result.get("global_prediction", 0)
-        global_prediction_label = "whale" if global_prediction else "other"
-        global_confidence = whale_prob
+        global_prediction_label = "resident" if global_prediction else "other"
+        global_confidence = resident_prob
 
     elif model_type == "orcahello":
         if model_path is None:
@@ -64,17 +64,17 @@ def run_inference(wav_path: str, model_type: str = "podsai",
         model = get_model_inference(model_type="orcahello", model_path=model_path)
         result = model.predict(wav_path)
 
-        # The OrcaHello SRKW detector is a binary classifier (other vs whale).
-        whale_prob = float(result.get("global_confidence", 0.0))
-        other_prob = round(1.0 - whale_prob, 4)
+        # The OrcaHello SRKW detector is a binary classifier (other vs resident).
+        resident_prob = float(result.get("global_confidence", 0.0))
+        other_prob = round(1.0 - resident_prob, 4)
 
         probabilities = {
             "other": other_prob,
-            "whale": round(whale_prob, 4),
+            "resident": round(resident_prob, 4),
         }
         global_prediction = result.get("global_prediction", 0)
-        global_prediction_label = "whale" if global_prediction else "other"
-        global_confidence = whale_prob
+        global_prediction_label = "resident" if global_prediction else "other"
+        global_confidence = resident_prob
 
     elif model_type == "podsai":
         if model_path is None:
@@ -165,8 +165,8 @@ def main() -> int:
         help=(
             "Model type to use (default: podsai). "
             "podsai: 7-class model (water, resident, transient, humpback, vessel, jingle, human). "
-            "fastai: 2-class model (other, whale). "
-            "orcahello: 2-class SRKW detector (other, whale) using the OrcaHello ResNet50 model."
+            "fastai: 2-class model (other, resident). "
+            "orcahello: 2-class SRKW detector (other, resident) using the OrcaHello ResNet50 model."
         ),
     )
     parser.add_argument(
