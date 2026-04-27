@@ -2,9 +2,9 @@
 # Copyright (c) PODS-AI contributors
 # SPDX-License-Identifier: MIT
 """
-HuggingFace model inference wrapper for orca call detection.
+PODS-AI model inference wrapper for orca call detection.
 
-This module provides a wrapper around HuggingFace audio classification models
+This module provides a wrapper around Wav2Vec2 audio classification models
 that implements the interface expected by PODS-AI's model_inference system.
 """
 
@@ -23,9 +23,9 @@ from model_inference import ModelInference
 SEGMENT_GROUP_SIZE = 10
 
 
-class HuggingFaceInference(ModelInference):  # Inherit from ModelInference
+class PodsAIInference(ModelInference):  # Inherit from ModelInference
     """
-    Inference wrapper for HuggingFace audio classification models.
+    Inference wrapper for PODS-AI audio classification models.
 
     This class implements the interface expected by model_inference.py,
     providing predictions in the format required by extract_training_samples.py.
@@ -57,7 +57,7 @@ class HuggingFaceInference(ModelInference):  # Inherit from ModelInference
         else:
             self.device = device
 
-        print(f"Loading HuggingFace model from {model_path}...")
+        print(f"Loading PODS-AI model from {model_path}...")
         print(f"Using device: {self.device}")
 
         # Load feature extractor and model.
@@ -383,15 +383,15 @@ class HuggingFaceInference(ModelInference):  # Inherit from ModelInference
         }
 
 
-def get_huggingface_inference(model_path: str, **kwargs) -> HuggingFaceInference:
+def get_podsai_inference(model_path: str, **kwargs) -> PodsAIInference:
     """
-    Factory function to create HuggingFace inference instance.
+    Factory function to create PODS-AI inference instance.
 
     Args:
         model_path: Path to model directory or HuggingFace Hub model ID
-        **kwargs: Additional arguments passed to HuggingFaceInference
+        **kwargs: Additional arguments passed to PodsAIInference
 
     Returns:
-        HuggingFaceInference instance
+        PodsAIInference instance
     """
-    return HuggingFaceInference(model_path, **kwargs)
+    return PodsAIInference(model_path, **kwargs)

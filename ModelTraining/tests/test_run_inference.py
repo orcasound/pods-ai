@@ -5,7 +5,7 @@
 Unit tests for run_inference.py.
 
 Tests cover:
-- run_inference() with mocked HuggingFace model
+- run_inference() with mocked PODS-AI model
 - run_inference() with mocked FastAI model
 - Per-class probability output format and values
 - CLI argument validation (invalid model type)
@@ -53,8 +53,8 @@ def _make_fastai_model_mock(global_prediction: int = 1, global_confidence: float
     return mock_model
 
 
-def _make_huggingface_model_mock(num_local: int = 10) -> MagicMock:
-    """Return a mock HuggingFace model whose predict() returns a 7-class result."""
+def _make_podsai_model_mock(num_local: int = 10) -> MagicMock:
+    """Return a mock PODS-AI model whose predict() returns a 7-class result."""
     mock_model = MagicMock()
 
     # 7-class label mapping matching the standard schema.
@@ -126,8 +126,8 @@ def _verify_fastai_result_structure(result: dict) -> None:
     assert result["global_prediction_label"] in {"other", "resident"}
 
 
-def _verify_huggingface_result_structure(result: dict) -> None:
-    """Verify HuggingFace result has expected structure and valid values."""
+def _verify_podsai_result_structure(result: dict) -> None:
+    """Verify PODS-AI result has expected structure and valid values."""
     expected_classes = {"water", "resident", "transient", "humpback", "vessel", "jingle", "human"}
 
     assert "probabilities" in result
@@ -154,9 +154,9 @@ def _print_fastai_result(result: dict, label: str = "") -> None:
     print(f"  Probabilities: {result['probabilities']}")
 
 
-def _print_huggingface_result(result: dict, label: str = "") -> None:
-    """Print HuggingFace inference results for debugging."""
-    prefix = f"HuggingFace inference results{f' on {label}' if label else ''}:"
+def _print_podsai_result(result: dict, label: str = "") -> None:
+    """Print PODS-AI inference results for debugging."""
+    prefix = f"PODS-AI inference results{f' on {label}' if label else ''}:"
     print(f"\n{prefix}")
     print(f"  Global prediction: {result['global_prediction_label']}")
     print(f"  Global confidence: {result['global_confidence']:.4f}")
@@ -183,9 +183,9 @@ def _verify_fastai_prediction(result: dict, audio_type: str) -> None:
     )
 
 
-def _verify_huggingface_prediction(result: dict, audio_type: str, allow_category_match: bool = False) -> None:
+def _verify_podsai_prediction(result: dict, audio_type: str, allow_category_match: bool = False) -> None:
     """
-    Verify HuggingFace model predicted the correct class for the audio type.
+    Verify PODS-AI model predicted the correct class for the audio type.
 
     Args:
         result: Inference result dictionary.
@@ -209,19 +209,19 @@ def _verify_huggingface_prediction(result: dict, audio_type: str, allow_category
         if audio_type in whale_classes:
             # Accept any whale class.
             assert actual in whale_classes, (
-                f"HuggingFace model predicted '{actual}' for {audio_type} audio, "
+                f"PODS-AI model predicted '{actual}' for {audio_type} audio, "
                 f"but expected one of {whale_classes}"
             )
         elif audio_type in non_whale_classes:
             # Accept any non-whale class.
             assert actual in non_whale_classes, (
-                f"HuggingFace model predicted '{actual}' for {audio_type} audio, "
+                f"PODS-AI model predicted '{actual}' for {audio_type} audio, "
                 f"but expected one of {non_whale_classes}"
             )
     else:
         # Exact match required.
         assert actual == audio_type, (
-            f"HuggingFace model predicted '{actual}' for {audio_type} audio, "
+            f"PODS-AI model predicted '{actual}' for {audio_type} audio, "
             f"but expected exact match '{audio_type}'"
         )
 
@@ -230,17 +230,17 @@ def _verify_huggingface_prediction(result: dict, audio_type: str, allow_category
 # Tests for run_inference()
 # ---------------------------------------------------------------------------
 
-class TestRunInferenceHuggingFace:
-    """Tests for run_inference() with a mocked HuggingFace model."""
+class TestRunInferencePodsAI:
+    """Tests for run_inference() with a mocked PODS-AI model."""
 
     def test_returns_expected_keys(self):
         """run_inference returns a dict with probabilities, global_prediction_label, global_confidence."""
         wav_path = _make_wav()
         try:
-            mock_model = _make_huggingface_model_mock()
+            mock_model = _make_podsai_model_mock()
             with patch("run_inference.get_model_inference", return_value=mock_model):
                 from run_inference import run_inference
-                result = run_inference(wav_path, model_type="huggingface", model_path="fake-path")
+                result = run_inference(wav_path, model_type="podsai", model_path="fake-path")
 
             assert "probabilities" in result
             assert "global_prediction_label" in result
@@ -249,14 +249,14 @@ class TestRunInferenceHuggingFace:
             Path(wav_path).unlink(missing_ok=True)
 
     def test_probabilities_cover_all_seven_classes(self):
-        """All 7 HuggingFace class labels are present in the probabilities output."""
+        """All 7 PODS-AI class labels are present in the probabilities output."""
         expected_labels = {"water", "resident", "transient", "humpback", "vessel", "jingle", "human"}
         wav_path = _make_wav()
         try:
-            mock_model = _make_huggingface_model_mock()
+            mock_model = _make_podsai_model_mock()
             with patch("run_inference.get_model_inference", return_value=mock_model):
                 from run_inference import run_inference
-                result = run_inference(wav_path, model_type="huggingface", model_path="fake-path")
+                result = run_inference(wav_path, model_type="podsai", model_path="fake-path")
 
             assert set(result["probabilities"].keys()) == expected_labels
         finally:
@@ -266,10 +266,10 @@ class TestRunInferenceHuggingFace:
         """The globally predicted class should have a probability equal to global_confidence."""
         wav_path = _make_wav()
         try:
-            mock_model = _make_huggingface_model_mock(num_local=10)
+            mock_model = _make_podsai_model_mock(num_local=10)
             with patch("run_inference.get_model_inference", return_value=mock_model):
                 from run_inference import run_inference
-                result = run_inference(wav_path, model_type="huggingface", model_path="fake-path")
+                result = run_inference(wav_path, model_type="podsai", model_path="fake-path")
 
             # "resident" windows (local_predictions==1) all have confidence 0.7 > threshold 0.5.
             # So resident probability = mean([0.7]*8) = 0.7 = global_confidence.
@@ -282,10 +282,10 @@ class TestRunInferenceHuggingFace:
         """Classes whose windows are all below the confidence threshold should have probability 0.0."""
         wav_path = _make_wav()
         try:
-            mock_model = _make_huggingface_model_mock(num_local=10)
+            mock_model = _make_podsai_model_mock(num_local=10)
             with patch("run_inference.get_model_inference", return_value=mock_model):
                 from run_inference import run_inference
-                result = run_inference(wav_path, model_type="huggingface", model_path="fake-path")
+                result = run_inference(wav_path, model_type="podsai", model_path="fake-path")
 
             # "water" windows (local_predictions==0) have confidence 0.1 < threshold 0.5 → 0.0.
             assert result["probabilities"]["water"] == 0.0
@@ -299,10 +299,10 @@ class TestRunInferenceHuggingFace:
         """All per-class probability values should be in [0.0, 1.0]."""
         wav_path = _make_wav()
         try:
-            mock_model = _make_huggingface_model_mock()
+            mock_model = _make_podsai_model_mock()
             with patch("run_inference.get_model_inference", return_value=mock_model):
                 from run_inference import run_inference
-                result = run_inference(wav_path, model_type="huggingface", model_path="fake-path")
+                result = run_inference(wav_path, model_type="podsai", model_path="fake-path")
 
             for label, prob in result["probabilities"].items():
                 assert 0.0 <= prob <= 1.0, f"Probability for {label!r} out of range: {prob}"
@@ -313,10 +313,10 @@ class TestRunInferenceHuggingFace:
         """global_prediction_label and global_confidence match the mock model output."""
         wav_path = _make_wav()
         try:
-            mock_model = _make_huggingface_model_mock()
+            mock_model = _make_podsai_model_mock()
             with patch("run_inference.get_model_inference", return_value=mock_model):
                 from run_inference import run_inference
-                result = run_inference(wav_path, model_type="huggingface", model_path="fake-path")
+                result = run_inference(wav_path, model_type="podsai", model_path="fake-path")
 
             assert result["global_prediction_label"] == "resident"
             assert abs(result["global_confidence"] - 0.7) < 1e-6
@@ -327,7 +327,7 @@ class TestRunInferenceHuggingFace:
         """When local_predictions is empty, all class probabilities should be 0.0."""
         wav_path = _make_wav()
         try:
-            mock_model = _make_huggingface_model_mock()
+            mock_model = _make_podsai_model_mock()
             mock_model.predict.return_value = {
                 "local_predictions": [],
                 "local_confidences": [],
@@ -337,7 +337,7 @@ class TestRunInferenceHuggingFace:
             }
             with patch("run_inference.get_model_inference", return_value=mock_model):
                 from run_inference import run_inference
-                result = run_inference(wav_path, model_type="huggingface", model_path="fake-path")
+                result = run_inference(wav_path, model_type="podsai", model_path="fake-path")
 
             for prob in result["probabilities"].values():
                 assert prob == 0.0
@@ -345,12 +345,12 @@ class TestRunInferenceHuggingFace:
             Path(wav_path).unlink(missing_ok=True)
 
     def test_raises_value_error_without_model_path(self):
-        """run_inference raises ValueError when model_path is None for huggingface."""
+        """run_inference raises ValueError when model_path is None for podsai."""
         wav_path = _make_wav()
         try:
             from run_inference import run_inference
             with pytest.raises(ValueError, match="model_path is required"):
-                run_inference(wav_path, model_type="huggingface", model_path=None)
+                run_inference(wav_path, model_type="podsai", model_path=None)
         finally:
             Path(wav_path).unlink(missing_ok=True)
 
@@ -585,8 +585,8 @@ class TestMainCLI:
         """main() returns exit code 1 when run_inference raises ValueError."""
         wav_path = _make_wav()
         try:
-            # Calling with huggingface and no --model-path should raise ValueError.
-            with patch("sys.argv", ["run_inference.py", wav_path, "--model", "huggingface"]):
+            # Calling with podsai and no --model-path should raise ValueError.
+            with patch("sys.argv", ["run_inference.py", wav_path, "--model", "podsai"]):
                 from run_inference import main
                 assert main() == 1
         finally:
@@ -637,8 +637,8 @@ class TestIntegrationWithRealModels:
         return str(path)
 
     @pytest.fixture
-    def huggingface_model_path(self) -> str:
-        """Path to the HuggingFace multiclass model directory, or Hub model ID as fallback."""
+    def podsai_model_path(self) -> str:
+        """Path to the PODS-AI multiclass model directory, or Hub model ID as fallback."""
         local_path = Path("model/multiclass")
         if local_path.exists():
             return str(local_path)
@@ -647,7 +647,7 @@ class TestIntegrationWithRealModels:
         # present before returning the Hub ID.  If it is absent (e.g. because the model
         # was published without running feature_extractor.push_to_hub()), the test is
         # skipped with a clear message rather than failing with a RuntimeError inside
-        # HuggingFaceInference.__init__().  Re-run the Train Model workflow (which now
+        # PodsAIInference.__init__().  Re-run the Train Model workflow (which now
         # calls feature_extractor.push_to_hub()) to upload the missing file and allow
         # these tests to run in CI.
         hub_id = "davethaler/whale-call-detector"
@@ -807,27 +807,27 @@ class TestIntegrationWithRealModels:
         _verify_fastai_prediction(result, label)
         _print_fastai_result(result, label)
 
-    # Parametrized tests for HuggingFace model on different audio types.
+    # Parametrized tests for PODS-AI model on different audio types.
     @pytest.mark.parametrize("wav_fixture,label,xfail_reason", [
         ("resident_wav_path", "resident",
-         "HuggingFace model may misclassify resident orca as another whale class"),
+         "PODS-AI model may misclassify resident orca as another whale class"),
         ("transient_wav_path", "transient", None),
         ("humpback_wav_path", "humpback",
-         "HuggingFace model may misclassify humpback as another whale class"),
+         "PODS-AI model may misclassify humpback as another whale class"),
         ("vessel_wav_path", "vessel", None),
         ("water_wav_path", "water", None),
         ("human_wav_path", "human", None),
         ("jingle_wav_path", "jingle", None),
     ])
-    def test_huggingface_model_inference(
+    def test_podsai_model_inference(
         self,
         wav_fixture: str,
         label: str,
         xfail_reason: Optional[str],
-        huggingface_model_path: str,
+        podsai_model_path: str,
         request: pytest.FixtureRequest
     ) -> None:
-        """Test HuggingFace model inference on various audio types."""
+        """Test PODS-AI model inference on various audio types."""
         from run_inference import run_inference
 
         # Apply xfail marker if this test case is expected to fail.
@@ -835,29 +835,29 @@ class TestIntegrationWithRealModels:
             request.node.add_marker(pytest.mark.xfail(reason=xfail_reason, strict=False))
 
         wav_path = request.getfixturevalue(wav_fixture)
-        result = run_inference(wav_path, model_type="huggingface", model_path=huggingface_model_path)
+        result = run_inference(wav_path, model_type="podsai", model_path=podsai_model_path)
 
-        _verify_huggingface_result_structure(result)
+        _verify_podsai_result_structure(result)
         # Always require exact match - no category matching allowed.
-        _verify_huggingface_prediction(result, label, allow_category_match=False)
-        _print_huggingface_result(result, label)
+        _verify_podsai_prediction(result, label, allow_category_match=False)
+        _print_podsai_result(result, label)
 
     # Parametrized CLI integration tests.
     @pytest.mark.parametrize("wav_fixture,model_type,model_path_fixture", [
         ("resident_wav_path", "fastai", "fastai_model_path"),
-        ("resident_wav_path", "huggingface", "huggingface_model_path"),
+        ("resident_wav_path", "podsai", "podsai_model_path"),
         ("transient_wav_path", "fastai", "fastai_model_path"),
-        ("transient_wav_path", "huggingface", "huggingface_model_path"),
+        ("transient_wav_path", "podsai", "podsai_model_path"),
         ("humpback_wav_path", "fastai", "fastai_model_path"),
-        ("humpback_wav_path", "huggingface", "huggingface_model_path"),
+        ("humpback_wav_path", "podsai", "podsai_model_path"),
         ("vessel_wav_path", "fastai", "fastai_model_path"),
-        ("vessel_wav_path", "huggingface", "huggingface_model_path"),
+        ("vessel_wav_path", "podsai", "podsai_model_path"),
         ("water_wav_path", "fastai", "fastai_model_path"),
-        ("water_wav_path", "huggingface", "huggingface_model_path"),
+        ("water_wav_path", "podsai", "podsai_model_path"),
         ("human_wav_path", "fastai", "fastai_model_path"),
-        ("human_wav_path", "huggingface", "huggingface_model_path"),
+        ("human_wav_path", "podsai", "podsai_model_path"),
         ("jingle_wav_path", "fastai", "fastai_model_path"),
-        ("jingle_wav_path", "huggingface", "huggingface_model_path"),
+        ("jingle_wav_path", "podsai", "podsai_model_path"),
     ])
     def test_cli_integration(
         self,
@@ -884,24 +884,24 @@ class TestIntegrationWithRealModels:
 
     @pytest.mark.parametrize("wav_fixture,label,xfail_reason", [
         ("testing_resident_wav_path", "resident",
-         "HuggingFace model may misclassify resident orca as another whale class"),
+         "PODS-AI model may misclassify resident orca as another whale class"),
         ("testing_transient_wav_path", "transient", None),
         ("testing_humpback_wav_path", "humpback",
-         "HuggingFace model may misclassify humpback as another whale class"),
+         "PODS-AI model may misclassify humpback as another whale class"),
         ("testing_vessel_wav_path", "vessel", None),
         ("testing_water_wav_path", "water", None),
         ("testing_human_wav_path", "human", None),
         ("testing_jingle_wav_path", "jingle", None),
     ])
-    def test_huggingface_model_inference_on_testing_wavs(
+    def test_podsai_model_inference_on_testing_wavs(
         self,
         wav_fixture: str,
         label: str,
         xfail_reason: Optional[str],
-        huggingface_model_path: str,
+        podsai_model_path: str,
         request: pytest.FixtureRequest
     ) -> None:
-        """Test HuggingFace inference on one 60-second testing wav per category."""
+        """Test PODS-AI inference on one 60-second testing wav per category."""
         from run_inference import run_inference
 
         # Apply xfail marker if this test case is expected to fail.
@@ -909,12 +909,12 @@ class TestIntegrationWithRealModels:
             request.node.add_marker(pytest.mark.xfail(reason=xfail_reason, strict=False))
 
         wav_path = request.getfixturevalue(wav_fixture)
-        result = run_inference(wav_path, model_type="huggingface", model_path=huggingface_model_path)
+        result = run_inference(wav_path, model_type="podsai", model_path=podsai_model_path)
 
-        _verify_huggingface_result_structure(result)
+        _verify_podsai_result_structure(result)
         # Require exact label match for per-category testing WAV fixtures.
-        _verify_huggingface_prediction(result, label, allow_category_match=False)
-        _print_huggingface_result(result, f"testing-{label}")
+        _verify_podsai_prediction(result, label, allow_category_match=False)
+        _print_podsai_result(result, f"testing-{label}")
 
     @pytest.fixture
     def orcahello_model_path(self) -> str:

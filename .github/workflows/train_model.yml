@@ -19,7 +19,7 @@ on:
       output_dir:
         description: 'Output directory for the trained model'
         required: false
-        default: 'model/huggingface'
+        default: 'model/podsai'
         type: string
       hub_model_id:
         description: 'HuggingFace Hub model ID (e.g., username/model-name)'
@@ -73,7 +73,7 @@ jobs:
       - name: Train model
         working-directory: ModelTraining
         run: >
-          python src/train_huggingface_model.py
+          python src/train_podsai_model.py
           --output_dir ${{ inputs.output_dir }}
           --epochs ${{ inputs.epochs }}
           --batch_size ${{ inputs.batch_size }}

@@ -21,7 +21,7 @@ The `ModelTraining/src` directory has the following scripts for different steps 
    - Testing samples are written to subdirectories under `output/testing-wav`
    - For testing samples, all rows download 60-second wav files (`tp_human_only` uses the row timestamp; others are centered on the row timestamp)
 5. **make_spectrograms.py**: Create a png file for each wav file in a subdirectory of `output/png`
-6. **train_huggingface_model.py**: A script to train a HuggingFace model on the generated training samples.
+6. **train_podsai_model.py**: A script to train a PODS-AI model on the generated training samples.
 
 ## Model-Based Timestamp Correction for tp_human_only
 
@@ -154,31 +154,31 @@ Key dependencies:
 ### run_inference.py
 
 Run model inference on a wav file and display the global prediction, confidence score,
-and per-class probabilities.  For HuggingFace models the per-class probability is the
+and per-class probabilities.  For PODS-AI models the per-class probability is the
 mean of all `local_confidence` values (from windows predicting that class) that exceed
 the model's threshold — the same statistic used for `global_confidence`.  For the FastAI
 binary model, `whale = global_confidence` and `other = 1 - global_confidence`.
 
 ```
-usage: python run_inference.py <wav_file> [--model {huggingface,fastai,orcahello}] [--model-path PATH]
+usage: python run_inference.py <wav_file> [--model {podsai,fastai,orcahello}] [--model-path PATH]
 ```
 
 | Argument | Description |
 |---|---|
 | `wav_file` | Path to the wav file to score |
-| `--model` | Model type: `huggingface` (default), `fastai`, or `orcahello` |
-| `--model-path` | Path to model directory or HuggingFace Hub model ID. Required for `huggingface`; defaults to `./model` for `fastai`; defaults to `orcasound/orcahello-srkw-detector-v1` for `orcahello` |
+| `--model` | Model type: `podsai` (default), `fastai`, or `orcahello` |
+| `--model-path` | Path to model directory or HuggingFace Hub model ID. Required for `podsai`; defaults to `./model` for `fastai`; defaults to `orcasound/orcahello-srkw-detector-v1` for `orcahello` |
 
-**Example — HuggingFace model**
+**Example — PODS-AI model**
 
 ```bash
 cd src
-python run_inference.py sample.wav --model huggingface --model-path /path/to/hf-model
+python run_inference.py sample.wav --model podsai --model-path /path/to/podsai-model
 ```
 
 Output:
 ```
-Model type: huggingface
+Model type: podsai
 Global prediction: resident (confidence: 0.7000)
 
 Per-class probabilities:
