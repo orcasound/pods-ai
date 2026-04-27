@@ -270,8 +270,8 @@ usage: python compare_models.py [--testing-csv PATH] [--wav-dir PATH]
 | `--testing-csv` | Path to `testing_samples.csv` (default: `../output/csv/testing_samples.csv`) |
 | `--wav-dir` | Root directory of testing WAV files (default: `../output/testing-wav`) |
 | `--models` | Comma-separated list of models to evaluate (default: `fastai,orcahello,huggingface`) |
-| `--fastai-model-path` | Path to FastAI model directory (default: `../model`) |
-| `--orcahello-model-path` | HuggingFace Hub ID or path for OrcaHello model (default: `orcasound/orcahello-srkw-detector-v1`) |
+| `--fastai-model-path` | Path to FastAI model directory. Defaults to `./model` (the `run_inference.py` default) when not specified |
+| `--orcahello-model-path` | HuggingFace Hub ID or path for OrcaHello model. Defaults to `orcasound/orcahello-srkw-detector-v1` when not specified |
 | `--huggingface-model-path` | Path or Hub ID for HuggingFace model. Required when `huggingface` is in `--models` |
 
 **Example — compare all three models**

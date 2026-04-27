@@ -284,14 +284,17 @@ def main() -> int:
     parser.add_argument(
         "--fastai-model-path",
         default=None,
-        help="Path to FastAI model directory (default: ../model).",
+        help=(
+            "Path to FastAI model directory. "
+            "Defaults to ./model (the run_inference.py default) when not specified."
+        ),
     )
     parser.add_argument(
         "--orcahello-model-path",
         default=None,
         help=(
-            "Path or HuggingFace Hub ID for the OrcaHello model "
-            "(default: orcasound/orcahello-srkw-detector-v1)."
+            "Path or HuggingFace Hub ID for the OrcaHello model. "
+            "Defaults to orcasound/orcahello-srkw-detector-v1 when not specified."
         ),
     )
     parser.add_argument(
