@@ -232,55 +232,55 @@ class TestFindWavFile:
 class TestIsResidentPrediction:
     """Tests for is_resident_prediction()."""
 
-    def test_fastai_whale_is_resident(self):
-        """FastAI "whale" prediction maps to resident."""
+    def test_fastai_resident_is_resident(self):
+        """FastAI "resident" prediction maps to resident."""
         from compare_models import is_resident_prediction
-        assert is_resident_prediction("whale", "fastai") is True
+        assert is_resident_prediction("resident", "fastai") is True
 
     def test_fastai_other_is_not_resident(self):
         """FastAI "other" prediction maps to non-resident."""
         from compare_models import is_resident_prediction
         assert is_resident_prediction("other", "fastai") is False
 
-    def test_orcahello_whale_is_resident(self):
-        """OrcaHello "whale" prediction maps to resident."""
+    def test_orcahello_resident_is_resident(self):
+        """OrcaHello "resident" prediction maps to resident."""
         from compare_models import is_resident_prediction
-        assert is_resident_prediction("whale", "orcahello") is True
+        assert is_resident_prediction("resident", "orcahello") is True
 
     def test_orcahello_other_is_not_resident(self):
         """OrcaHello "other" prediction maps to non-resident."""
         from compare_models import is_resident_prediction
         assert is_resident_prediction("other", "orcahello") is False
 
-    def test_huggingface_resident_is_resident(self):
-        """HuggingFace "resident" prediction maps to resident."""
+    def test_podsai_resident_is_resident(self):
+        """PODS-AI "resident" prediction maps to resident."""
         from compare_models import is_resident_prediction
-        assert is_resident_prediction("resident", "huggingface") is True
+        assert is_resident_prediction("resident", "podsai") is True
 
-    def test_huggingface_water_is_not_resident(self):
-        """HuggingFace "water" prediction maps to non-resident."""
+    def test_podsai_water_is_not_resident(self):
+        """PODS-AI "water" prediction maps to non-resident."""
         from compare_models import is_resident_prediction
-        assert is_resident_prediction("water", "huggingface") is False
+        assert is_resident_prediction("water", "podsai") is False
 
-    def test_huggingface_transient_is_not_resident(self):
-        """HuggingFace "transient" prediction maps to non-resident."""
+    def test_podsai_transient_is_not_resident(self):
+        """PODS-AI "transient" prediction maps to non-resident."""
         from compare_models import is_resident_prediction
-        assert is_resident_prediction("transient", "huggingface") is False
+        assert is_resident_prediction("transient", "podsai") is False
 
-    def test_huggingface_humpback_is_not_resident(self):
-        """HuggingFace "humpback" prediction maps to non-resident."""
+    def test_podsai_humpback_is_not_resident(self):
+        """PODS-AI "humpback" prediction maps to non-resident."""
         from compare_models import is_resident_prediction
-        assert is_resident_prediction("humpback", "huggingface") is False
+        assert is_resident_prediction("humpback", "podsai") is False
 
-    def test_huggingface_human_is_not_resident(self):
-        """HuggingFace "human" prediction maps to non-resident."""
+    def test_podsai_human_is_not_resident(self):
+        """PODS-AI "human" prediction maps to non-resident."""
         from compare_models import is_resident_prediction
-        assert is_resident_prediction("human", "huggingface") is False
+        assert is_resident_prediction("human", "podsai") is False
 
-    def test_huggingface_vessel_is_not_resident(self):
-        """HuggingFace "vessel" prediction maps to non-resident."""
+    def test_podsai_vessel_is_not_resident(self):
+        """PODS-AI "vessel" prediction maps to non-resident."""
         from compare_models import is_resident_prediction
-        assert is_resident_prediction("vessel", "huggingface") is False
+        assert is_resident_prediction("vessel", "podsai") is False
 
 
 # ---------------------------------------------------------------------------
@@ -346,7 +346,7 @@ class TestEvaluateModel:
         return wav_dir
 
     def test_correct_resident_prediction_counted(self, tmp_path):
-        """A resident sample predicted as "whale" (fastai) counts as correct."""
+        """A resident sample predicted as "resident" (fastai) counts as correct."""
         from compare_models import TestSample, evaluate_model
 
         sample = TestSample(
@@ -359,7 +359,7 @@ class TestEvaluateModel:
         )
         wav_dir = self._make_wav_files(tmp_path, [sample])
 
-        mock_result = {"global_prediction_label": "whale", "global_confidence": 0.8}
+        mock_result = {"global_prediction_label": "resident", "global_confidence": 0.8}
         with patch("compare_models.run_inference", return_value=mock_result):
             result = evaluate_model("fastai", "./model", [sample], wav_dir)
 
@@ -369,7 +369,7 @@ class TestEvaluateModel:
         assert result.skipped == 0
 
     def test_false_positive_counted(self, tmp_path):
-        """A non-resident sample predicted as "whale" (fastai) counts as false positive."""
+        """A non-resident sample predicted as "resident" (fastai) counts as false positive."""
         from compare_models import TestSample, evaluate_model
 
         sample = TestSample(
@@ -382,7 +382,7 @@ class TestEvaluateModel:
         )
         wav_dir = self._make_wav_files(tmp_path, [sample])
 
-        mock_result = {"global_prediction_label": "whale", "global_confidence": 0.7}
+        mock_result = {"global_prediction_label": "resident", "global_confidence": 0.7}
         with patch("compare_models.run_inference", return_value=mock_result):
             result = evaluate_model("fastai", "./model", [sample], wav_dir)
 
@@ -454,8 +454,8 @@ class TestEvaluateModel:
         assert result.skipped == 1
         assert result.correct == 0
 
-    def test_huggingface_resident_prediction_correct(self, tmp_path):
-        """HuggingFace "resident" prediction for a resident sample counts as correct."""
+    def test_podsai_resident_prediction_correct(self, tmp_path):
+        """PODS-AI "resident" prediction for a resident sample counts as correct."""
         from compare_models import TestSample, evaluate_model
 
         sample = TestSample(
@@ -470,14 +470,14 @@ class TestEvaluateModel:
 
         mock_result = {"global_prediction_label": "resident", "global_confidence": 0.9}
         with patch("compare_models.run_inference", return_value=mock_result):
-            result = evaluate_model("huggingface", "/path/to/model", [sample], wav_dir)
+            result = evaluate_model("podsai", "/path/to/model", [sample], wav_dir)
 
         assert result.correct == 1
         assert result.false_positives == 0
         assert result.false_negatives == 0
 
-    def test_huggingface_water_prediction_correct_for_non_resident(self, tmp_path):
-        """HuggingFace "water" prediction for a non-resident sample counts as correct."""
+    def test_podsai_water_prediction_correct_for_non_resident(self, tmp_path):
+        """PODS-AI "water" prediction for a non-resident sample counts as correct."""
         from compare_models import TestSample, evaluate_model
 
         sample = TestSample(
@@ -492,7 +492,7 @@ class TestEvaluateModel:
 
         mock_result = {"global_prediction_label": "water", "global_confidence": 0.8}
         with patch("compare_models.run_inference", return_value=mock_result):
-            result = evaluate_model("huggingface", "/path/to/model", [sample], wav_dir)
+            result = evaluate_model("podsai", "/path/to/model", [sample], wav_dir)
 
         assert result.correct == 1
         assert result.false_positives == 0
@@ -657,8 +657,8 @@ class TestMainCLI:
             result = main()
         assert result == 1
 
-    def test_returns_1_for_huggingface_without_model_path(self, tmp_path):
-        """main() returns 1 when huggingface is in --models but --huggingface-model-path is absent."""
+    def test_returns_1_for_podsai_without_model_path(self, tmp_path):
+        """main() returns 1 when podsai is in --models but --podsai-model-path is absent."""
         from compare_models import main
 
         det_csv, train_csv = self._write_csvs(tmp_path, _make_detection_rows())
@@ -669,7 +669,7 @@ class TestMainCLI:
             "--detections-csv", str(det_csv),
             "--training-csv", str(train_csv),
             "--wav-dir", str(wav_dir),
-            "--models", "huggingface",
+            "--models", "podsai",
         ]
         with patch.object(sys, "argv", test_args):
             result = main()
@@ -690,7 +690,7 @@ class TestMainCLI:
             wav.parent.mkdir(parents=True, exist_ok=True)
             wav.touch()
 
-        mock_result = {"global_prediction_label": "whale", "global_confidence": 0.8}
+        mock_result = {"global_prediction_label": "resident", "global_confidence": 0.8}
         test_args = [
             "compare_models.py",
             "--detections-csv", str(det_csv),

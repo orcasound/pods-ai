@@ -8,12 +8,12 @@ Usage:
     python compare_models.py [options]
 
 Derives a test set from detections.csv by excluding rows whose URI appears in
-training_samples.csv, then runs each enabled model (fastai, orcahello, huggingface)
+training_samples.csv, then runs each enabled model (fastai, orcahello, podsai)
 on the corresponding 60-second WAV files and reports correct identifications,
 false positives, and false negatives per model.
 
 A "correct" identification means:
-  - Model predicted "resident" (whale) when the label is "resident".
+  - Model predicted "resident" (SRKW) when the label is "resident".
   - Model predicted anything other than "resident" when the label is not "resident".
 
 A "false positive" means the model predicted "resident" when the correct label is not "resident".
@@ -162,22 +162,18 @@ def find_wav_file(sample: TestSample, wav_dir: Path) -> Optional[Path]:
 
 def is_resident_prediction(global_prediction_label: str, model_type: str) -> bool:
     """
-    Determine whether a model's prediction corresponds to "resident" (whale).
+    Determine whether a model's prediction corresponds to "resident" (SRKW).
 
-    For binary models (fastai, orcahello), "whale" maps to resident.
-    For the HuggingFace 7-class model, "resident" maps directly to resident.
+    All three model types (fastai, orcahello, podsai) use "resident" as the
+    positive class label, so the check is the same regardless of model type.
 
     Args:
         global_prediction_label: The model's predicted class label.
-        model_type: The model type ('fastai', 'orcahello', or 'huggingface').
+        model_type: The model type ('fastai', 'orcahello', or 'podsai').
 
     Returns:
         True if the prediction is "resident"; False otherwise.
     """
-    if model_type in ("fastai", "orcahello"):
-        # Binary models use "whale" for resident and "other" for everything else.
-        return global_prediction_label == "whale"
-    # HuggingFace 7-class model uses "resident" directly.
     return global_prediction_label == RESIDENT_LABEL
 
 
@@ -191,7 +187,7 @@ def evaluate_model(
     Run a model against all test samples and accumulate results.
 
     Args:
-        model_type: One of 'fastai', 'orcahello', 'huggingface'.
+        model_type: One of 'fastai', 'orcahello', 'podsai'.
         model_path: Path to the model (or HuggingFace Hub model ID).
         samples: List of testing samples.
         wav_dir: Root directory containing testing WAV files.
@@ -310,10 +306,10 @@ def main() -> int:
     )
     parser.add_argument(
         "--models",
-        default="fastai,orcahello,huggingface",
+        default="fastai,orcahello,podsai",
         help=(
             "Comma-separated list of models to evaluate "
-            "(default: fastai,orcahello,huggingface)."
+            "(default: fastai,orcahello,podsai)."
         ),
     )
     parser.add_argument(
@@ -333,11 +329,11 @@ def main() -> int:
         ),
     )
     parser.add_argument(
-        "--huggingface-model-path",
+        "--podsai-model-path",
         default=None,
         help=(
-            "Path to HuggingFace model directory or Hub model ID. "
-            "Required when 'huggingface' is included in --models."
+            "Path to PODS-AI model directory or Hub model ID. "
+            "Required when 'podsai' is included in --models."
         ),
     )
 
@@ -371,7 +367,7 @@ def main() -> int:
         return 1
 
     models = [m.strip() for m in args.models.split(",") if m.strip()]
-    valid_models = {"fastai", "orcahello", "huggingface"}
+    valid_models = {"fastai", "orcahello", "podsai"}
     for model in models:
         if model not in valid_models:
             print(
@@ -380,9 +376,9 @@ def main() -> int:
             )
             return 1
 
-    if "huggingface" in models and args.huggingface_model_path is None:
+    if "podsai" in models and args.podsai_model_path is None:
         print(
-            "Error: --huggingface-model-path is required when 'huggingface' is in --models.",
+            "Error: --podsai-model-path is required when 'podsai' is in --models.",
             file=sys.stderr,
         )
         return 1
@@ -390,7 +386,7 @@ def main() -> int:
     model_paths: dict[str, Optional[str]] = {
         "fastai": args.fastai_model_path,
         "orcahello": args.orcahello_model_path,
-        "huggingface": args.huggingface_model_path,
+        "podsai": args.podsai_model_path,
     }
 
     samples = derive_test_samples(detections_csv, training_csv)
