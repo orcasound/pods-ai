@@ -5,7 +5,7 @@
 Unit tests for compare_models.py.
 
 Tests cover:
-- derive_test_samples() CSV parsing and exclusion logic
+- load_test_samples() CSV parsing
 - find_wav_file() path construction
 - is_resident_prediction() label mapping
 - evaluate_model() with mocked run_inference
@@ -30,15 +30,15 @@ def _write_csv(path, rows, fieldnames=None):
     """Write a CSV file with the given rows."""
     if not fieldnames:
         fieldnames = ["Category", "NodeName", "Timestamp", "URI", "Description", "Notes", "Confidence"]
-    with open(path, "w", newline="") as f:
+    with open(path, "w", newline="", encoding="utf-8") as f:
         import csv as _csv
         writer = _csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
         writer.writeheader()
         writer.writerows(rows)
 
 
-def _make_detection_rows():
-    """Return a list of detection rows for testing."""
+def _make_testing_rows():
+    """Return a list of testing sample rows."""
     return [
         {
             "Category": "resident",
@@ -71,55 +71,36 @@ def _make_detection_rows():
 
 
 # ---------------------------------------------------------------------------
-# Tests for derive_test_samples()
+# Tests for load_test_samples()
 # ---------------------------------------------------------------------------
 
-class TestDeriveTestSamples:
-    """Tests for derive_test_samples()."""
+class TestLoadTestSamples:
+    """Tests for load_test_samples()."""
 
-    def test_excludes_training_uris(self, tmp_path):
-        """derive_test_samples excludes rows whose URI appears in training_samples.csv."""
-        from compare_models import derive_test_samples
-        detections = _make_detection_rows()
-        training_rows = [detections[0]]
+    def test_loads_all_samples(self, tmp_path):
+        """load_test_samples loads all rows from testing_samples.csv."""
+        from compare_models import load_test_samples
+        testing_rows = _make_testing_rows()
 
-        detections_csv = tmp_path / "detections.csv"
-        training_csv = tmp_path / "training_samples.csv"
-        _write_csv(detections_csv, detections)
-        _write_csv(training_csv, training_rows)
+        testing_csv = tmp_path / "testing_samples.csv"
+        _write_csv(testing_csv, testing_rows)
 
-        samples = derive_test_samples(detections_csv, training_csv)
-        assert len(samples) == 2
+        samples = load_test_samples(testing_csv)
+        assert len(samples) == 3
         uris = {s.uri for s in samples}
-        assert "https://example.com/1" not in uris
+        assert "https://example.com/1" in uris
         assert "https://example.com/2" in uris
         assert "https://example.com/3" in uris
 
-    def test_returns_all_detections_when_no_training_overlap(self, tmp_path):
-        """derive_test_samples returns all detections when training has different URIs."""
-        from compare_models import derive_test_samples
-        detections = _make_detection_rows()
-        training_rows = [{"URI": "https://example.com/999"}]
-
-        detections_csv = tmp_path / "detections.csv"
-        training_csv = tmp_path / "training_samples.csv"
-        _write_csv(detections_csv, detections)
-        _write_csv(training_csv, training_rows)
-
-        samples = derive_test_samples(detections_csv, training_csv)
-        assert len(samples) == len(detections)
-
     def test_parses_fields_correctly(self, tmp_path):
-        """derive_test_samples correctly maps CSV columns to TestSample fields."""
-        from compare_models import derive_test_samples
-        detections = _make_detection_rows()
+        """load_test_samples correctly maps CSV columns to TestSample fields."""
+        from compare_models import load_test_samples
+        testing_rows = _make_testing_rows()
 
-        detections_csv = tmp_path / "detections.csv"
-        training_csv = tmp_path / "training_samples.csv"
-        _write_csv(detections_csv, detections)
-        _write_csv(training_csv, [])
+        testing_csv = tmp_path / "testing_samples.csv"
+        _write_csv(testing_csv, testing_rows)
 
-        samples = derive_test_samples(detections_csv, training_csv)
+        samples = load_test_samples(testing_csv)
         first = samples[0]
         assert first.category == "resident"
         assert first.node_name == "rpi_orcasound_lab"
@@ -127,35 +108,48 @@ class TestDeriveTestSamples:
         assert first.uri == "https://example.com/1"
         assert first.notes == "tp_human_only"
 
-    def test_returns_empty_list_for_missing_detections_file(self, tmp_path):
-        """derive_test_samples returns [] when detections.csv is missing."""
-        from compare_models import derive_test_samples
-        training_csv = tmp_path / "training_samples.csv"
-        _write_csv(training_csv, [])
+    def test_returns_empty_list_for_missing_file(self, tmp_path):
+        """load_test_samples returns [] when testing_samples.csv is missing."""
+        from compare_models import load_test_samples
 
-        samples = derive_test_samples(Path("/nonexistent/detections.csv"), training_csv)
+        samples = load_test_samples(Path("/nonexistent/testing_samples.csv"))
         assert samples == []
 
-    def test_returns_all_when_training_file_missing(self, tmp_path):
-        """derive_test_samples returns all detections when training_samples.csv is missing."""
-        from compare_models import derive_test_samples
-        detections_csv = tmp_path / "detections.csv"
-        _write_csv(detections_csv, _make_detection_rows())
+    def test_respects_max_samples_limit(self, tmp_path):
+        """load_test_samples respects max_samples parameter."""
+        from compare_models import load_test_samples
+        testing_rows = _make_testing_rows()
 
-        samples = derive_test_samples(detections_csv, Path("/nonexistent/training_samples.csv"))
-        assert len(samples) == len(_make_detection_rows())
+        testing_csv = tmp_path / "testing_samples.csv"
+        _write_csv(testing_csv, testing_rows)
 
-    def test_returns_empty_when_all_detections_in_training(self, tmp_path):
-        """derive_test_samples returns [] when all detections are in training."""
-        from compare_models import derive_test_samples
-        detections = _make_detection_rows()
+        samples = load_test_samples(testing_csv, max_samples=2)
+        assert len(samples) == 2
 
-        detections_csv = tmp_path / "detections.csv"
-        training_csv = tmp_path / "training_samples.csv"
-        _write_csv(detections_csv, detections)
-        _write_csv(training_csv, detections)
+    def test_handles_csv_error(self, tmp_path):
+        """load_test_samples returns [] for malformed CSV."""
+        from compare_models import load_test_samples
+        
+        testing_csv = tmp_path / "testing_samples.csv"
+        # Write malformed CSV with unescaped quotes
+        with open(testing_csv, "w", encoding="utf-8") as f:
+            f.write("Category,NodeName,Timestamp,URI,Description,Notes\n")
+            f.write('resident,rpi_lab,2023_01_01_00_00_00_PST,http://example.com,"bad"quote",notes\n')
+        
+        samples = load_test_samples(testing_csv)
+        assert samples == []
 
-        samples = derive_test_samples(detections_csv, training_csv)
+    def test_handles_unicode_decode_error(self, tmp_path):
+        """load_test_samples returns [] for files with encoding issues."""
+        from compare_models import load_test_samples
+        
+        testing_csv = tmp_path / "testing_samples.csv"
+        # Write file with invalid UTF-8
+        with open(testing_csv, "wb") as f:
+            f.write(b"Category,NodeName,Timestamp,URI,Description,Notes\n")
+            f.write(b"resident,rpi_lab,2023_01_01_00_00_00_PST,http://example.com,test\x8f,notes\n")
+        
+        samples = load_test_samples(testing_csv)
         assert samples == []
 
 
@@ -326,6 +320,18 @@ class TestModelResultProperties:
         r = ModelResult(model_type="fastai", total=10, false_negatives=1, skipped=0)
         assert abs(r.false_negative_rate - 0.1) < 1e-9
 
+    def test_avg_predict_time_none_when_no_times(self):
+        """avg_predict_time is None when predict_times is empty."""
+        from compare_models import ModelResult
+        r = ModelResult(model_type="fastai", total=5, skipped=5)
+        assert r.avg_predict_time is None
+
+    def test_avg_predict_time_calculates_mean(self):
+        """avg_predict_time is the mean of predict_times."""
+        from compare_models import ModelResult
+        r = ModelResult(model_type="fastai", total=3, predict_times=[1.0, 2.0, 3.0])
+        assert abs(r.avg_predict_time - 2.0) < 1e-9
+
 
 # ---------------------------------------------------------------------------
 # Tests for evaluate_model()
@@ -359,7 +365,7 @@ class TestEvaluateModel:
         )
         wav_dir = self._make_wav_files(tmp_path, [sample])
 
-        mock_result = {"global_prediction_label": "resident", "global_confidence": 0.8}
+        mock_result = {"global_prediction_label": "resident", "global_confidence": 0.8, "predict_time": 1.5}
         with patch("compare_models.run_inference", return_value=mock_result):
             result = evaluate_model("fastai", "./model", [sample], wav_dir)
 
@@ -382,7 +388,7 @@ class TestEvaluateModel:
         )
         wav_dir = self._make_wav_files(tmp_path, [sample])
 
-        mock_result = {"global_prediction_label": "resident", "global_confidence": 0.7}
+        mock_result = {"global_prediction_label": "resident", "global_confidence": 0.7, "predict_time": 1.2}
         with patch("compare_models.run_inference", return_value=mock_result):
             result = evaluate_model("fastai", "./model", [sample], wav_dir)
 
@@ -404,7 +410,7 @@ class TestEvaluateModel:
         )
         wav_dir = self._make_wav_files(tmp_path, [sample])
 
-        mock_result = {"global_prediction_label": "other", "global_confidence": 0.1}
+        mock_result = {"global_prediction_label": "other", "global_confidence": 0.1, "predict_time": 1.0}
         with patch("compare_models.run_inference", return_value=mock_result):
             result = evaluate_model("fastai", "./model", [sample], wav_dir)
 
@@ -468,7 +474,7 @@ class TestEvaluateModel:
         )
         wav_dir = self._make_wav_files(tmp_path, [sample])
 
-        mock_result = {"global_prediction_label": "resident", "global_confidence": 0.9}
+        mock_result = {"global_prediction_label": "resident", "global_confidence": 0.9, "predict_time": 2.0}
         with patch("compare_models.run_inference", return_value=mock_result):
             result = evaluate_model("podsai", "/path/to/model", [sample], wav_dir)
 
@@ -490,7 +496,7 @@ class TestEvaluateModel:
         )
         wav_dir = self._make_wav_files(tmp_path, [sample])
 
-        mock_result = {"global_prediction_label": "water", "global_confidence": 0.8}
+        mock_result = {"global_prediction_label": "water", "global_confidence": 0.8, "predict_time": 1.8}
         with patch("compare_models.run_inference", return_value=mock_result):
             result = evaluate_model("podsai", "/path/to/model", [sample], wav_dir)
 
@@ -508,11 +514,32 @@ class TestEvaluateModel:
         ]
         wav_dir = self._make_wav_files(tmp_path, samples)
 
-        mock_result = {"global_prediction_label": "other", "global_confidence": 0.1}
+        mock_result = {"global_prediction_label": "other", "global_confidence": 0.1, "predict_time": 1.0}
         with patch("compare_models.run_inference", return_value=mock_result):
             result = evaluate_model("fastai", "./model", samples, wav_dir)
 
         assert result.total == 2
+
+    def test_records_predict_times(self, tmp_path):
+        """evaluate_model records predict_time from inference results."""
+        from compare_models import TestSample, evaluate_model
+
+        sample = TestSample(
+            category="resident",
+            node_name="rpi_orcasound_lab",
+            timestamp="2023_08_18_00_59_53_PST",
+            uri="",
+            description="",
+            notes="tp_human_only",
+        )
+        wav_dir = self._make_wav_files(tmp_path, [sample])
+
+        mock_result = {"global_prediction_label": "resident", "global_confidence": 0.8, "predict_time": 2.5}
+        with patch("compare_models.run_inference", return_value=mock_result):
+            result = evaluate_model("fastai", "./model", [sample], wav_dir)
+
+        assert len(result.predict_times) == 1
+        assert abs(result.predict_times[0] - 2.5) < 1e-9
 
 
 # ---------------------------------------------------------------------------
@@ -571,6 +598,14 @@ class TestPrintSummary:
         assert "Definitions:" in captured
         assert "false+" in captured or "FP" in captured
 
+    def test_prints_avg_time(self, capsys):
+        """print_summary includes average time column."""
+        from compare_models import ModelResult, print_summary
+        results = [ModelResult(model_type="fastai", total=5, correct=4, skipped=0, predict_times=[1.5, 2.0, 1.8, 2.2, 1.7])]
+        print_summary(results)
+        captured = capsys.readouterr().out
+        assert "Avg Time" in captured
+
 
 # ---------------------------------------------------------------------------
 # Tests for main() CLI
@@ -579,43 +614,20 @@ class TestPrintSummary:
 class TestMainCLI:
     """Tests for the main() entry point."""
 
-    def _write_csvs(self, tmp_path, detection_rows, training_rows=None):
-        """Write detections.csv and training_samples.csv to tmp_path."""
-        det_csv = tmp_path / "detections.csv"
-        train_csv = tmp_path / "training_samples.csv"
-        _write_csv(det_csv, detection_rows)
-        _write_csv(train_csv, training_rows or [])
-        return det_csv, train_csv
+    def _write_testing_csv(self, tmp_path, testing_rows):
+        """Write testing_samples.csv to tmp_path."""
+        testing_csv = tmp_path / "testing_samples.csv"
+        _write_csv(testing_csv, testing_rows)
+        return testing_csv
 
-    def test_returns_1_for_missing_detections_csv(self, tmp_path):
-        """main() returns 1 when detections.csv does not exist."""
+    def test_returns_1_for_missing_testing_csv(self, tmp_path):
+        """main() returns 1 when testing_samples.csv does not exist."""
         from compare_models import main
         wav_dir = tmp_path / "testing-wav"
         wav_dir.mkdir()
-        training_csv = tmp_path / "training_samples.csv"
-        _write_csv(training_csv, [])
         test_args = [
             "compare_models.py",
-            "--detections-csv", str(tmp_path / "nonexistent.csv"),
-            "--training-csv", str(training_csv),
-            "--wav-dir", str(wav_dir),
-            "--models", "fastai",
-        ]
-        with patch.object(sys, "argv", test_args):
-            result = main()
-        assert result == 1
-
-    def test_returns_1_for_missing_training_csv(self, tmp_path):
-        """main() returns 1 when training_samples.csv does not exist."""
-        from compare_models import main
-        wav_dir = tmp_path / "testing-wav"
-        wav_dir.mkdir()
-        det_csv = tmp_path / "detections.csv"
-        _write_csv(det_csv, _make_detection_rows())
-        test_args = [
-            "compare_models.py",
-            "--detections-csv", str(det_csv),
-            "--training-csv", str(tmp_path / "nonexistent_training.csv"),
+            "--testing-csv", str(tmp_path / "nonexistent.csv"),
             "--wav-dir", str(wav_dir),
             "--models", "fastai",
         ]
@@ -627,11 +639,10 @@ class TestMainCLI:
         """main() returns 1 when the WAV directory does not exist."""
         from compare_models import main
 
-        det_csv, train_csv = self._write_csvs(tmp_path, _make_detection_rows())
+        testing_csv = self._write_testing_csv(tmp_path, _make_testing_rows())
         test_args = [
             "compare_models.py",
-            "--detections-csv", str(det_csv),
-            "--training-csv", str(train_csv),
+            "--testing-csv", str(testing_csv),
             "--wav-dir", str(tmp_path / "nonexistent-wav-dir"),
             "--models", "fastai",
         ]
@@ -643,13 +654,12 @@ class TestMainCLI:
         """main() returns 1 when an unrecognised model type is specified."""
         from compare_models import main
 
-        det_csv, train_csv = self._write_csvs(tmp_path, _make_detection_rows())
+        testing_csv = self._write_testing_csv(tmp_path, _make_testing_rows())
         wav_dir = tmp_path / "testing-wav"
         wav_dir.mkdir()
         test_args = [
             "compare_models.py",
-            "--detections-csv", str(det_csv),
-            "--training-csv", str(train_csv),
+            "--testing-csv", str(testing_csv),
             "--wav-dir", str(wav_dir),
             "--models", "unknown_model",
         ]
@@ -658,25 +668,23 @@ class TestMainCLI:
         assert result == 1
 
     def test_returns_0_on_success_with_fastai(self, tmp_path):
-        """main() returns 0 when it successfully evaluates fastai on a derived test set."""
+        """main() returns 0 when it successfully evaluates fastai on test samples."""
         from compare_models import main
 
-        rows = _make_detection_rows()
-        # One training row excluded; the other two form the test set.
-        det_csv, train_csv = self._write_csvs(tmp_path, rows, training_rows=[rows[1]])
+        rows = _make_testing_rows()
+        testing_csv = self._write_testing_csv(tmp_path, rows)
 
         wav_dir = tmp_path / "testing-wav"
-        for row in [rows[0], rows[2]]:
+        for row in rows:
             node = row["NodeName"].replace("_", "-")
             wav = wav_dir / row["Category"] / f"{node}_{row['Timestamp']}.wav"
             wav.parent.mkdir(parents=True, exist_ok=True)
             wav.touch()
 
-        mock_result = {"global_prediction_label": "resident", "global_confidence": 0.8}
+        mock_result = {"global_prediction_label": "resident", "global_confidence": 0.8, "predict_time": 1.5}
         test_args = [
             "compare_models.py",
-            "--detections-csv", str(det_csv),
-            "--training-csv", str(train_csv),
+            "--testing-csv", str(testing_csv),
             "--wav-dir", str(wav_dir),
             "--models", "fastai",
             "--fastai-model-path", "./model",
@@ -686,20 +694,65 @@ class TestMainCLI:
                 result = main()
         assert result == 0
 
-    def test_returns_1_when_all_detections_are_in_training(self, tmp_path):
-        """main() returns 1 when all detections are used for training (empty test set)."""
+    def test_returns_1_when_no_test_samples(self, tmp_path):
+        """main() returns 1 when testing_samples.csv is empty."""
         from compare_models import main
 
-        rows = _make_detection_rows()
-        det_csv, train_csv = self._write_csvs(tmp_path, rows, training_rows=rows)
+        testing_csv = self._write_testing_csv(tmp_path, [])
         wav_dir = tmp_path / "testing-wav"
         wav_dir.mkdir()
         test_args = [
             "compare_models.py",
-            "--detections-csv", str(det_csv),
-            "--training-csv", str(train_csv),
+            "--testing-csv", str(testing_csv),
             "--wav-dir", str(wav_dir),
             "--models", "fastai",
+        ]
+        with patch.object(sys, "argv", test_args):
+            result = main()
+        assert result == 1
+
+    def test_respects_max_samples_argument(self, tmp_path):
+        """main() respects --max-samples argument."""
+        from compare_models import main
+
+        rows = _make_testing_rows()
+        testing_csv = self._write_testing_csv(tmp_path, rows)
+
+        wav_dir = tmp_path / "testing-wav"
+        for row in rows[:2]:  # Only create WAVs for first 2
+            node = row["NodeName"].replace("_", "-")
+            wav = wav_dir / row["Category"] / f"{node}_{row['Timestamp']}.wav"
+            wav.parent.mkdir(parents=True, exist_ok=True)
+            wav.touch()
+
+        mock_result = {"global_prediction_label": "resident", "global_confidence": 0.8, "predict_time": 1.5}
+        test_args = [
+            "compare_models.py",
+            "--testing-csv", str(testing_csv),
+            "--wav-dir", str(wav_dir),
+            "--models", "fastai",
+            "--max-samples", "2",
+        ]
+        with patch.object(sys, "argv", test_args):
+            with patch("compare_models.run_inference", return_value=mock_result) as mock_infer:
+                result = main()
+                # Should only call inference twice (max 2 samples)
+                assert mock_infer.call_count == 2
+        assert result == 0
+
+    def test_returns_1_for_invalid_max_samples(self, tmp_path):
+        """main() returns 1 when --max-samples is zero or negative."""
+        from compare_models import main
+
+        testing_csv = self._write_testing_csv(tmp_path, _make_testing_rows())
+        wav_dir = tmp_path / "testing-wav"
+        wav_dir.mkdir()
+        test_args = [
+            "compare_models.py",
+            "--testing-csv", str(testing_csv),
+            "--wav-dir", str(wav_dir),
+            "--models", "fastai",
+            "--max-samples", "0",
         ]
         with patch.object(sys, "argv", test_args):
             result = main()
