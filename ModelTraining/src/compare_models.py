@@ -29,6 +29,7 @@ from typing import Optional
 from run_inference import run_inference
 
 RESIDENT_LABEL = "resident"
+MATRIX_CELL_PADDING = 2
 
 
 @dataclass
@@ -54,6 +55,7 @@ class ModelResult:
     false_negatives: int = 0
     skipped: int = 0
     predict_times: list[float] = field(default_factory=list)
+    # Maps actual_label → {predicted_label → count} for each evaluated sample.
     confusion_matrix: dict[str, dict[str, int]] = field(default_factory=dict)
 
     @property
@@ -253,8 +255,8 @@ def print_confusion_matrix(result: ModelResult) -> None:
         set(list(matrix.keys()) + [p for preds in matrix.values() for p in preds])
     )
 
-    col_width = max(len(label) for label in all_labels) + 2
-    row_label_width = max(len(label) for label in all_labels) + 2
+    col_width = max(len(label) for label in all_labels) + MATRIX_CELL_PADDING
+    row_label_width = max(len(label) for label in all_labels) + MATRIX_CELL_PADDING
 
     print(f"Confusion Matrix for {result.model_type} (rows=actual, cols=predicted):")
     print(f"{'':>{row_label_width}}", end="")
