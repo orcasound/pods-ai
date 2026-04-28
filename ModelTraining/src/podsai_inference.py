@@ -228,37 +228,41 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
 
         print(f"  Processing {num_positions} positions with {segment_duration}s window, {hop_duration}s hop...")
 
+        # Collect all segments first, then batch-process them in a single forward pass
+        # for better performance (fewer model calls, better hardware utilization).
+        segments = []
+        for pos_idx in range(num_positions):
+            start = pos_idx * hop_samples
+            end = min(start + segment_samples, len(audio))
+            segment = audio[start:end]
+
+            # Pad if necessary (for short audio or last segment).
+            if len(segment) < segment_samples:
+                padding = segment_samples - len(segment)
+                segment = np.pad(segment, (0, padding), mode='constant')
+            segments.append(segment)
+
         with torch.no_grad():
-            for pos_idx in range(num_positions):
-                start = pos_idx * hop_samples
-                end = min(start + segment_samples, len(audio))
-                segment = audio[start:end]
+            # Extract features for all segments at once.
+            inputs = self.feature_extractor(
+                segments,
+                sampling_rate=sr,
+                return_tensors="pt",
+                padding=True,
+            )
 
-                # Pad if necessary (for short audio or last segment).
-                if len(segment) < segment_samples:
-                    padding = segment_samples - len(segment)
-                    segment = np.pad(segment, (0, padding), mode='constant')
+            # Move to device. This is important for performance, especially if using GPU.
+            inputs = {k: v.to(self.device) for k, v in inputs.items()}
 
-                # Extract features. This will handle padding internally if needed.
-                inputs = self.feature_extractor(
-                    segment,
-                    sampling_rate=sr,
-                    return_tensors="pt",
-                    padding=True,
-                )
+            # Get predictions for all segments in one forward pass.
+            outputs = self.model(**inputs)
+            logits = outputs.logits
+            probs = torch.nn.functional.softmax(logits, dim=-1)
 
-                # Move to device. This is important for performance, especially if using GPU.
-                inputs = {k: v.to(self.device) for k, v in inputs.items()}
-
-                # Get predictions.
-                outputs = self.model(**inputs)
-                logits = outputs.logits
-                probs = torch.nn.functional.softmax(logits, dim=-1)
-
-                # Get predicted class (argmax) and store probabilities.
-                predicted_class = torch.argmax(probs, dim=-1).item()
-                segment_class_ids.append(predicted_class)
-                segment_probs.append(probs[0].cpu().numpy())
+            # Get predicted class (argmax) and store probabilities for each segment.
+            predicted_classes = torch.argmax(probs, dim=-1).tolist()
+            segment_class_ids = [int(c) for c in predicted_classes]
+            segment_probs = [probs[i].cpu().numpy() for i in range(len(segments))]
 
         # Guard against empty predictions list.
         # This can happen if the audio is too short or if there was an error during processing.

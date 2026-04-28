@@ -49,11 +49,12 @@ def mock_podsai_model():
     mock_model.to = Mock(return_value=mock_model)
     mock_model.eval = Mock(return_value=mock_model)
     
-    # Mock model output.
+    # Mock model output. Handles batched input by returning one row per segment.
     def mock_forward(**kwargs):
         # Return logits for "water" class with high confidence.
-        # Shape: (batch_size=1, num_classes=7)
-        logits = torch.tensor([[2.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0]])  # High score for "water"
+        # Shape: (batch_size, num_classes=7)
+        batch_size = kwargs["input_values"].shape[0]
+        logits = torch.tensor([[2.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0]]).repeat(batch_size, 1)
         mock_output = Mock()
         mock_output.logits = logits
         return mock_output
@@ -69,10 +70,16 @@ def mock_feature_extractor():
     mock_extractor = Mock()
     
     def mock_extract(audio, sampling_rate, return_tensors, padding):
-        # Return dummy tensors.
+        # Return dummy tensors. Supports both single array and batched list inputs.
+        if isinstance(audio, list):
+            batch_size = len(audio)
+            seq_len = len(audio[0]) if audio else 0
+        else:
+            batch_size = 1
+            seq_len = len(audio)
         return {
-            "input_values": torch.randn(1, len(audio)),
-            "attention_mask": torch.ones(1, len(audio))
+            "input_values": torch.randn(batch_size, seq_len),
+            "attention_mask": torch.ones(batch_size, seq_len, dtype=torch.long)
         }
     
     mock_extractor.side_effect = mock_extract
@@ -358,12 +365,13 @@ class TestPodsAIInferenceIndexing:
         mock_model.to = Mock(return_value=mock_model)
         mock_model.eval = Mock(return_value=mock_model)
         
-        # Return known probabilities.
+        # Return known probabilities. Handles batched input.
         # water=0.1, resident=0.4, transient=0.1, humpback=0.1, vessel=0.1, jingle=0.1, human=0.1
         # Total negative (water+vessel+jingle+human) = 0.4, so call-likelihood should be 0.6
         def mock_forward(**kwargs):
             # Logits that represent the desired distribution.
-            logits = torch.tensor([[0.1, 0.4, 0.1, 0.1, 0.1, 0.1, 0.1]])
+            batch_size = kwargs["input_values"].shape[0]
+            logits = torch.tensor([[0.1, 0.4, 0.1, 0.1, 0.1, 0.1, 0.1]]).repeat(batch_size, 1)
             mock_output = Mock()
             mock_output.logits = logits
             return mock_output
