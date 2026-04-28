@@ -12,6 +12,7 @@ Usage:
 
 import argparse
 import sys
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -37,13 +38,17 @@ def run_inference(wav_path: str, model_type: str = "podsai",
               that class and whose confidence exceeds the model's threshold.
             - global_prediction_label: predicted class label for the whole file
             - global_confidence: confidence score (0.0-1.0) for the global prediction
+            - predict_time: time in seconds spent in the model's predict() method
     """
 
     if model_type == "fastai":
         if model_path is None:
             model_path = "./model"
         model = get_model_inference(model_type="fastai", model_path=model_path)
+
+        start_time = time.time()
         result = model.predict(wav_path)
+        predict_time = time.time() - start_time
 
         # For the binary FastAI model, global_confidence is the mean of all
         # local_confidences that exceed the threshold (resident windows).
@@ -62,7 +67,10 @@ def run_inference(wav_path: str, model_type: str = "podsai",
         if model_path is None:
             model_path = "orcasound/orcahello-srkw-detector-v1"
         model = get_model_inference(model_type="orcahello", model_path=model_path)
+
+        start_time = time.time()
         result = model.predict(wav_path)
+        predict_time = time.time() - start_time
 
         # The OrcaHello SRKW detector is a binary classifier (other vs resident).
         resident_prob = float(result.get("global_confidence", 0.0))
@@ -83,7 +91,10 @@ def run_inference(wav_path: str, model_type: str = "podsai",
                 "Provide a path to a fine-tuned model directory or a HuggingFace Hub model ID."
             )
         model = get_model_inference(model_type="podsai", model_path=model_path)
+
+        start_time = time.time()
         result = model.predict(wav_path)
+        predict_time = time.time() - start_time
 
         local_predictions = result.get("local_predictions", [])
         local_confidences = result.get("local_confidences", [])
@@ -123,6 +134,7 @@ def run_inference(wav_path: str, model_type: str = "podsai",
         "probabilities": probabilities,
         "global_prediction_label": global_prediction_label,
         "global_confidence": global_confidence,
+        "predict_time": predict_time,
     }
 
 
@@ -136,9 +148,11 @@ def print_results(results: dict, model_type: str) -> None:
     probabilities = results["probabilities"]
     label = results["global_prediction_label"]
     confidence = results["global_confidence"]
+    predict_time = results.get("predict_time", 0.0)
 
     print(f"Model type: {model_type}")
     print(f"Global prediction: {label} (confidence: {confidence:.4f})")
+    print(f"Prediction time: {predict_time:.2f}s")
     print()
     print("Per-class probabilities:")
     for class_name, prob in sorted(probabilities.items()):

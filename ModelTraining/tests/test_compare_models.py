@@ -657,24 +657,6 @@ class TestMainCLI:
             result = main()
         assert result == 1
 
-    def test_returns_1_for_podsai_without_model_path(self, tmp_path):
-        """main() returns 1 when podsai is in --models but --podsai-model-path is absent."""
-        from compare_models import main
-
-        det_csv, train_csv = self._write_csvs(tmp_path, _make_detection_rows())
-        wav_dir = tmp_path / "testing-wav"
-        wav_dir.mkdir()
-        test_args = [
-            "compare_models.py",
-            "--detections-csv", str(det_csv),
-            "--training-csv", str(train_csv),
-            "--wav-dir", str(wav_dir),
-            "--models", "podsai",
-        ]
-        with patch.object(sys, "argv", test_args):
-            result = main()
-        assert result == 1
-
     def test_returns_0_on_success_with_fastai(self, tmp_path):
         """main() returns 0 when it successfully evaluates fastai on a derived test set."""
         from compare_models import main

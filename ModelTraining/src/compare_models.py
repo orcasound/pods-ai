@@ -7,10 +7,9 @@ Compare multiple models on a test set of audio samples.
 Usage:
     python compare_models.py [options]
 
-Derives a test set from detections.csv by excluding rows whose URI appears in
-training_samples.csv, then runs each enabled model (fastai, orcahello, podsai)
-on the corresponding 60-second WAV files and reports correct identifications,
-false positives, and false negatives per model.
+Loads a test set from testing_samples.csv, then runs each enabled model
+(fastai, orcahello, podsai) on the corresponding 60-second WAV files and
+reports correct identifications, false positives, and false negatives per model.
 
 A "correct" identification means:
   - Model predicted "resident" (SRKW) when the label is "resident".
@@ -23,7 +22,7 @@ A "false negative" means the model predicted something other than "resident" whe
 import argparse
 import csv
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
@@ -54,6 +53,7 @@ class ModelResult:
     false_positives: int = 0
     false_negatives: int = 0
     skipped: int = 0
+    predict_times: list[float] = field(default_factory=list)
 
     @property
     def evaluated(self) -> int:
@@ -81,60 +81,45 @@ class ModelResult:
             return None
         return self.false_negatives / self.evaluated
 
+    @property
+    def avg_predict_time(self) -> Optional[float]:
+        """Average time in seconds spent in predict() method per WAV file."""
+        if not self.predict_times:
+            return None
+        return sum(self.predict_times) / len(self.predict_times)
 
-def _load_csv_rows(csv_path: Path) -> list[dict]:
+
+def load_test_samples(testing_csv: Path, max_samples: Optional[int] = None) -> list[TestSample]:
     """
-    Load all rows from a CSV file as a list of dicts.
+    Load test samples from testing_samples.csv.
 
     Args:
-        csv_path: Path to the CSV file.
+        testing_csv: Path to testing_samples.csv.
+        max_samples: Maximum number of samples to load. If None, load all samples.
 
     Returns:
-        List of row dicts, or an empty list on error.
+        List of TestSample objects, or an empty list on error.
     """
-    rows = []
-    try:
-        with open(csv_path, newline="") as f:
-            reader = csv.DictReader(f)
-            rows = list(reader)
-    except OSError as e:
-        print(f"Error reading {csv_path}: {e}", file=sys.stderr)
-    return rows
-
-
-def derive_test_samples(detections_csv: Path, training_csv: Path) -> list[TestSample]:
-    """
-    Derive a test set from detections.csv by excluding rows already used for training.
-
-    A detection row is excluded from the test set if its URI appears in
-    training_samples.csv.  All remaining rows from detections.csv form the
-    potential test set.
-
-    Args:
-        detections_csv: Path to detections.csv.
-        training_csv: Path to training_samples.csv.
-
-    Returns:
-        List of TestSample objects not used for training, or an empty list on error.
-    """
-    detections = _load_csv_rows(detections_csv)
-    training_rows = _load_csv_rows(training_csv)
-
-    training_uris = {row.get("URI", "") for row in training_rows if row.get("URI", "")}
-
     samples = []
-    for row in detections:
-        uri = row.get("URI", "")
-        if uri in training_uris:
-            continue
-        samples.append(TestSample(
-            category=row.get("Category", ""),
-            node_name=row.get("NodeName", ""),
-            timestamp=row.get("Timestamp", ""),
-            uri=uri,
-            description=row.get("Description", ""),
-            notes=row.get("Notes", ""),
-        ))
+    try:
+        with open(testing_csv, newline="", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                samples.append(TestSample(
+                    category=row.get("Category", ""),
+                    node_name=row.get("NodeName", ""),
+                    timestamp=row.get("Timestamp", ""),
+                    uri=row.get("URI", ""),
+                    description=row.get("Description", ""),
+                    notes=row.get("Notes", ""),
+                ))
+
+                # Stop if we've reached the maximum.
+                if max_samples is not None and len(samples) >= max_samples:
+                    break
+
+    except OSError as e:
+        print(f"Error reading {testing_csv}: {e}", file=sys.stderr)
     return samples
 
 
@@ -193,7 +178,8 @@ def evaluate_model(
         wav_dir: Root directory containing testing WAV files.
 
     Returns:
-        ModelResult with counts of correct, false positive, and false negative predictions.
+        ModelResult with counts of correct, false positive, and false negative predictions,
+        plus timing information for predict() calls.
     """
     result = ModelResult(model_type=model_type, total=len(samples))
 
@@ -211,6 +197,8 @@ def evaluate_model(
 
         try:
             inference_result = run_inference(str(wav_path), model_type=model_type, model_path=model_path)
+            predict_time = inference_result.get("predict_time", 0.0)
+            result.predict_times.append(predict_time)
         except Exception as e:
             print(f"  [{model_type}] Error on {wav_path.name}: {e}")
             result.skipped += 1
@@ -231,7 +219,7 @@ def evaluate_model(
 
         print(
             f"  [{model_type}] {sample.category}/{sample.node_name}/{sample.timestamp}: "
-            f"predicted={predicted_label!r} → {status}"
+            f"predicted={predicted_label!r} → {status} ({predict_time:.2f}s)"
         )
 
     return result
@@ -245,34 +233,37 @@ def print_summary(results: list[ModelResult]) -> None:
         results: List of ModelResult objects, one per model.
     """
     print()
-    print("=" * 70)
+    print("=" * 90)
     print("Model Comparison Summary")
-    print("=" * 70)
+    print("=" * 90)
     header = (
         f"{'Model':<15} {'Evaluated':>9} {'Correct':>9} {'Accuracy':>9}"
-        f" {'FP':>6} {'FP%':>7} {'FN':>6} {'FN%':>7}"
+        f" {'FP':>6} {'FP%':>7} {'FN':>6} {'FN%':>7} {'Avg Time':>10}"
     )
     print(header)
-    print("-" * 70)
+    print("-" * 90)
 
     for r in results:
         evaluated = r.evaluated
         accuracy = f"{r.accuracy:.1%}" if r.accuracy is not None else "N/A"
         fp_rate = f"{r.false_positive_rate:.1%}" if r.false_positive_rate is not None else "N/A"
         fn_rate = f"{r.false_negative_rate:.1%}" if r.false_negative_rate is not None else "N/A"
+        avg_time = f"{r.avg_predict_time:.2f}s" if r.avg_predict_time is not None else "N/A"
+
         print(
             f"{r.model_type:<15} {evaluated:>9} {r.correct:>9} {accuracy:>9}"
-            f" {r.false_positives:>6} {fp_rate:>7} {r.false_negatives:>6} {fn_rate:>7}"
+            f" {r.false_positives:>6} {fp_rate:>7} {r.false_negatives:>6} {fn_rate:>7} {avg_time:>10}"
         )
         if r.skipped:
             print(f"  ({r.skipped} skipped due to missing WAV or inference error)")
 
-    print("=" * 70)
+    print("=" * 90)
     print()
     print("Definitions:")
     print("  Correct      = predicted resident when expected, or non-resident when expected")
     print("  FP (false+)  = predicted resident when correct class was non-resident")
     print("  FN (false-)  = predicted non-resident when correct class was resident")
+    print("  Avg Time     = average time spent in model predict() per 60-second WAV file")
 
 
 def main() -> int:
@@ -283,26 +274,20 @@ def main() -> int:
     """
     parser = argparse.ArgumentParser(
         description=(
-            "Compare model predictions on a test set derived from detections.csv "
-            "by excluding rows already used in training_samples.csv. "
+            "Compare model predictions on a test set loaded from testing_samples.csv. "
             "Runs each enabled model against the corresponding 60-second WAV files "
             "and reports correct identifications, false positives, and false negatives."
         )
     )
     parser.add_argument(
-        "--detections-csv",
-        default="../output/csv/detections.csv",
-        help="Path to detections.csv (default: ../output/csv/detections.csv).",
-    )
-    parser.add_argument(
-        "--training-csv",
-        default="../output/csv/training_samples.csv",
-        help="Path to training_samples.csv (default: ../output/csv/training_samples.csv).",
+        "--testing-csv",
+        default="output/csv/testing_samples.csv",
+        help="Path to testing_samples.csv (default: output/csv/testing_samples.csv).",
     )
     parser.add_argument(
         "--wav-dir",
-        default="../output/testing-wav",
-        help="Root directory containing testing WAV files (default: ../output/testing-wav).",
+        default="output/testing-wav",
+        help="Root directory containing testing WAV files (default: output/testing-wav).",
     )
     parser.add_argument(
         "--models",
@@ -314,15 +299,15 @@ def main() -> int:
     )
     parser.add_argument(
         "--fastai-model-path",
-        default=None,
+        default="model",
         help=(
             "Path to FastAI model directory. "
-            "Defaults to ./model (the run_inference.py default) when not specified."
+            "Defaults to model when not specified."
         ),
     )
     parser.add_argument(
         "--orcahello-model-path",
-        default=None,
+        default="orcasound/orcahello-srkw-detector-v1",
         help=(
             "Path or HuggingFace Hub ID for the OrcaHello model. "
             "Defaults to orcasound/orcahello-srkw-detector-v1 when not specified."
@@ -330,29 +315,29 @@ def main() -> int:
     )
     parser.add_argument(
         "--podsai-model-path",
-        default=None,
+        default="model/multiclass",
         help=(
             "Path to PODS-AI model directory or Hub model ID. "
-            "Required when 'podsai' is included in --models."
+            "Defaults to model/multiclass when not specified."
+        ),
+    )
+    parser.add_argument(
+        "--max-samples",
+        type=int,
+        default=None,
+        help=(
+            "Maximum number of test samples to process. "
+            "If not specified, all samples are processed."
         ),
     )
 
     args = parser.parse_args()
 
-    detections_csv = Path(args.detections_csv)
-    if not detections_csv.exists():
-        print(f"Error: detections CSV not found: {detections_csv}", file=sys.stderr)
+    testing_csv = Path(args.testing_csv)
+    if not testing_csv.exists():
+        print(f"Error: testing CSV not found: {testing_csv}", file=sys.stderr)
         print(
-            "Run make_csv.py first to generate detections.csv.",
-            file=sys.stderr,
-        )
-        return 1
-
-    training_csv = Path(args.training_csv)
-    if not training_csv.exists():
-        print(f"Error: training CSV not found: {training_csv}", file=sys.stderr)
-        print(
-            "Run extract_training_samples.py first to generate training_samples.csv.",
+            "Run extract_training_samples.py first to generate testing_samples.csv.",
             file=sys.stderr,
         )
         return 1
@@ -376,26 +361,25 @@ def main() -> int:
             )
             return 1
 
-    if "podsai" in models and args.podsai_model_path is None:
-        print(
-            "Error: --podsai-model-path is required when 'podsai' is in --models.",
-            file=sys.stderr,
-        )
-        return 1
-
     model_paths: dict[str, Optional[str]] = {
         "fastai": args.fastai_model_path,
         "orcahello": args.orcahello_model_path,
         "podsai": args.podsai_model_path,
     }
 
-    samples = derive_test_samples(detections_csv, training_csv)
+    # Validate max_samples if specified.
+    if args.max_samples is not None and args.max_samples <= 0:
+        print(f"Error: --max-samples must be a positive integer, got {args.max_samples}", file=sys.stderr)
+        return 1
+
+    samples = load_test_samples(testing_csv, max_samples=args.max_samples)
     if not samples:
         print("Error: no test samples found.", file=sys.stderr)
         return 1
 
-    print(f"Derived {len(samples)} test samples from {detections_csv}")
-    print(f"  (detections not found in {training_csv})")
+    print(f"Loaded {len(samples)} test samples from {testing_csv}")
+    if args.max_samples is not None:
+        print(f"  (limited to first {args.max_samples} samples)")
     print(f"WAV directory: {wav_dir}")
     print(f"Models to evaluate: {', '.join(models)}")
     print()
