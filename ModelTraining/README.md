@@ -283,10 +283,9 @@ usage: python compare_models.py [--testing-csv PATH] [--max-samples N]
 **Example — compare all three models**
 
 ```bash
-cd src
-python compare_models.py \
+python src/compare_models.py \
     --models fastai,orcahello,podsai \
-    --fastai-model-path ../model \
+    --fastai-model-path model \
     --podsai-model-path /path/to/podsai-model
 ```
 
@@ -317,26 +316,24 @@ Definitions:
   Avg Time     = average time spent in model predict() per 60-second WAV file
 
 Confusion Matrix for fastai (rows=actual, cols=predicted):
-                 human   humpback     jingle      other   resident  transient     vessel      water
-      human          0          0          0          1          1          0          0          0
-   humpback          0          0          0          7          3          0          0          0
-     jingle          0          0          0          8          2          0          0          0
-      other          0          0          0          0          0          0          0          0
-   resident          0          0          0          9          1          0          0          0
-  transient          0          0          0          2          8          0          0          0
-     vessel          0          0          0          4          6          0          0          0
-      water          0          0          0          0         10          0          0          0
+               other   resident
+    human          1          1
+ humpback          7          3
+   jingle          8          2
+ resident          9          1
+transient          2          8
+   vessel          4          6
+    water          0         10
 
 Confusion Matrix for orcahello (rows=actual, cols=predicted):
-                 human   humpback     jingle      other   resident  transient     vessel      water
-      human          0          0          0          0          2          0          0          0
-   humpback          0          0          0          3          7          0          0          0
-     jingle          0          0          0          0         10          0          0          0
-      other          0          0          0          0          0          0          0          0
-   resident          0          0          0          8          2          0          0          0
-  transient          0          0          0          0         10          0          0          0
-     vessel          0          0          0          0         10          0          0          0
-      water          0          0          0          0         10          0          0          0
+               other   resident
+    human          0          2
+ humpback          3          7
+   jingle          0         10
+ resident          8          2
+transient          0         10
+   vessel          0         10
+    water          0         10
 
 Confusion Matrix for podsai (rows=actual, cols=predicted):
                  human   humpback     jingle   resident  transient     vessel      water
@@ -352,15 +349,13 @@ Confusion Matrix for podsai (rows=actual, cols=predicted):
 **Example — compare only fastai and orcahello**
 
 ```bash
-cd src
-python compare_models.py --models fastai,orcahello --fastai-model-path ../model
+python src/compare_models.py --models fastai,orcahello --fastai-model-path model
 ```
 
 **Example — limit to 10 test samples**
 
 ```bash
-cd src
-python compare_models.py --max-samples 10 --fastai-model-path ../model
+python src/compare_models.py --max-samples 10 --fastai-model-path model
 ```
 
 ### get_best_timestamp.py

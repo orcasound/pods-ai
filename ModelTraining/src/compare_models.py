@@ -241,7 +241,8 @@ def print_confusion_matrix(result: ModelResult) -> None:
     Print a per-class confusion matrix for a single model result.
 
     Rows are actual (ground-truth) labels; columns are predicted labels.
-    Only labels that appear in the data (either as actual or predicted) are shown.
+    Only labels with at least one non-zero entry in their row (for actuals) or
+    column (for predicted) are shown; all-zero rows and columns are omitted.
 
     Args:
         result: ModelResult whose confusion_matrix to display.
@@ -250,23 +251,38 @@ def print_confusion_matrix(result: ModelResult) -> None:
     if not matrix:
         return
 
-    # Collect every label seen as actual or predicted, then sort them.
-    all_labels = sorted(
-        set(list(matrix.keys()) + [p for preds in matrix.values() for p in preds])
+    # Collect actual labels (rows) that have at least one non-zero prediction.
+    actual_labels = sorted(
+        actual for actual in matrix
+        if any(count > 0 for count in matrix[actual].values())
     )
 
+    # Collect predicted labels (columns) that have at least one non-zero count.
+    predicted_labels = sorted(
+        set(
+            predicted
+            for preds in matrix.values()
+            for predicted, count in preds.items()
+            if count > 0
+        )
+    )
+
+    if not actual_labels or not predicted_labels:
+        return
+
+    all_labels = sorted(set(actual_labels) | set(predicted_labels))
     col_width = max(len(label) for label in all_labels) + MATRIX_CELL_PADDING
     row_label_width = max(len(label) for label in all_labels) + MATRIX_CELL_PADDING
 
     print(f"Confusion Matrix for {result.model_type} (rows=actual, cols=predicted):")
     print(f"{'':>{row_label_width}}", end="")
-    for label in all_labels:
+    for label in predicted_labels:
         print(f"{label:>{col_width}}", end="")
     print()
 
-    for actual in all_labels:
+    for actual in actual_labels:
         print(f"{actual:>{row_label_width}}", end="")
-        for predicted in all_labels:
+        for predicted in predicted_labels:
             count = matrix.get(actual, {}).get(predicted, 0)
             print(f"{count:>{col_width}}", end="")
         print()

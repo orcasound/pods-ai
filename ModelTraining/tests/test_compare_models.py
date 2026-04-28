@@ -926,6 +926,44 @@ class TestConfusionMatrix:
         # The resident row should contain a zero for the humpback column.
         assert any("0" in line for line in lines)
 
+    def test_print_confusion_matrix_omits_all_zero_rows(self, capsys):
+        """print_confusion_matrix omits rows where every predicted count is zero."""
+        from compare_models import ModelResult, print_confusion_matrix
+
+        result = ModelResult(
+            model_type="fastai",
+            confusion_matrix={
+                "resident": {"other": 9, "resident": 1},
+                "other": {},
+            },
+        )
+        print_confusion_matrix(result)
+        captured = capsys.readouterr().out
+
+        # The "other" actual row is all-zero and must not appear as a row label.
+        lines = captured.splitlines()
+        row_lines = [line for line in lines if not line.strip().startswith("Confusion") and line.strip()]
+        row_labels = [line.split()[0] for line in row_lines[1:]]  # skip header line
+        assert "other" not in row_labels
+
+    def test_print_confusion_matrix_omits_all_zero_columns(self, capsys):
+        """print_confusion_matrix omits columns where every count across all rows is zero."""
+        from compare_models import ModelResult, print_confusion_matrix
+
+        result = ModelResult(
+            model_type="fastai",
+            confusion_matrix={
+                "human": {"other": 1, "resident": 1},
+                "resident": {"other": 9, "resident": 1},
+            },
+        )
+        print_confusion_matrix(result)
+        captured = capsys.readouterr().out
+
+        # Only "other" and "resident" columns were ever predicted; "human" must not appear.
+        header_line = [line for line in captured.splitlines() if "other" in line and "resident" in line][0]
+        assert "human" not in header_line
+
     def test_print_summary_includes_confusion_matrices(self, capsys):
         """print_summary prints confusion matrices for each model after the table."""
         from compare_models import ModelResult, print_summary
