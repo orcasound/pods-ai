@@ -762,3 +762,184 @@ class TestMainCLI:
         with patch.object(sys, "argv", test_args):
             result = main()
         assert result == 1
+
+
+# ---------------------------------------------------------------------------
+# Tests for ModelResult confusion_matrix tracking
+# ---------------------------------------------------------------------------
+
+class TestConfusionMatrix:
+    """Tests for per-class confusion matrix tracking in ModelResult and evaluate_model()."""
+
+    def _make_sample(self, category, node_name="rpi_orcasound_lab", timestamp="2023_08_18_00_59_53_PST"):
+        """Return a TestSample with the given category."""
+        from compare_models import TestSample
+        return TestSample(
+            category=category,
+            node_name=node_name,
+            timestamp=timestamp,
+            uri="",
+            description="",
+            notes="",
+        )
+
+    def _make_wav(self, tmp_path, sample):
+        """Create a dummy WAV file for the sample and return the wav_dir."""
+        from compare_models import TestSample
+        wav_dir = tmp_path / "testing-wav"
+        node_name_in_filename = sample.node_name.replace("_", "-")
+        wav_file = wav_dir / sample.category / f"{node_name_in_filename}_{sample.timestamp}.wav"
+        wav_file.parent.mkdir(parents=True, exist_ok=True)
+        wav_file.touch()
+        return wav_dir
+
+    def test_confusion_matrix_populated_on_correct_prediction(self, tmp_path):
+        """evaluate_model records actual→predicted in confusion_matrix for correct predictions."""
+        from compare_models import evaluate_model
+
+        sample = self._make_sample("resident")
+        wav_dir = self._make_wav(tmp_path, sample)
+
+        mock_result = {"global_prediction_label": "resident", "global_confidence": 0.9, "predict_time": 1.0}
+        with patch("compare_models.run_inference", return_value=mock_result):
+            result = evaluate_model("podsai", "/model", [sample], wav_dir)
+
+        assert result.confusion_matrix == {"resident": {"resident": 1}}
+
+    def test_confusion_matrix_populated_on_false_positive(self, tmp_path):
+        """evaluate_model records actual→predicted in confusion_matrix for false positives."""
+        from compare_models import evaluate_model
+
+        sample = self._make_sample("humpback")
+        wav_dir = self._make_wav(tmp_path, sample)
+
+        mock_result = {"global_prediction_label": "resident", "global_confidence": 0.8, "predict_time": 1.0}
+        with patch("compare_models.run_inference", return_value=mock_result):
+            result = evaluate_model("podsai", "/model", [sample], wav_dir)
+
+        assert result.confusion_matrix == {"humpback": {"resident": 1}}
+
+    def test_confusion_matrix_not_updated_for_skipped_samples(self, tmp_path):
+        """Skipped samples (missing WAV) do not appear in the confusion matrix."""
+        from compare_models import evaluate_model
+
+        sample = self._make_sample("resident")
+        wav_dir = tmp_path / "testing-wav"
+        wav_dir.mkdir()  # WAV file does not exist.
+
+        with patch("compare_models.run_inference") as mock_infer:
+            result = evaluate_model("fastai", "./model", [sample], wav_dir)
+            mock_infer.assert_not_called()
+
+        assert result.confusion_matrix == {}
+
+    def test_confusion_matrix_accumulates_multiple_samples(self, tmp_path):
+        """evaluate_model accumulates counts across multiple samples."""
+        from compare_models import evaluate_model, TestSample
+
+        samples = [
+            TestSample("resident", "rpi_orcasound_lab", "2023_08_18_00_59_53_PST", "", "", ""),
+            TestSample("resident", "rpi_orcasound_lab", "2023_08_19_00_00_00_PST", "", "", ""),
+            TestSample("humpback", "rpi_sunset_bay", "2023_08_20_00_00_00_PST", "", "", ""),
+        ]
+
+        wav_dir = tmp_path / "testing-wav"
+        for s in samples:
+            node = s.node_name.replace("_", "-")
+            wav = wav_dir / s.category / f"{node}_{s.timestamp}.wav"
+            wav.parent.mkdir(parents=True, exist_ok=True)
+            wav.touch()
+
+        def fake_infer(wav_path, model_type, model_path):
+            if "humpback" in str(wav_path):
+                return {"global_prediction_label": "water", "global_confidence": 0.7, "predict_time": 1.0}
+            return {"global_prediction_label": "resident", "global_confidence": 0.9, "predict_time": 1.0}
+
+        with patch("compare_models.run_inference", side_effect=fake_infer):
+            result = evaluate_model("podsai", "/model", samples, wav_dir)
+
+        assert result.confusion_matrix["resident"]["resident"] == 2
+        assert result.confusion_matrix["humpback"]["water"] == 1
+
+    def test_confusion_matrix_empty_when_no_matrix(self, capsys):
+        """print_confusion_matrix does nothing when confusion_matrix is empty."""
+        from compare_models import ModelResult, print_confusion_matrix
+
+        result = ModelResult(model_type="fastai")
+        print_confusion_matrix(result)
+        captured = capsys.readouterr().out
+        assert captured == ""
+
+    def test_print_confusion_matrix_contains_labels(self, capsys):
+        """print_confusion_matrix includes all seen labels in header and rows."""
+        from compare_models import ModelResult, print_confusion_matrix
+
+        result = ModelResult(
+            model_type="podsai",
+            confusion_matrix={
+                "resident": {"resident": 5, "water": 1},
+                "humpback": {"water": 3, "humpback": 2},
+            },
+        )
+        print_confusion_matrix(result)
+        captured = capsys.readouterr().out
+
+        assert "resident" in captured
+        assert "humpback" in captured
+        assert "water" in captured
+
+    def test_print_confusion_matrix_shows_correct_counts(self, capsys):
+        """print_confusion_matrix displays the right numeric values."""
+        from compare_models import ModelResult, print_confusion_matrix
+
+        result = ModelResult(
+            model_type="fastai",
+            confusion_matrix={
+                "resident": {"resident": 7, "other": 2},
+                "other": {"resident": 1, "other": 9},
+            },
+        )
+        print_confusion_matrix(result)
+        captured = capsys.readouterr().out
+
+        assert "7" in captured
+        assert "2" in captured
+        assert "1" in captured
+        assert "9" in captured
+
+    def test_print_confusion_matrix_zero_for_unseen_pairs(self, capsys):
+        """print_confusion_matrix shows 0 for class pairs that never occurred."""
+        from compare_models import ModelResult, print_confusion_matrix
+
+        result = ModelResult(
+            model_type="podsai",
+            confusion_matrix={
+                "resident": {"resident": 3},
+                "humpback": {"humpback": 4},
+            },
+        )
+        print_confusion_matrix(result)
+        captured = capsys.readouterr().out
+
+        # "resident" predicted as "humpback" should be 0, shown somewhere.
+        lines = [line for line in captured.splitlines() if "resident" in line and not line.strip().startswith("Confusion")]
+        # The resident row should contain a zero for the humpback column.
+        assert any("0" in line for line in lines)
+
+    def test_print_summary_includes_confusion_matrices(self, capsys):
+        """print_summary prints confusion matrices for each model after the table."""
+        from compare_models import ModelResult, print_summary
+
+        results = [
+            ModelResult(
+                model_type="fastai",
+                total=2,
+                correct=2,
+                confusion_matrix={"resident": {"resident": 2}},
+            ),
+        ]
+        print_summary(results)
+        captured = capsys.readouterr().out
+
+        assert "Confusion Matrix for fastai" in captured
+        assert "resident" in captured

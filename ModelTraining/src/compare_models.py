@@ -29,6 +29,7 @@ from typing import Optional
 from run_inference import run_inference
 
 RESIDENT_LABEL = "resident"
+MATRIX_CELL_PADDING = 2
 
 
 @dataclass
@@ -54,6 +55,8 @@ class ModelResult:
     false_negatives: int = 0
     skipped: int = 0
     predict_times: list[float] = field(default_factory=list)
+    # Maps actual_label -> {predicted_label -> count} for each evaluated sample.
+    confusion_matrix: dict[str, dict[str, int]] = field(default_factory=dict)
 
     @property
     def evaluated(self) -> int:
@@ -218,12 +221,55 @@ def evaluate_model(
             result.false_negatives += 1
             status = "false_negative"
 
+        # Update per-class confusion matrix.
+        actual_label = sample.category
+        if actual_label not in result.confusion_matrix:
+            result.confusion_matrix[actual_label] = {}
+        preds = result.confusion_matrix[actual_label]
+        preds[predicted_label] = preds.get(predicted_label, 0) + 1
+
         print(
             f"  [{model_type}] {sample.category}/{sample.node_name}/{sample.timestamp}: "
             f"predicted={predicted_label!r} → {status} ({predict_time:.2f}s)"
         )
 
     return result
+
+
+def print_confusion_matrix(result: ModelResult) -> None:
+    """
+    Print a per-class confusion matrix for a single model result.
+
+    Rows are actual (ground-truth) labels; columns are predicted labels.
+    Only labels that appear in the data (either as actual or predicted) are shown.
+
+    Args:
+        result: ModelResult whose confusion_matrix to display.
+    """
+    matrix = result.confusion_matrix
+    if not matrix:
+        return
+
+    # Collect every label seen as actual or predicted, then sort them.
+    all_labels = sorted(
+        set(list(matrix.keys()) + [p for preds in matrix.values() for p in preds])
+    )
+
+    col_width = max(len(label) for label in all_labels) + MATRIX_CELL_PADDING
+    row_label_width = max(len(label) for label in all_labels) + MATRIX_CELL_PADDING
+
+    print(f"Confusion Matrix for {result.model_type} (rows=actual, cols=predicted):")
+    print(f"{'':>{row_label_width}}", end="")
+    for label in all_labels:
+        print(f"{label:>{col_width}}", end="")
+    print()
+
+    for actual in all_labels:
+        print(f"{actual:>{row_label_width}}", end="")
+        for predicted in all_labels:
+            count = matrix.get(actual, {}).get(predicted, 0)
+            print(f"{count:>{col_width}}", end="")
+        print()
 
 
 def print_summary(results: list[ModelResult]) -> None:
@@ -265,6 +311,10 @@ def print_summary(results: list[ModelResult]) -> None:
     print("  FP (false+)  = predicted resident when correct class was non-resident")
     print("  FN (false-)  = predicted non-resident when correct class was resident")
     print("  Avg Time     = average time spent in model predict() per 60-second WAV file")
+
+    for r in results:
+        print()
+        print_confusion_matrix(r)
 
 
 def main() -> int:
