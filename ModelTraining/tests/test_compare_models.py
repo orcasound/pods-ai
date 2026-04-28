@@ -127,16 +127,21 @@ class TestLoadTestSamples:
         assert len(samples) == 2
 
     def test_handles_csv_error(self, tmp_path):
-        """load_test_samples returns [] for malformed CSV."""
+        """load_test_samples returns [] on csv.Error."""
+        import csv
+        from unittest.mock import patch
         from compare_models import load_test_samples
-        
+
         testing_csv = tmp_path / "testing_samples.csv"
-        # Write malformed CSV with unescaped quotes
-        with open(testing_csv, "w", encoding="utf-8") as f:
-            f.write("Category,NodeName,Timestamp,URI,Description,Notes\n")
-            f.write('resident,rpi_lab,2023_01_01_00_00_00_PST,http://example.com,"bad"quote",notes\n')
-        
-        samples = load_test_samples(testing_csv)
+        testing_csv.write_text("Category,NodeName,Timestamp,URI,Description,Notes\n")
+
+        # Patch DictReader iteration to raise csv.Error mid-read.
+        with patch("compare_models.csv.DictReader") as mock_reader_cls:
+            mock_reader_cls.return_value.__iter__ = lambda self: iter([])
+            mock_reader_cls.return_value.__enter__ = lambda self: self
+            mock_reader_cls.side_effect = csv.Error("simulated CSV parse error")
+            samples = load_test_samples(testing_csv)
+
         assert samples == []
 
     def test_handles_unicode_decode_error(self, tmp_path):

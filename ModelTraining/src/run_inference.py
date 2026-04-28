@@ -46,11 +46,9 @@ def run_inference(wav_path: str, model_type: str = "podsai",
             model_path = "./model"
         model = get_model_inference(model_type="fastai", model_path=model_path)
 
-        start_time = time.time()
+        start_time = time.perf_counter()
         result = model.predict(wav_path)
-        predict_time = time.time() - start_time
-
-        # For the binary FastAI model, global_confidence is the mean of all
+        predict_time = time.perf_counter() - start_time
         # local_confidences that exceed the threshold (resident windows).
         resident_prob = float(result.get("global_confidence", 0.0))
         other_prob = round(1.0 - resident_prob, 4)
@@ -68,9 +66,9 @@ def run_inference(wav_path: str, model_type: str = "podsai",
             model_path = "orcasound/orcahello-srkw-detector-v1"
         model = get_model_inference(model_type="orcahello", model_path=model_path)
 
-        start_time = time.time()
+        start_time = time.perf_counter()
         result = model.predict(wav_path)
-        predict_time = time.time() - start_time
+        predict_time = time.perf_counter() - start_time
 
         # The OrcaHello SRKW detector is a binary classifier (other vs resident).
         resident_prob = float(result.get("global_confidence", 0.0))
@@ -92,9 +90,9 @@ def run_inference(wav_path: str, model_type: str = "podsai",
             )
         model = get_model_inference(model_type="podsai", model_path=model_path)
 
-        start_time = time.time()
+        start_time = time.perf_counter()
         result = model.predict(wav_path)
-        predict_time = time.time() - start_time
+        predict_time = time.perf_counter() - start_time
 
         local_predictions = result.get("local_predictions", [])
         local_confidences = result.get("local_confidences", [])

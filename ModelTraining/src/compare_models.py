@@ -100,8 +100,8 @@ def load_test_samples(testing_csv: Path, max_samples: Optional[int] = None) -> l
     Returns:
         List of TestSample objects, or an empty list on error.
     """
-    samples = []
     try:
+        samples = []
         with open(testing_csv, newline="", encoding="utf-8") as f:
             reader = csv.DictReader(f)
             for row in reader:
@@ -118,9 +118,10 @@ def load_test_samples(testing_csv: Path, max_samples: Optional[int] = None) -> l
                 if max_samples is not None and len(samples) >= max_samples:
                     break
 
+        return samples
     except (OSError, csv.Error, UnicodeDecodeError) as e:
         print(f"Error reading {testing_csv}: {e}", file=sys.stderr)
-    return samples
+        return []
 
 
 def find_wav_file(sample: TestSample, wav_dir: Path) -> Optional[Path]:
