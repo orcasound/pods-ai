@@ -292,7 +292,7 @@ python compare_models.py \
 
 Output:
 ```
-Loaded 55 test samples from output/csv/testing_samples.csv
+Loaded 62 test samples from output/csv/testing_samples.csv
 WAV directory: output/testing-wav
 Models to evaluate: fastai, orcahello, podsai
 
