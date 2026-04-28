@@ -118,7 +118,7 @@ def load_test_samples(testing_csv: Path, max_samples: Optional[int] = None) -> l
                 if max_samples is not None and len(samples) >= max_samples:
                     break
 
-    except OSError as e:
+    except (OSError, csv.Error, UnicodeDecodeError) as e:
         print(f"Error reading {testing_csv}: {e}", file=sys.stderr)
     return samples
 
