@@ -55,7 +55,7 @@ class ModelResult:
     false_negatives: int = 0
     skipped: int = 0
     predict_times: list[float] = field(default_factory=list)
-    # Maps actual_label → {predicted_label → count} for each evaluated sample.
+    # Maps actual_label -> {predicted_label -> count} for each evaluated sample.
     confusion_matrix: dict[str, dict[str, int]] = field(default_factory=dict)
 
     @property
