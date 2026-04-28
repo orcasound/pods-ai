@@ -305,9 +305,9 @@ Model Comparison Summary
 ==========================================================================================
 Model           Evaluated   Correct  Accuracy     FP     FP%     FN     FN%   Avg Time
 ------------------------------------------------------------------------------------------
-fastai                 55        42    76.4%      8   14.5%      5    9.1%      1.23s
-orcahello              55        40    72.7%     10   18.2%      5    9.1%      0.92s
-podsai                 55        45    81.8%      5    9.1%      5    9.1%      2.10s
+fastai                 62        23     37.1%     30   48.4%      9   14.5%     11.89s
+orcahello              62         5      8.1%     49   79.0%      8   12.9%      4.51s
+podsai                 62        52     83.9%      3    4.8%      7   11.3%      4.49s
 ==========================================================================================
 
 Definitions:
@@ -315,6 +315,38 @@ Definitions:
   FP (false+)  = predicted resident when correct class was non-resident
   FN (false-)  = predicted non-resident when correct class was resident
   Avg Time     = average time spent in model predict() per 60-second WAV file
+
+Confusion Matrix for fastai (rows=actual, cols=predicted):
+                 human   humpback     jingle      other   resident  transient     vessel      water
+      human          0          0          0          1          1          0          0          0
+   humpback          0          0          0          7          3          0          0          0
+     jingle          0          0          0          8          2          0          0          0
+      other          0          0          0          0          0          0          0          0
+   resident          0          0          0          9          1          0          0          0
+  transient          0          0          0          2          8          0          0          0
+     vessel          0          0          0          4          6          0          0          0
+      water          0          0          0          0         10          0          0          0
+
+Confusion Matrix for orcahello (rows=actual, cols=predicted):
+                 human   humpback     jingle      other   resident  transient     vessel      water
+      human          0          0          0          0          2          0          0          0
+   humpback          0          0          0          3          7          0          0          0
+     jingle          0          0          0          0         10          0          0          0
+      other          0          0          0          0          0          0          0          0
+   resident          0          0          0          8          2          0          0          0
+  transient          0          0          0          0         10          0          0          0
+     vessel          0          0          0          0         10          0          0          0
+      water          0          0          0          0         10          0          0          0
+
+Confusion Matrix for podsai (rows=actual, cols=predicted):
+                 human   humpback     jingle   resident  transient     vessel      water
+      human          1          1          0          0          0          0          0
+   humpback          0          6          0          2          2          0          0
+     jingle          0          0         10          0          0          0          0
+   resident          0          0          1          3          4          0          2
+  transient          0          6          1          0          3          0          0
+     vessel          0          4          0          1          1          4          0
+      water          0          0          0          0          0          0         10
 ```
 
 **Example — compare only fastai and orcahello**
