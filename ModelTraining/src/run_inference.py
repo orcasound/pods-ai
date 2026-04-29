@@ -70,17 +70,19 @@ def run_inference(wav_path: str, model_type: str = "podsai",
         result = model.predict(wav_path)
         predict_time = time.perf_counter() - start_time
 
-        # The OrcaHello SRKW detector is a binary classifier (other vs resident).
-        resident_prob = float(result.get("global_confidence", 0.0))
-        other_prob = round(1.0 - resident_prob, 4)
+        # The OrcaHello SRKW detector is a binary classifier (resident vs other).
+        # The model's global_confidence is the raw confidence for class 1 ("other"),
+        # so resident probability = 1 - global_confidence.
+        raw_confidence = float(result.get("global_confidence", 0.0))
+        resident_prob = round(1.0 - raw_confidence, 4)
+        other_prob = round(raw_confidence, 4)
 
         probabilities = {
             "other": other_prob,
-            "resident": round(resident_prob, 4),
+            "resident": resident_prob,
         }
-        global_prediction = result.get("global_prediction", 0)
-        global_prediction_label = "resident" if global_prediction else "other"
-        global_confidence = resident_prob
+        global_prediction_label = result.get("global_prediction_label", "other")
+        global_confidence = resident_prob if global_prediction_label == "resident" else other_prob
 
     elif model_type == "podsai":
         if model_path is None:

@@ -18,7 +18,15 @@ Usage:
 
     model = OrcaHelloSRKWInference("orcasound/orcahello-srkw-detector-v1")
     result = model.predict("sample.wav")
-    print(result["global_prediction_label"])  # "whale" or "other"
+    print(result["global_prediction_label"])  # "resident" or "other"
+
+Note on label mapping:
+    The model's call_class_index=1 selects the softmax output for class 1.
+    Empirically, class 1 corresponds to "other" (non-SRKW sounds) while class 0
+    corresponds to "resident" (SRKW/whale sounds).  Therefore global_prediction==1
+    means "other" and global_prediction==0 means "resident", which is the opposite
+    of what the model config comment suggests.  global_confidence is the model's
+    raw confidence for class 1 ("other"), so resident confidence = 1 - global_confidence.
 """
 
 import sys
@@ -143,8 +151,9 @@ class OrcaHelloSRKWInference(ModelInference):
                 - local_predictions: List of binary predictions (0/1) per segment.
                 - local_confidences: List of confidence scores (0.0-1.0) per segment.
                 - global_prediction: Overall binary prediction (0 or 1).
-                - global_prediction_label: "whale" if global_prediction==1 else "other".
-                - global_confidence: Aggregated confidence score (0.0-1.0).
+                - global_prediction_label: "other" if global_prediction==1 else "resident".
+                - global_confidence: Aggregated confidence score (0.0-1.0) for class 1
+                  ("other"); resident confidence is 1 - global_confidence.
                 - hop_duration: Hop duration in seconds between segments.
                 - segment_duration: Duration of each segment in seconds.
             Returns dict with empty lists and zero scores on error.
@@ -169,7 +178,7 @@ class OrcaHelloSRKWInference(ModelInference):
             "local_predictions": result.local_predictions,
             "local_confidences": result.local_confidences,
             "global_prediction": result.global_prediction,
-            "global_prediction_label": "whale" if result.global_prediction == 1 else "other",
+            "global_prediction_label": "other" if result.global_prediction == 1 else "resident",
             "global_confidence": result.global_confidence,
             "hop_duration": float(self.inference_config.inference.window_hop_s),
             "segment_duration": float(self.inference_config.inference.window_s),

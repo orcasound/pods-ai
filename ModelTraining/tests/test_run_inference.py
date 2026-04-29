@@ -89,14 +89,19 @@ def _make_podsai_model_mock(num_local: int = 10) -> MagicMock:
 
 def _make_orcahello_model_mock(global_prediction: int = 1, global_confidence: float = 0.75,
                                num_local: int = 5) -> MagicMock:
-    """Return a mock OrcaHello model whose predict() returns a binary result."""
+    """Return a mock OrcaHello model whose predict() returns a binary result.
+
+    Note: global_confidence is the model's raw confidence for class 1 ("other").
+    When global_prediction=1, global_prediction_label is "other".
+    When global_prediction=0, global_prediction_label is "resident".
+    """
     mock_model = MagicMock()
     local_confidences = [0.8] * num_local
     mock_model.predict.return_value = {
         "local_predictions": [global_prediction] * num_local,
         "local_confidences": local_confidences,
         "global_prediction": global_prediction,
-        "global_prediction_label": "resident" if global_prediction else "other",
+        "global_prediction_label": "other" if global_prediction else "resident",
         "global_confidence": global_confidence,
         "hop_duration": 1.0,
         "segment_duration": 2.0,
@@ -492,8 +497,23 @@ class TestRunInferenceOrcaHello:
         finally:
             Path(wav_path).unlink(missing_ok=True)
 
-    def test_global_prediction_resident_when_positive(self):
-        """When global_prediction=1, global_prediction_label should be 'resident'."""
+    def test_orcahello_resident_prob_is_inverted_confidence(self):
+        """'resident' probability should equal 1.0 - global_confidence (model's raw 'other' confidence)."""
+        wav_path = _make_wav()
+        try:
+            mock_model = _make_orcahello_model_mock(global_confidence=0.75, num_local=5)
+            with patch("run_inference.get_model_inference", return_value=mock_model):
+                from run_inference import run_inference
+                result = run_inference(wav_path, model_type="orcahello",
+                                       model_path="orcasound/orcahello-srkw-detector-v1")
+
+            assert abs(result["probabilities"]["resident"] - 0.25) < 1e-3
+            assert abs(result["probabilities"]["other"] - 0.75) < 1e-3
+        finally:
+            Path(wav_path).unlink(missing_ok=True)
+
+    def test_global_prediction_other_when_model_returns_one(self):
+        """When global_prediction=1, global_prediction_label should be 'other'."""
         wav_path = _make_wav()
         try:
             mock_model = _make_orcahello_model_mock(global_prediction=1, global_confidence=0.8)
@@ -502,13 +522,13 @@ class TestRunInferenceOrcaHello:
                 result = run_inference(wav_path, model_type="orcahello",
                                        model_path="orcasound/orcahello-srkw-detector-v1")
 
-            assert result["global_prediction_label"] == "resident"
+            assert result["global_prediction_label"] == "other"
             assert abs(result["global_confidence"] - 0.8) < 1e-6
         finally:
             Path(wav_path).unlink(missing_ok=True)
 
-    def test_global_prediction_other_when_negative(self):
-        """When global_prediction=0, global_prediction_label should be 'other'."""
+    def test_global_prediction_resident_when_model_returns_zero(self):
+        """When global_prediction=0, global_prediction_label should be 'resident'."""
         wav_path = _make_wav()
         try:
             mock_model = _make_orcahello_model_mock(global_prediction=0, global_confidence=0.0)
@@ -517,7 +537,7 @@ class TestRunInferenceOrcaHello:
                 result = run_inference(wav_path, model_type="orcahello",
                                        model_path="orcasound/orcahello-srkw-detector-v1")
 
-            assert result["global_prediction_label"] == "other"
+            assert result["global_prediction_label"] == "resident"
         finally:
             Path(wav_path).unlink(missing_ok=True)
 
