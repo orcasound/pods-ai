@@ -15,7 +15,10 @@ The `ModelTraining/src` directory has the following scripts for different steps 
    `--input _filename_`. A custom segment duration can be specified with `--duration _seconds_` (default: 3 seconds).
    - For `tp_human_only` detections, runs model inference on preceding 60 seconds to find correct timestamp
    - For other detections, subtracts the segment duration from the timestamp
-   - `testing_samples.csv` uses detections-format rows, excludes training rows, and includes up to 10 eligible samples per category
+   - `testing_samples.csv` uses detections-format rows, excludes training rows, and includes eligible samples per category:
+     - Up to 10 standard eligible samples per category (excludes samples with confidence 0.0)
+     - Additionally up to 10 `tp_machine_only` samples in the `resident` category
+     - Additionally up to 10 `tp_human_only` samples per negative category (water, human, vessel, jingle)
 4. **download_wavs.py**: Use `output/csv/training_samples.csv` and `output/csv/testing_samples.csv` to download wav files
    - Training samples are written to subdirectories under `output/wav`
    - Testing samples are written to subdirectories under `output/testing-wav`
@@ -268,6 +271,7 @@ usage: python compare_models.py [--testing-csv PATH] [--max-samples N]
                                 [--fastai-model-path PATH]
                                 [--orcahello-model-path PATH]
                                 [--podsai-model-path PATH]
+                                [--category CATEGORY]
 ```
 
 | Argument | Description |
@@ -279,6 +283,7 @@ usage: python compare_models.py [--testing-csv PATH] [--max-samples N]
 | `--fastai-model-path` | Path to FastAI model directory. Defaults to `model` when not specified |
 | `--orcahello-model-path` | HuggingFace Hub ID or path for OrcaHello model. Defaults to `orcasound/orcahello-srkw-detector-v1` when not specified |
 | `--podsai-model-path` | Path or Hub ID for PODS-AI model. Defaults to `model/multiclass` when not specified |
+| `--category` | Only evaluate samples from this category (e.g. `resident`, `humpback`, `water`). If not specified, all categories are evaluated |
 
 **Example — compare all three models**
 
@@ -291,7 +296,7 @@ python src/compare_models.py \
 
 Output:
 ```
-Loaded 62 test samples from output/csv/testing_samples.csv
+Loaded 72 test samples from output\csv\testing_samples.csv
 WAV directory: output/testing-wav
 Models to evaluate: fastai, orcahello, podsai
 
@@ -304,9 +309,9 @@ Model Comparison Summary
 ==========================================================================================
 Model           Evaluated   Correct  Accuracy     FP     FP%     FN     FN%   Avg Time
 ------------------------------------------------------------------------------------------
-fastai                 62        23     37.1%     30   48.4%      9   14.5%     11.89s
-orcahello              62         5      8.1%     49   79.0%      8   12.9%      4.51s
-podsai                 62        52     83.9%      3    4.8%      7   11.3%      4.49s
+fastai                 72        33     45.8%     30   41.7%      9   12.5%     12.05s
+orcahello              72        15     20.8%     49   68.1%      8   11.1%      4.27s
+podsai                 72        53     73.6%      3    4.2%     16   22.2%      5.39s
 ==========================================================================================
 
 Definitions:
@@ -316,31 +321,31 @@ Definitions:
   Avg Time     = average time spent in model predict() per 60-second WAV file
 
 Confusion Matrix for fastai (rows=actual, cols=predicted):
-               other   resident
-    human          1          1
- humpback          7          3
-   jingle          8          2
- resident          9          1
-transient          2          8
-   vessel          4          6
-    water          0         10
+                 other   resident
+      human          1          1
+   humpback          7          3
+     jingle          8          2
+   resident          9         11
+  transient          2          8
+     vessel          4          6
+      water          0         10
 
 Confusion Matrix for orcahello (rows=actual, cols=predicted):
-               other   resident
-    human          0          2
- humpback          3          7
-   jingle          0         10
- resident          8          2
-transient          0         10
-   vessel          0         10
-    water          0         10
+                 other   resident
+      human          0          2
+   humpback          3          7
+     jingle          0         10
+   resident          8         12
+  transient          0         10
+     vessel          0         10
+      water          0         10
 
 Confusion Matrix for podsai (rows=actual, cols=predicted):
                  human   humpback     jingle   resident  transient     vessel      water
       human          1          1          0          0          0          0          0
    humpback          0          6          0          2          2          0          0
      jingle          0          0         10          0          0          0          0
-   resident          0          0          1          3          4          0          2
+   resident          0          8          1          4          4          0          3
   transient          0          6          1          0          3          0          0
      vessel          0          4          0          1          1          4          0
       water          0          0          0          0          0          0         10
@@ -356,6 +361,12 @@ python src/compare_models.py --models fastai,orcahello --fastai-model-path model
 
 ```bash
 python src/compare_models.py --max-samples 10 --fastai-model-path model
+```
+
+**Example — evaluate only resident samples**
+
+```bash
+python src/compare_models.py --category resident --fastai-model-path model
 ```
 
 ### get_best_timestamp.py

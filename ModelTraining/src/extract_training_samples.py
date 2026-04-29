@@ -270,11 +270,12 @@ def select_testing_samples(
 
     Selection criteria:
     1. Exclude samples already selected for training.
-    2. Exclude tp_machine_only samples in resident category.
-    3. Exclude tp_human_only samples in negative categories.
-    4. Exclude samples with manual confidence 0.0.
-    5. Sort eligible samples using sort_by_preference.
-    6. Select up to MAX_TESTING_SAMPLES_PER_CATEGORY per category.
+    2. Exclude samples with manual confidence 0.0.
+    3. Select up to MAX_TESTING_SAMPLES_PER_CATEGORY per category from eligible samples.
+    4. Additionally select up to MAX_TESTING_SAMPLES_PER_CATEGORY tp_machine_only samples
+       in resident category.
+    5. Additionally select up to MAX_TESTING_SAMPLES_PER_CATEGORY tp_human_only samples
+       in negative categories.
 
     Args:
         detections: List of detection dictionaries.
@@ -286,22 +287,22 @@ def select_testing_samples(
         list[dict]: Selected testing sample dictionaries.
     """
     training_uris = {sample['URI'] for sample in training_samples if sample.get('URI', '')}
-    eligible_detections = []
+
+    # Separate detections into three groups.
+    standard_eligible = []
+    resident_tp_machine_only = []
+    negative_tp_human_only = []
 
     for detection in detections:
         uri = detection.get('URI', '')
         category = detection.get('Category', '')
         notes = detection.get('Notes', '')
 
+        # Exclude training samples.
         if uri in training_uris:
             continue
 
-        if notes == 'tp_machine_only' and category == 'resident':
-            continue
-
-        if notes == 'tp_human_only' and category in NEGATIVE_CATEGORIES:
-            continue
-
+        # Exclude samples with 0.0 confidence.
         if uri in manual_confidences:
             try:
                 if float(manual_confidences[uri]) == 0.0:
@@ -309,18 +310,42 @@ def select_testing_samples(
             except (ValueError, TypeError):
                 pass
 
-        eligible_detections.append(detection)
+        # Categorize the detection.
+        if notes == 'tp_machine_only' and category == 'resident':
+            resident_tp_machine_only.append(detection)
+        elif notes == 'tp_human_only' and category in NEGATIVE_CATEGORIES:
+            negative_tp_human_only.append(detection)
+        else:
+            standard_eligible.append(detection)
 
-    organized_data = organize_by_category_node(eligible_detections)
+    # Select from standard eligible samples.
+    organized_standard = organize_by_category_node(standard_eligible)
     selected_testing_samples = []
 
-    for category in sorted(organized_data.keys()):
+    for category in sorted(organized_standard.keys()):
         category_detections = []
-        for node_detections in organized_data[category].values():
+        for node_detections in organized_standard[category].values():
             category_detections.extend(node_detections)
 
         sorted_detections = sort_by_preference(category_detections, manual_confidences)
         selected_testing_samples.extend(sorted_detections[:MAX_TESTING_SAMPLES_PER_CATEGORY])
+
+    # Add tp_machine_only resident samples.
+    if resident_tp_machine_only:
+        sorted_resident_machine = sort_by_preference(resident_tp_machine_only, manual_confidences)
+        selected_testing_samples.extend(sorted_resident_machine[:MAX_TESTING_SAMPLES_PER_CATEGORY])
+
+    # Add tp_human_only negative category samples.
+    if negative_tp_human_only:
+        # Organize by category to respect per-category limit.
+        organized_negative = organize_by_category_node(negative_tp_human_only)
+        for category in sorted(organized_negative.keys()):
+            category_detections = []
+            for node_detections in organized_negative[category].values():
+                category_detections.extend(node_detections)
+
+            sorted_detections = sort_by_preference(category_detections, manual_confidences)
+            selected_testing_samples.extend(sorted_detections[:MAX_TESTING_SAMPLES_PER_CATEGORY])
 
     return selected_testing_samples
 
@@ -526,7 +551,7 @@ def compute_correct_timestamp_for_tp_human_only(
         prediction_results = model_inference.predict(wav_path)
 
         local_confidences = prediction_results["local_confidences"]
-        
+
         # Get hop_duration from model output if available, otherwise infer it using corrected formula.
         # Models should return hop_duration and segment_duration to avoid inference errors.
         if "hop_duration" in prediction_results and "segment_duration" in prediction_results:
@@ -554,7 +579,7 @@ def compute_correct_timestamp_for_tp_human_only(
                 hop_duration = audio_duration  # Single position covers entire audio.
             else:
                 hop_duration = 1.0  # Default to 1 second if no confidences.
-            
+
             print(f"  Warning: Model did not report hop_duration, inferred {hop_duration:.2f}s from {len(local_confidences)} positions")
 
         print(f"  Received {len(local_confidences)} confidence values")
@@ -919,6 +944,21 @@ def main():
             print(f"    {node}: {type_node_counts[type][node]}")
 
     print(f"\nSelected {len(testing_samples)} testing samples")
+
+    # Print breakdown by category for testing samples.
+    testing_category_counts = defaultdict(int)
+    testing_notes_counts = defaultdict(int)
+    for sample in testing_samples:
+        testing_category_counts[sample['Category']] += 1
+        testing_notes_counts[sample['Notes']] += 1
+
+    print("Testing samples by category:")
+    for category in sorted(testing_category_counts.keys()):
+        print(f"  {category}: {testing_category_counts[category]} samples")
+
+    print("Testing samples by notes:")
+    for notes in sorted(testing_notes_counts.keys()):
+        print(f"  {notes}: {testing_notes_counts[notes]} samples")
 
     # Initialize model inference for tp_human_only timestamp correction.
     print("\nInitializing model inference for tp_human_only timestamp correction...")

@@ -92,24 +92,33 @@ class ModelResult:
         return sum(self.predict_times) / len(self.predict_times)
 
 
-def load_test_samples(testing_csv: Path, max_samples: Optional[int] = None) -> list[TestSample]:
+def load_test_samples(testing_csv: Path, max_samples: Optional[int] = None,
+                      category_filter: Optional[str] = None) -> list[TestSample]:
     """
     Load test samples from testing_samples.csv.
 
     Args:
         testing_csv: Path to testing_samples.csv.
         max_samples: Maximum number of samples to load. If None, load all samples.
+        category_filter: If specified, only load samples matching this category.
+                        If None, load samples from all categories.
 
     Returns:
         List of TestSample objects, or an empty list on error.
     """
+    samples = []
     try:
-        samples = []
         with open(testing_csv, newline="", encoding="utf-8") as f:
             reader = csv.DictReader(f)
             for row in reader:
+                category = row.get("Category", "")
+
+                # Skip if category filter is specified and doesn't match.
+                if category_filter is not None and category != category_filter:
+                    continue
+
                 samples.append(TestSample(
-                    category=row.get("Category", ""),
+                    category=category,
                     node_name=row.get("NodeName", ""),
                     timestamp=row.get("Timestamp", ""),
                     uri=row.get("URI", ""),
@@ -121,10 +130,9 @@ def load_test_samples(testing_csv: Path, max_samples: Optional[int] = None) -> l
                 if max_samples is not None and len(samples) >= max_samples:
                     break
 
-        return samples
     except (OSError, csv.Error, UnicodeDecodeError) as e:
         print(f"Error reading {testing_csv}: {e}", file=sys.stderr)
-        return []
+    return samples
 
 
 def find_wav_file(sample: TestSample, wav_dir: Path) -> Optional[Path]:
@@ -397,6 +405,15 @@ def main() -> int:
             "If not specified, all samples are processed."
         ),
     )
+    parser.add_argument(
+        "--category",
+        default=None,
+        help=(
+            "Only test samples from this category. "
+            "If not specified, all categories are tested. "
+            "Categories: water, resident, transient, humpback, vessel, jingle, human."
+        ),
+    )
 
     args = parser.parse_args()
 
@@ -439,12 +456,18 @@ def main() -> int:
         print(f"Error: --max-samples must be a positive integer, got {args.max_samples}", file=sys.stderr)
         return 1
 
-    samples = load_test_samples(testing_csv, max_samples=args.max_samples)
+    samples = load_test_samples(testing_csv, max_samples=args.max_samples,
+                                category_filter=args.category)
     if not samples:
-        print("Error: no test samples found.", file=sys.stderr)
+        if args.category:
+            print(f"Error: no test samples found for category '{args.category}'.", file=sys.stderr)
+        else:
+            print("Error: no test samples found.", file=sys.stderr)
         return 1
 
     print(f"Loaded {len(samples)} test samples from {testing_csv}")
+    if args.category:
+        print(f"  (filtered to category: {args.category})")
     if args.max_samples is not None:
         print(f"  (limited to first {args.max_samples} samples)")
     print(f"WAV directory: {wav_dir}")
