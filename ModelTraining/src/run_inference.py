@@ -82,7 +82,8 @@ def run_inference(wav_path: str, model_type: str = "podsai",
             "resident": resident_prob,
         }
         global_prediction_label = result.get("global_prediction_label", "other")
-        global_confidence = resident_prob if global_prediction_label == "resident" else other_prob
+        global_prediction = result.get("global_prediction", 0)
+        global_confidence = resident_prob if global_prediction == 0 else other_prob
 
     elif model_type == "podsai":
         if model_path is None:

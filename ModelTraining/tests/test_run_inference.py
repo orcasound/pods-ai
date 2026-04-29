@@ -93,7 +93,8 @@ def _make_orcahello_model_mock(global_prediction: int = 1, global_confidence: fl
 
     Note: global_confidence is the model's raw confidence for class 1 ("other").
     When global_prediction=1, global_prediction_label is "other".
-    When global_prediction=0, global_prediction_label is "resident".
+    When global_prediction=0, global_prediction_label is "resident"; the actual
+    resident confidence would be 1.0 - global_confidence.
     """
     mock_model = MagicMock()
     local_confidences = [0.8] * num_local
