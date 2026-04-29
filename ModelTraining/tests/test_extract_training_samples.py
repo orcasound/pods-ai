@@ -333,7 +333,7 @@ class TestTestingSamples:
     def test_select_testing_samples_applies_eligibility_rules(self):
         """select_testing_samples should filter out ineligible rows and training rows."""
         detections = [
-            # Eligible resident (not tp_machine_only).
+            # Eligible resident tp_human_only (standard eligible).
             {
                 'Category': 'resident',
                 'NodeName': 'rpi_test',
@@ -343,7 +343,7 @@ class TestTestingSamples:
                 'Notes': 'tp_human_only',
                 'Confidence': '',
             },
-            # Ineligible: tp_machine_only + resident.
+            # Eligible: tp_machine_only + resident (added as bonus group).
             {
                 'Category': 'resident',
                 'NodeName': 'rpi_test',
@@ -353,7 +353,7 @@ class TestTestingSamples:
                 'Notes': 'tp_machine_only',
                 'Confidence': '',
             },
-            # Ineligible: tp_human_only + negative category.
+            # Eligible: tp_human_only + negative category (added as bonus group).
             {
                 'Category': 'water',
                 'NodeName': 'rpi_test',
@@ -383,7 +383,7 @@ class TestTestingSamples:
                 'Notes': 'tp_machine_only',
                 'Confidence': '',
             },
-            # Eligible non-resident machine detection.
+            # Eligible non-resident machine detection (standard eligible).
             {
                 'Category': 'humpback',
                 'NodeName': 'rpi_test',
@@ -413,8 +413,8 @@ class TestTestingSamples:
 
         assert 'https://example.org/resident-tp-human' in selected_uris
         assert 'https://example.org/humpback-tp-machine' in selected_uris
-        assert 'https://example.org/resident-tp-machine' not in selected_uris
-        assert 'https://example.org/water-tp-human' not in selected_uris
+        assert 'https://example.org/resident-tp-machine' in selected_uris
+        assert 'https://example.org/water-tp-human' in selected_uris
         assert 'https://example.org/transient-zero-confidence' not in selected_uris
         assert 'https://example.org/training-selected' not in selected_uris
 

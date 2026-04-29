@@ -126,6 +126,48 @@ class TestLoadTestSamples:
         samples = load_test_samples(testing_csv, max_samples=2)
         assert len(samples) == 2
 
+    def test_category_filter_returns_only_matching_samples(self, tmp_path):
+        """load_test_samples returns only samples matching the category filter."""
+        from compare_models import load_test_samples
+        testing_rows = _make_testing_rows()
+
+        testing_csv = tmp_path / "testing_samples.csv"
+        _write_csv(testing_csv, testing_rows)
+
+        samples = load_test_samples(testing_csv, category_filter="resident")
+        assert len(samples) == 1
+        assert all(s.category == "resident" for s in samples)
+
+    def test_category_filter_returns_empty_for_no_match(self, tmp_path):
+        """load_test_samples returns [] when category filter matches no rows."""
+        from compare_models import load_test_samples
+        testing_rows = _make_testing_rows()
+
+        testing_csv = tmp_path / "testing_samples.csv"
+        _write_csv(testing_csv, testing_rows)
+
+        samples = load_test_samples(testing_csv, category_filter="transient")
+        assert samples == []
+
+    def test_category_filter_combined_with_max_samples(self, tmp_path):
+        """load_test_samples applies both category_filter and max_samples."""
+        from compare_models import load_test_samples
+
+        rows = [
+            {"Category": "humpback", "NodeName": "rpi_a", "Timestamp": "2024_01_01_00_00_00_PST",
+             "URI": "https://example.com/1", "Description": "", "Notes": "tp_machine_only", "Confidence": ""},
+            {"Category": "humpback", "NodeName": "rpi_b", "Timestamp": "2024_01_01_00_01_00_PST",
+             "URI": "https://example.com/2", "Description": "", "Notes": "tp_machine_only", "Confidence": ""},
+            {"Category": "humpback", "NodeName": "rpi_c", "Timestamp": "2024_01_01_00_02_00_PST",
+             "URI": "https://example.com/3", "Description": "", "Notes": "tp_machine_only", "Confidence": ""},
+        ]
+        testing_csv = tmp_path / "testing_samples.csv"
+        _write_csv(testing_csv, rows)
+
+        samples = load_test_samples(testing_csv, max_samples=2, category_filter="humpback")
+        assert len(samples) == 2
+        assert all(s.category == "humpback" for s in samples)
+
     def test_handles_csv_error(self, tmp_path):
         """load_test_samples returns [] on csv.Error."""
         import csv
@@ -758,6 +800,55 @@ class TestMainCLI:
             "--wav-dir", str(wav_dir),
             "--models", "fastai",
             "--max-samples", "0",
+        ]
+        with patch.object(sys, "argv", test_args):
+            result = main()
+        assert result == 1
+
+    def test_category_filter_returns_only_matching_samples(self, tmp_path):
+        """main() --category filters samples to the specified category."""
+        from compare_models import main
+
+        rows = _make_testing_rows()
+        testing_csv = self._write_testing_csv(tmp_path, rows)
+
+        wav_dir = tmp_path / "testing-wav"
+        # Only create WAV for the resident sample.
+        resident_row = rows[0]
+        node = resident_row["NodeName"].replace("_", "-")
+        wav = wav_dir / resident_row["Category"] / f"{node}_{resident_row['Timestamp']}.wav"
+        wav.parent.mkdir(parents=True, exist_ok=True)
+        wav.touch()
+
+        mock_result = {"global_prediction_label": "resident", "global_confidence": 0.9, "predict_time": 1.0}
+        test_args = [
+            "compare_models.py",
+            "--testing-csv", str(testing_csv),
+            "--wav-dir", str(wav_dir),
+            "--models", "fastai",
+            "--fastai-model-path", "./model",
+            "--category", "resident",
+        ]
+        with patch.object(sys, "argv", test_args):
+            with patch("compare_models.run_inference", return_value=mock_result) as mock_infer:
+                result = main()
+                # Only the one resident sample should be evaluated.
+                assert mock_infer.call_count == 1
+        assert result == 0
+
+    def test_returns_1_for_category_with_no_samples(self, tmp_path):
+        """main() returns 1 when --category matches no rows in testing_samples.csv."""
+        from compare_models import main
+
+        testing_csv = self._write_testing_csv(tmp_path, _make_testing_rows())
+        wav_dir = tmp_path / "testing-wav"
+        wav_dir.mkdir()
+        test_args = [
+            "compare_models.py",
+            "--testing-csv", str(testing_csv),
+            "--wav-dir", str(wav_dir),
+            "--models", "fastai",
+            "--category", "transient",
         ]
         with patch.object(sys, "argv", test_args):
             result = main()

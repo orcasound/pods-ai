@@ -15,7 +15,10 @@ The `ModelTraining/src` directory has the following scripts for different steps 
    `--input _filename_`. A custom segment duration can be specified with `--duration _seconds_` (default: 3 seconds).
    - For `tp_human_only` detections, runs model inference on preceding 60 seconds to find correct timestamp
    - For other detections, subtracts the segment duration from the timestamp
-   - `testing_samples.csv` uses detections-format rows, excludes training rows, and includes up to 10 eligible samples per category
+   - `testing_samples.csv` uses detections-format rows, excludes training rows, and includes eligible samples per category:
+     - Up to 10 standard eligible samples per category (excludes samples with confidence 0.0)
+     - Additionally up to 10 `tp_machine_only` samples in the `resident` category
+     - Additionally up to 10 `tp_human_only` samples per negative category (water, human, vessel, jingle)
 4. **download_wavs.py**: Use `output/csv/training_samples.csv` and `output/csv/testing_samples.csv` to download wav files
    - Training samples are written to subdirectories under `output/wav`
    - Testing samples are written to subdirectories under `output/testing-wav`
@@ -268,6 +271,7 @@ usage: python compare_models.py [--testing-csv PATH] [--max-samples N]
                                 [--fastai-model-path PATH]
                                 [--orcahello-model-path PATH]
                                 [--podsai-model-path PATH]
+                                [--category CATEGORY]
 ```
 
 | Argument | Description |
@@ -279,6 +283,7 @@ usage: python compare_models.py [--testing-csv PATH] [--max-samples N]
 | `--fastai-model-path` | Path to FastAI model directory. Defaults to `model` when not specified |
 | `--orcahello-model-path` | HuggingFace Hub ID or path for OrcaHello model. Defaults to `orcasound/orcahello-srkw-detector-v1` when not specified |
 | `--podsai-model-path` | Path or Hub ID for PODS-AI model. Defaults to `model/multiclass` when not specified |
+| `--category` | Only evaluate samples from this category (e.g. `resident`, `humpback`, `water`). If not specified, all categories are evaluated |
 
 **Example — compare all three models**
 
@@ -356,6 +361,12 @@ python src/compare_models.py --models fastai,orcahello --fastai-model-path model
 
 ```bash
 python src/compare_models.py --max-samples 10 --fastai-model-path model
+```
+
+**Example — evaluate only resident samples**
+
+```bash
+python src/compare_models.py --category resident --fastai-model-path model
 ```
 
 ### get_best_timestamp.py
