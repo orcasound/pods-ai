@@ -296,7 +296,7 @@ python src/compare_models.py \
 
 Output:
 ```
-Loaded 62 test samples from output/csv/testing_samples.csv
+Loaded 72 test samples from output\csv\testing_samples.csv
 WAV directory: output/testing-wav
 Models to evaluate: fastai, orcahello, podsai
 
@@ -309,9 +309,9 @@ Model Comparison Summary
 ==========================================================================================
 Model           Evaluated   Correct  Accuracy     FP     FP%     FN     FN%   Avg Time
 ------------------------------------------------------------------------------------------
-fastai                 62        23     37.1%     30   48.4%      9   14.5%     11.89s
-orcahello              62         5      8.1%     49   79.0%      8   12.9%      4.51s
-podsai                 62        52     83.9%      3    4.8%      7   11.3%      4.49s
+fastai                 72        33     45.8%     30   41.7%      9   12.5%     12.05s
+orcahello              72        15     20.8%     49   68.1%      8   11.1%      4.27s
+podsai                 72        53     73.6%      3    4.2%     16   22.2%      5.39s
 ==========================================================================================
 
 Definitions:
@@ -321,31 +321,31 @@ Definitions:
   Avg Time     = average time spent in model predict() per 60-second WAV file
 
 Confusion Matrix for fastai (rows=actual, cols=predicted):
-               other   resident
-    human          1          1
- humpback          7          3
-   jingle          8          2
- resident          9          1
-transient          2          8
-   vessel          4          6
-    water          0         10
+                 other   resident
+      human          1          1
+   humpback          7          3
+     jingle          8          2
+   resident          9         11
+  transient          2          8
+     vessel          4          6
+      water          0         10
 
 Confusion Matrix for orcahello (rows=actual, cols=predicted):
-               other   resident
-    human          0          2
- humpback          3          7
-   jingle          0         10
- resident          8          2
-transient          0         10
-   vessel          0         10
-    water          0         10
+                 other   resident
+      human          0          2
+   humpback          3          7
+     jingle          0         10
+   resident          8         12
+  transient          0         10
+     vessel          0         10
+      water          0         10
 
 Confusion Matrix for podsai (rows=actual, cols=predicted):
                  human   humpback     jingle   resident  transient     vessel      water
       human          1          1          0          0          0          0          0
    humpback          0          6          0          2          2          0          0
      jingle          0          0         10          0          0          0          0
-   resident          0          0          1          3          4          0          2
+   resident          0          8          1          4          4          0          3
   transient          0          6          1          0          3          0          0
      vessel          0          4          0          1          1          4          0
       water          0          0          0          0          0          0         10
