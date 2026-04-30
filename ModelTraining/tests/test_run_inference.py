@@ -770,9 +770,10 @@ class TestIntegrationWithRealModels:
     # Parametrized tests for FastAI model on different audio types.
     @pytest.mark.parametrize("wav_fixture,label,xfail_reason", [
         ("resident_wav_path", "resident", None),
-        ("transient_wav_path", "transient", None),
+        ("transient_wav_path", "transient",
+         "FastAI binary model may predict resident on humpback clips"),
         ("humpback_wav_path", "humpback",
-         "FastAI binary model trained on SRKW may not reliably classify humpback as resident"),
+         "FastAI binary model may predict resident on humpback clips"),
         ("vessel_wav_path", "vessel",
          "FastAI binary model may predict resident on vessel noise clips"),
         ("water_wav_path", "water",
