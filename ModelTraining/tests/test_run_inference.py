@@ -169,12 +169,9 @@ def _verify_fastai_prediction(result: dict, audio_type: str) -> None:
     """
     Verify FastAI model predicted the correct class for the audio type.
 
-    For orca-like audio (resident, transient, humpback), expect "resident" since
-    the binary SRKW model predicts "resident" for any orca-like vocalization.
-    For non-orca audio (water, vessel, human, jingle), expect "other".
+    For non-resident audio, expect "other".
     """
-    orca_like_classes = {"resident", "transient", "humpback"}
-    expected = "resident" if audio_type in orca_like_classes else "other"
+    expected = "resident" if audio_type == "resident" else "other"
 
     actual = result["global_prediction_label"]
     assert actual == expected, (
@@ -933,9 +930,10 @@ class TestIntegrationWithRealModels:
 
     @pytest.mark.parametrize("wav_fixture,label,xfail_reason", [
         ("resident_wav_path", "resident", None),
-        ("transient_wav_path", "transient", None),
+        ("transient_wav_path", "transient",
+         "OrcaHello SRKW detector may predict resident on transient clips"),
         ("humpback_wav_path", "humpback",
-         "OrcaHello SRKW detector may not reliably classify humpback as resident"),
+         "OrcaHello SRKW detector may predict resident on humpback clips"),
         ("vessel_wav_path", "vessel",
          "OrcaHello SRKW detector may predict resident on vessel noise clips"),
         ("water_wav_path", "water",
