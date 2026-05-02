@@ -94,32 +94,7 @@ def run_inference(wav_path: str, model_type: str = "podsai",
         result = model.predict(wav_path)
         predict_time = time.perf_counter() - start_time
 
-        local_predictions = result.get("local_predictions", [])
-        local_confidences = result.get("local_confidences", [])
-        local_probs = result.get("local_probs", [])
-        id2label: dict = model.id2label
-        threshold: float = getattr(model, "threshold", 0.5)
-
-        # For each class, compute the mean probability across all windows where
-        # the class probability exceeds the threshold.
-        # This provides a per-class confidence score.
-        probabilities = {}
-        for class_id, label in id2label.items():
-            if local_probs:
-                # Use the actual class probabilities from the model
-                class_probs = [
-                    float(probs[class_id]) for probs in local_probs
-                    if probs[class_id] > threshold
-                ]
-                probabilities[label] = round(sum(class_probs) / len(class_probs), 4) if class_probs else 0.0
-            else:
-                # Fallback to the old method if local_probs not available
-                class_confs = [
-                    conf for pred, conf in zip(local_predictions, local_confidences, strict=True)
-                    if pred == class_id and conf > threshold
-                ]
-                probabilities[label] = round(sum(class_confs) / len(class_confs), 4) if class_confs else 0.0
-
+        probabilities = result["per_class_probabilities"]
         global_prediction_label = result.get("global_prediction_label", "")
         global_confidence = float(result.get("global_confidence", 0.0))
 

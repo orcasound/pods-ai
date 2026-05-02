@@ -375,6 +375,13 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
         # Convert global prediction ID to label name.
         global_prediction_label = self.id2label[global_prediction_id]
 
+        # Calculate per-class probabilities for display purposes.
+        # These represent the mean probability for each class across all windows.
+        per_class_probabilities = {}
+        for class_id, label in self.id2label.items():
+            class_probs = [float(probs[class_id]) for probs in smoothed_probs]
+            per_class_probabilities[label] = float(np.mean(class_probs))
+
         return {
             "local_predictions": local_predictions,
             "local_confidences": local_confidences,
@@ -382,6 +389,7 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
             "global_prediction": global_prediction_id,
             "global_prediction_label": global_prediction_label,
             "global_confidence": global_confidence,
+            "per_class_probabilities": per_class_probabilities,
             "hop_duration": float(hop_duration),
             "segment_duration": float(segment_duration),
         }
