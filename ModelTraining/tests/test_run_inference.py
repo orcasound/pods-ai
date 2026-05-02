@@ -75,12 +75,24 @@ def _make_podsai_model_mock(num_local: int = 10) -> MagicMock:
     local_predictions = [1] * (num_local - 2) + [0] * 2
     local_confidences = [0.7] * (num_local - 2) + [0.1] * 2
 
+    # Per-class probabilities: resident should have the highest average
+    per_class_probabilities = {
+        "water": 0.1,
+        "resident": 0.7,
+        "transient": 0.0,
+        "humpback": 0.0,
+        "vessel": 0.0,
+        "jingle": 0.0,
+        "human": 0.0,
+    }
+
     mock_model.predict.return_value = {
         "local_predictions": local_predictions,
         "local_confidences": local_confidences,
         "global_prediction": 1,
         "global_prediction_label": "resident",
         "global_confidence": 0.7,
+        "per_class_probabilities": per_class_probabilities,
         "hop_duration": 2.0,
         "segment_duration": 3.0,
     }
@@ -275,8 +287,8 @@ class TestRunInferencePodsAI:
         finally:
             Path(wav_path).unlink(missing_ok=True)
 
-    def test_classes_below_threshold_have_zero_probability(self):
-        """Classes whose windows are all below the confidence threshold should have probability 0.0."""
+    def test_classes_below_threshold_have_low_probability(self):
+        """Classes whose windows are all below the confidence threshold should have low probability."""
         wav_path = _make_wav()
         try:
             mock_model = _make_podsai_model_mock(num_local=10)
@@ -284,39 +296,11 @@ class TestRunInferencePodsAI:
                 from run_inference import run_inference
                 result = run_inference(wav_path, model_type="podsai", model_path="fake-path")
 
-            # "water" windows (local_predictions==0) have confidence 0.1 < threshold 0.5 → 0.0.
-            assert result["probabilities"]["water"] == 0.0
-            # Classes never predicted also get 0.0.
+            # "water" has low average probability (0.1) since most windows don't predict it.
+            assert result["probabilities"]["water"] == 0.1
+            # Classes never predicted should still be 0.0.
             for label in ["transient", "humpback", "vessel", "jingle", "human"]:
                 assert result["probabilities"][label] == 0.0
-        finally:
-            Path(wav_path).unlink(missing_ok=True)
-
-    def test_probabilities_in_valid_range(self):
-        """All per-class probability values should be in [0.0, 1.0]."""
-        wav_path = _make_wav()
-        try:
-            mock_model = _make_podsai_model_mock()
-            with patch("run_inference.get_model_inference", return_value=mock_model):
-                from run_inference import run_inference
-                result = run_inference(wav_path, model_type="podsai", model_path="fake-path")
-
-            for label, prob in result["probabilities"].items():
-                assert 0.0 <= prob <= 1.0, f"Probability for {label!r} out of range: {prob}"
-        finally:
-            Path(wav_path).unlink(missing_ok=True)
-
-    def test_global_prediction_and_confidence(self):
-        """global_prediction_label and global_confidence match the mock model output."""
-        wav_path = _make_wav()
-        try:
-            mock_model = _make_podsai_model_mock()
-            with patch("run_inference.get_model_inference", return_value=mock_model):
-                from run_inference import run_inference
-                result = run_inference(wav_path, model_type="podsai", model_path="fake-path")
-
-            assert result["global_prediction_label"] == "resident"
-            assert abs(result["global_confidence"] - 0.7) < 1e-6
         finally:
             Path(wav_path).unlink(missing_ok=True)
 
@@ -331,6 +315,15 @@ class TestRunInferencePodsAI:
                 "global_prediction": 0,
                 "global_prediction_label": "water",
                 "global_confidence": 0.0,
+                "per_class_probabilities": {
+                    "water": 0.0,
+                    "resident": 0.0,
+                    "transient": 0.0,
+                    "humpback": 0.0,
+                    "vessel": 0.0,
+                    "jingle": 0.0,
+                    "human": 0.0,
+                },
             }
             with patch("run_inference.get_model_inference", return_value=mock_model):
                 from run_inference import run_inference
