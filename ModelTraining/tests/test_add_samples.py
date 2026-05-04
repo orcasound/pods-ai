@@ -17,6 +17,7 @@ from add_samples import (
     add_samples,
     format_timestamp_pst,
     get_segment_prediction,
+    parse_node_and_timestamp_from_filename,
     parse_timestamp_pst,
     split_wav_into_segments,
 )
@@ -60,6 +61,58 @@ class TestFormatTimestampPst:
         """format_timestamp_pst should always end with _PST."""
         dt = parse_timestamp_pst("2025_01_01_00_00_00_PST")
         assert format_timestamp_pst(dt).endswith("_PST")
+
+
+# ---------------------------------------------------------------------------
+# parse_node_and_timestamp_from_filename
+# ---------------------------------------------------------------------------
+
+
+class TestParseNodeAndTimestampFromFilename:
+    """Tests for parse_node_and_timestamp_from_filename."""
+
+    def test_parses_standard_filename(self):
+        """Should extract node name (with underscores) and timestamp from a well-formed filename."""
+        node, ts = parse_node_and_timestamp_from_filename(
+            "rpi-orcasound-lab_2025_12_17_22_34_03_PST.wav"
+        )
+        assert node == "rpi_orcasound_lab"
+        assert ts == "2025_12_17_22_34_03_PST"
+
+    def test_parses_path_with_directory(self):
+        """Should ignore leading directory components and parse only the basename."""
+        node, ts = parse_node_and_timestamp_from_filename(
+            "/some/path/rpi-sunset-bay_2026_01_01_00_00_00_PST.wav"
+        )
+        assert node == "rpi_sunset_bay"
+        assert ts == "2026_01_01_00_00_00_PST"
+
+    def test_node_name_with_single_segment(self):
+        """Node names that contain no hyphens should still be parsed correctly."""
+        node, ts = parse_node_and_timestamp_from_filename(
+            "orcasound-lab_2025_06_01_08_15_30_PST.wav"
+        )
+        assert node == "orcasound_lab"
+        assert ts == "2025_06_01_08_15_30_PST"
+
+    def test_raises_for_filename_without_timestamp(self):
+        """Should raise ValueError when the filename has no recognisable timestamp."""
+        with pytest.raises(ValueError, match="Cannot infer"):
+            parse_node_and_timestamp_from_filename("recording.wav")
+
+    def test_raises_for_filename_missing_pst_suffix(self):
+        """Should raise ValueError when _PST is absent from the timestamp portion."""
+        with pytest.raises(ValueError, match="Cannot infer"):
+            parse_node_and_timestamp_from_filename(
+                "rpi-orcasound-lab_2025_12_17_22_34_03.wav"
+            )
+
+    def test_raises_for_non_wav_extension(self):
+        """Should raise ValueError for files that do not end in .wav."""
+        with pytest.raises(ValueError, match="Cannot infer"):
+            parse_node_and_timestamp_from_filename(
+                "rpi-orcasound-lab_2025_12_17_22_34_03_PST.mp3"
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -446,3 +499,55 @@ class TestAddSamples:
 
         assert mock_get_model.call_count == 1
         assert mock_model.predict.call_count == 2
+
+    def test_infers_node_and_timestamp_from_filename(self, tmp_path):
+        """add_samples should parse node_name and base_timestamp from a well-formed filename."""
+        fake_segments = self._fake_split(tmp_path)
+        mock_model = MagicMock()
+        mock_model.predict.return_value = {"global_prediction_label": "water"}
+
+        with patch("add_samples.split_wav_into_segments", return_value=fake_segments) as mock_split, \
+             patch("add_samples.get_model_inference", return_value=mock_model):
+
+            add_samples(
+                wav_file="rpi-orcasound-lab_2025_01_15_12_30_00_PST.wav",
+                output_dir=str(tmp_path),
+                model_type="podsai",
+                model_path="/path/to/model",
+            )
+
+        # Verify the inferred values were passed to split_wav_into_segments.
+        call_kwargs = mock_split.call_args
+        assert call_kwargs[0][1] == "rpi_orcasound_lab"         # node_name
+        assert call_kwargs[0][2] == "2025_01_15_12_30_00_PST"   # base_timestamp
+
+    def test_explicit_args_override_filename_inference(self, tmp_path):
+        """Explicit node_name and base_timestamp should take precedence over filename."""
+        fake_segments = self._fake_split(tmp_path)
+        mock_model = MagicMock()
+        mock_model.predict.return_value = {"global_prediction_label": "water"}
+
+        with patch("add_samples.split_wav_into_segments", return_value=fake_segments) as mock_split, \
+             patch("add_samples.get_model_inference", return_value=mock_model):
+
+            add_samples(
+                wav_file="rpi-orcasound-lab_2025_01_15_12_30_00_PST.wav",
+                node_name="rpi_sunset_bay",
+                base_timestamp="2026_06_01_00_00_00_PST",
+                output_dir=str(tmp_path),
+                model_type="podsai",
+                model_path="/path/to/model",
+            )
+
+        call_kwargs = mock_split.call_args
+        assert call_kwargs[0][1] == "rpi_sunset_bay"
+        assert call_kwargs[0][2] == "2026_06_01_00_00_00_PST"
+
+    def test_raises_for_bad_filename_when_no_explicit_args(self):
+        """add_samples should raise ValueError when the filename cannot be parsed and no args given."""
+        with pytest.raises(ValueError, match="Cannot infer"):
+            add_samples(
+                wav_file="recording.wav",
+                model_type="fastai",
+                model_path="./model",
+            )

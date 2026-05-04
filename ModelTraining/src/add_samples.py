@@ -5,6 +5,11 @@
 Split a WAV file into 3-second segments and run inference on each segment.
 
 Usage:
+    # Node name and timestamp inferred from filename:
+    python add_samples.py rpi-orcasound-lab_2025_01_15_12_30_00_PST.wav \\
+        --model-path /path/to/model
+
+    # Override node name and/or timestamp explicitly:
     python add_samples.py recording.wav --node-name rpi_orcasound_lab \\
         --timestamp 2025_01_15_12_30_00_PST --model-path /path/to/model
     python add_samples.py recording.wav --node-name rpi_sunset_bay \\
@@ -16,9 +21,17 @@ output/wav/humpback/ etc.: {node_name_with_hyphens}_{timestamp_pst}.wav.
 The timestamp in each filename reflects the actual start time of that sample.
 
 Then runs inference on each saved segment and prints the predicted class label.
+
+If --node-name and --timestamp are omitted the script parses them from the
+input filename.  The filename must follow the convention used by the
+download_wavs.py outputs:
+    {node_name_with_hyphens}_{YYYY_MM_DD_HH_MM_SS_PST}.wav
+For example, rpi-orcasound-lab_2025_12_17_22_34_03_PST.wav yields
+node_name=rpi_orcasound_lab and timestamp=2025_12_17_22_34_03_PST.
 """
 
 import argparse
+import re
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -33,6 +46,47 @@ SEGMENT_DURATION = 3  # Duration of each segment in seconds.
 HOP_DURATION = 2  # Hop size between segments in seconds.
 DEFAULT_OUTPUT_DIR = "new"  # Default output directory for segments.
 PACIFIC_TZ = timezone("US/Pacific")  # Pacific timezone for timestamp formatting.
+
+# Regex that matches filenames produced by download_wavs.py:
+# {node_name_with_hyphens}_{YYYY_MM_DD_HH_MM_SS_PST}.wav
+_FILENAME_PATTERN = re.compile(
+    r"^(?P<node>.+?)_(?P<ts>\d{4}_\d{2}_\d{2}_\d{2}_\d{2}_\d{2}_PST)\.wav$",
+    re.IGNORECASE,
+)
+
+
+def parse_node_and_timestamp_from_filename(wav_file: str) -> tuple[str, str]:
+    """
+    Parse the hydrophone node name and PST timestamp from a WAV filename.
+
+    Expects filenames following the convention used by download_wavs.py:
+        {node_name_with_hyphens}_{YYYY_MM_DD_HH_MM_SS_PST}.wav
+    For example, "rpi-orcasound-lab_2025_12_17_22_34_03_PST.wav" yields
+    node_name="rpi_orcasound_lab" and timestamp="2025_12_17_22_34_03_PST".
+    Hyphens in the node-name portion are converted back to underscores.
+
+    Args:
+        wav_file: Path (or bare filename) of the WAV file to parse.
+
+    Returns:
+        Tuple of (node_name, timestamp_str) where node_name uses underscores.
+
+    Raises:
+        ValueError: If the filename does not match the expected pattern.
+    """
+    stem = Path(wav_file).name
+    match = _FILENAME_PATTERN.match(stem)
+    if not match:
+        raise ValueError(
+            f"Cannot infer node name and timestamp from filename: {stem!r}. "
+            "The filename must follow the convention "
+            "{node_name_with_hyphens}_{YYYY_MM_DD_HH_MM_SS_PST}.wav "
+            "(e.g., rpi-orcasound-lab_2025_12_17_22_34_03_PST.wav). "
+            "Use --node-name and --timestamp to provide them explicitly."
+        )
+    node_name = match.group("node").replace("-", "_")
+    timestamp_str = match.group("ts")
+    return node_name, timestamp_str
 
 
 def parse_timestamp_pst(timestamp_str: str) -> datetime:
@@ -179,8 +233,8 @@ def get_segment_prediction(model: object, segment_path: Path, model_type: str) -
 
 def add_samples(
     wav_file: str,
-    node_name: str,
-    base_timestamp: str,
+    node_name: Optional[str] = None,
+    base_timestamp: Optional[str] = None,
     output_dir: str = DEFAULT_OUTPUT_DIR,
     model_type: str = "podsai",
     model_path: Optional[str] = None,
@@ -192,11 +246,18 @@ def add_samples(
     {node_name_with_hyphens}_{timestamp_pst}.wav and returns a list of
     (filename, predicted_class) pairs.
 
+    If node_name or base_timestamp are not provided they are inferred from the
+    wav_file filename, which must follow the convention used by download_wavs.py:
+    {node_name_with_hyphens}_{YYYY_MM_DD_HH_MM_SS_PST}.wav
+    (e.g., rpi-orcasound-lab_2025_12_17_22_34_03_PST.wav).
+
     Args:
         wav_file: Path to the input WAV file.
         node_name: Hydrophone node name (e.g., "rpi_orcasound_lab").
+            Inferred from wav_file filename if not provided.
         base_timestamp: PST timestamp of the start of the recording
             (e.g., "2025_01_15_12_30_00_PST").
+            Inferred from wav_file filename if not provided.
         output_dir: Directory to save segments (default: "new").
         model_type: Model type to use ('podsai', 'fastai', or 'orcahello').
         model_path: Path to model directory or HuggingFace Hub model ID.
@@ -206,8 +267,15 @@ def add_samples(
         List of (filepath, predicted_class) tuples, one per segment.
 
     Raises:
-        ValueError: If model_path is not provided for the podsai model type.
+        ValueError: If node_name or base_timestamp cannot be inferred and are
+            not provided, or if model_path is not provided for the podsai model type.
     """
+    if node_name is None or base_timestamp is None:
+        inferred_node, inferred_ts = parse_node_and_timestamp_from_filename(wav_file)
+        if node_name is None:
+            node_name = inferred_node
+        if base_timestamp is None:
+            base_timestamp = inferred_ts
     out_dir = Path(output_dir)
 
     # Split the WAV and save segments.
@@ -263,19 +331,21 @@ def main() -> int:
     )
     parser.add_argument(
         "--node-name",
-        required=True,
+        default=None,
         help=(
             "Hydrophone node name (e.g., 'rpi_orcasound_lab'). "
-            "Used in output filenames (underscores are replaced with hyphens)."
+            "Used in output filenames (underscores are replaced with hyphens). "
+            "Inferred from the input filename if not provided."
         ),
     )
     parser.add_argument(
         "--timestamp",
-        required=True,
+        default=None,
         help=(
             "PST timestamp of the start of the recording "
             "(e.g., '2025_01_15_12_30_00_PST'). "
-            "Each segment filename encodes the actual start time of that sample."
+            "Each segment filename encodes the actual start time of that sample. "
+            "Inferred from the input filename if not provided."
         ),
     )
     parser.add_argument(
