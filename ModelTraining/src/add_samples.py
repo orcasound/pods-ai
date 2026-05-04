@@ -25,7 +25,6 @@ from pathlib import Path
 from typing import Optional
 
 import ffmpeg
-import numpy as np
 from pytz import timezone
 
 from model_inference import get_model_inference
@@ -105,7 +104,7 @@ def split_wav_into_segments(
     # Compute number of segment positions (sliding window).
     # Each position starts at pos_idx * hop_duration seconds.
     # The last position must start early enough that the full segment fits.
-    num_positions = int(np.floor((duration - segment_duration) / hop_duration)) + 1
+    num_positions = int((duration - segment_duration) // hop_duration) + 1
     if num_positions < 1:
         num_positions = 1
 

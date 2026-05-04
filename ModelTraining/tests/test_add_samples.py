@@ -70,11 +70,6 @@ class TestFormatTimestampPst:
 class TestSplitWavIntoSegments:
     """Tests for split_wav_into_segments."""
 
-    def _make_fake_ffmpeg(self, duration: float):
-        """Return patch helpers that fake ffmpeg.probe and ffmpeg.run."""
-        fake_probe_result = {"format": {"duration": str(duration)}}
-        return fake_probe_result
-
     def test_saves_correct_number_of_segments_for_60s_audio(self, tmp_path):
         """A 60-second file should produce 29 segments with 3s/2s settings."""
         # floor((60 - 3) / 2) + 1 = 29
