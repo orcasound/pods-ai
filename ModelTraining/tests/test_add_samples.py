@@ -11,6 +11,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from add_samples import (
+    DEFAULT_MODEL_PATH,
     DEFAULT_OUTPUT_DIR,
     HOP_DURATION,
     SEGMENT_DURATION,
@@ -309,48 +310,26 @@ class TestGetSegmentPrediction:
     """Tests for get_segment_prediction."""
 
     def test_podsai_returns_global_prediction_label(self, tmp_path):
-        """For podsai, prediction label comes from global_prediction_label."""
+        """Prediction label comes from global_prediction_label."""
         fake_path = tmp_path / "seg.wav"
         fake_path.write_bytes(b"")
         mock_model = MagicMock()
         mock_model.predict.return_value = {"global_prediction_label": "humpback"}
 
-        label = get_segment_prediction(mock_model, fake_path, "podsai")
+        label = get_segment_prediction(mock_model, fake_path)
 
         assert label == "humpback"
 
-    def test_fastai_resident_prediction(self, tmp_path):
-        """For fastai, global_prediction=1 should map to 'resident'."""
+    def test_returns_unknown_when_label_missing(self, tmp_path):
+        """get_segment_prediction should return 'unknown' when key is absent."""
         fake_path = tmp_path / "seg.wav"
         fake_path.write_bytes(b"")
         mock_model = MagicMock()
-        mock_model.predict.return_value = {"global_prediction": 1}
+        mock_model.predict.return_value = {}
 
-        label = get_segment_prediction(mock_model, fake_path, "fastai")
+        label = get_segment_prediction(mock_model, fake_path)
 
-        assert label == "resident"
-
-    def test_fastai_other_prediction(self, tmp_path):
-        """For fastai, global_prediction=0 should map to 'other'."""
-        fake_path = tmp_path / "seg.wav"
-        fake_path.write_bytes(b"")
-        mock_model = MagicMock()
-        mock_model.predict.return_value = {"global_prediction": 0}
-
-        label = get_segment_prediction(mock_model, fake_path, "fastai")
-
-        assert label == "other"
-
-    def test_orcahello_resident_prediction(self, tmp_path):
-        """For orcahello, global_prediction=1 should map to 'resident'."""
-        fake_path = tmp_path / "seg.wav"
-        fake_path.write_bytes(b"")
-        mock_model = MagicMock()
-        mock_model.predict.return_value = {"global_prediction": 1}
-
-        label = get_segment_prediction(mock_model, fake_path, "orcahello")
-
-        assert label == "resident"
+        assert label == "unknown"
 
     def test_returns_unknown_on_inference_failure(self, tmp_path, capsys):
         """get_segment_prediction should return 'unknown' if inference raises."""
@@ -359,7 +338,7 @@ class TestGetSegmentPrediction:
         mock_model = MagicMock()
         mock_model.predict.side_effect = RuntimeError("model error")
 
-        label = get_segment_prediction(mock_model, fake_path, "podsai")
+        label = get_segment_prediction(mock_model, fake_path)
 
         assert label == "unknown"
         captured = capsys.readouterr()
@@ -399,7 +378,6 @@ class TestAddSamples:
                 node_name="rpi_orcasound_lab",
                 base_timestamp="2025_01_15_12_30_00_PST",
                 output_dir=str(tmp_path),
-                model_type="podsai",
                 model_path="/path/to/model",
             )
 
@@ -408,19 +386,25 @@ class TestAddSamples:
             assert isinstance(filepath, str)
             assert label == "water"
 
-    def test_raises_for_missing_podsai_model_path(self, tmp_path):
-        """add_samples should raise ValueError when podsai is used without model_path."""
+    def test_default_model_path_is_used(self, tmp_path):
+        """add_samples should use DEFAULT_MODEL_PATH when model_path is not provided."""
         fake_segments = self._fake_split(tmp_path)
+        mock_model = MagicMock()
+        mock_model.predict.return_value = {"global_prediction_label": "water"}
+
         with patch("add_samples.split_wav_into_segments", return_value=fake_segments), \
-             pytest.raises(ValueError, match="model_path is required"):
+             patch("add_samples.get_model_inference", return_value=mock_model) as mock_get_model:
+
             add_samples(
                 wav_file="fake.wav",
                 node_name="rpi_orcasound_lab",
                 base_timestamp="2025_01_15_12_30_00_PST",
                 output_dir=str(tmp_path),
-                model_type="podsai",
-                model_path=None,
             )
+
+        mock_get_model.assert_called_once_with(
+            model_type="podsai", model_path=DEFAULT_MODEL_PATH
+        )
 
     def test_returns_empty_when_no_segments(self, tmp_path):
         """add_samples should return [] if split_wav_into_segments yields nothing."""
@@ -430,54 +414,9 @@ class TestAddSamples:
                 node_name="rpi_orcasound_lab",
                 base_timestamp="2025_01_15_12_30_00_PST",
                 output_dir=str(tmp_path),
-                model_type="fastai",
-                model_path="./model",
             )
 
         assert results == []
-
-    def test_fastai_default_model_path_is_set(self, tmp_path):
-        """add_samples should default to './model' for fastai when model_path is None."""
-        fake_segments = self._fake_split(tmp_path)
-        mock_model = MagicMock()
-        mock_model.predict.return_value = {"global_prediction": 0}
-
-        with patch("add_samples.split_wav_into_segments", return_value=fake_segments), \
-             patch("add_samples.get_model_inference", return_value=mock_model) as mock_get_model:
-
-            add_samples(
-                wav_file="fake.wav",
-                node_name="rpi_orcasound_lab",
-                base_timestamp="2025_01_15_12_30_00_PST",
-                output_dir=str(tmp_path),
-                model_type="fastai",
-                model_path=None,
-            )
-
-        mock_get_model.assert_called_once_with(model_type="fastai", model_path="./model")
-
-    def test_orcahello_default_model_path_is_set(self, tmp_path):
-        """add_samples should default to the orcahello HuggingFace ID when model_path is None."""
-        fake_segments = self._fake_split(tmp_path)
-        mock_model = MagicMock()
-        mock_model.predict.return_value = {"global_prediction": 0}
-
-        with patch("add_samples.split_wav_into_segments", return_value=fake_segments), \
-             patch("add_samples.get_model_inference", return_value=mock_model) as mock_get_model:
-
-            add_samples(
-                wav_file="fake.wav",
-                node_name="rpi_orcasound_lab",
-                base_timestamp="2025_01_15_12_30_00_PST",
-                output_dir=str(tmp_path),
-                model_type="orcahello",
-                model_path=None,
-            )
-
-        mock_get_model.assert_called_once_with(
-            model_type="orcahello",
-            model_path="orcasound/orcahello-srkw-detector-v1",
-        )
 
     def test_model_loaded_once_for_all_segments(self, tmp_path):
         """The model should be loaded exactly once regardless of the number of segments."""
@@ -493,12 +432,31 @@ class TestAddSamples:
                 node_name="rpi_orcasound_lab",
                 base_timestamp="2025_01_15_12_30_00_PST",
                 output_dir=str(tmp_path),
-                model_type="podsai",
                 model_path="/path/to/model",
             )
 
         assert mock_get_model.call_count == 1
         assert mock_model.predict.call_count == 2
+
+    def test_always_uses_podsai_model_type(self, tmp_path):
+        """add_samples should always call get_model_inference with model_type='podsai'."""
+        fake_segments = self._fake_split(tmp_path)
+        mock_model = MagicMock()
+        mock_model.predict.return_value = {"global_prediction_label": "water"}
+
+        with patch("add_samples.split_wav_into_segments", return_value=fake_segments), \
+             patch("add_samples.get_model_inference", return_value=mock_model) as mock_get_model:
+
+            add_samples(
+                wav_file="fake.wav",
+                node_name="rpi_orcasound_lab",
+                base_timestamp="2025_01_15_12_30_00_PST",
+                output_dir=str(tmp_path),
+                model_path="/path/to/model",
+            )
+
+        call_args = mock_get_model.call_args
+        assert call_args[1]["model_type"] == "podsai"
 
     def test_infers_node_and_timestamp_from_filename(self, tmp_path):
         """add_samples should parse node_name and base_timestamp from a well-formed filename."""
@@ -512,7 +470,6 @@ class TestAddSamples:
             add_samples(
                 wav_file="rpi-orcasound-lab_2025_01_15_12_30_00_PST.wav",
                 output_dir=str(tmp_path),
-                model_type="podsai",
                 model_path="/path/to/model",
             )
 
@@ -535,7 +492,6 @@ class TestAddSamples:
                 node_name="rpi_sunset_bay",
                 base_timestamp="2026_06_01_00_00_00_PST",
                 output_dir=str(tmp_path),
-                model_type="podsai",
                 model_path="/path/to/model",
             )
 
@@ -546,8 +502,4 @@ class TestAddSamples:
     def test_raises_for_bad_filename_when_no_explicit_args(self):
         """add_samples should raise ValueError when the filename cannot be parsed and no args given."""
         with pytest.raises(ValueError, match="Cannot infer"):
-            add_samples(
-                wav_file="recording.wav",
-                model_type="fastai",
-                model_path="./model",
-            )
+            add_samples(wav_file="recording.wav")

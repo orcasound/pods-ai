@@ -176,6 +176,9 @@ Output files follow the same naming convention as `output/wav/humpback/` etc.:
 {node_name_with_hyphens}_{YYYY_MM_DD_HH_MM_SS_PST}.wav
 ```
 
+Inference always uses the **PODS-AI (podsai)** model type.  The default model is
+`davethaler/whale-call-detector` on HuggingFace Hub; override with `--model-path`.
+
 If `--node-name` and `--timestamp` are omitted, the script infers them from the input
 filename.  The filename must follow the same convention:
 `{node_name_with_hyphens}_{YYYY_MM_DD_HH_MM_SS_PST}.wav`
@@ -187,9 +190,7 @@ After reviewing the predictions you can move the segments into the appropriate
 
 ```
 usage: python add_samples.py <wav_file> [--node-name NAME] [--timestamp TIMESTAMP]
-                             [--output-dir DIR]
-                             [--model {podsai,fastai,orcahello}]
-                             [--model-path PATH]
+                             [--output-dir DIR] [--model-path PATH]
 ```
 
 | Argument | Description |
@@ -198,27 +199,23 @@ usage: python add_samples.py <wav_file> [--node-name NAME] [--timestamp TIMESTAM
 | `--node-name` | Hydrophone node name (e.g. `rpi_orcasound_lab`). Underscores are replaced with hyphens in output filenames. **Inferred from the input filename if omitted.** |
 | `--timestamp` | PST timestamp of the **start** of the recording (e.g. `2025_01_15_12_30_00_PST`). **Inferred from the input filename if omitted.** |
 | `--output-dir` | Directory to save segments (default: `new`) |
-| `--model` | Model type: `podsai` (default), `fastai`, or `orcahello` |
-| `--model-path` | Path to model directory or HuggingFace Hub model ID. Required for `podsai`; defaults to `./model` for `fastai`; defaults to `orcasound/orcahello-srkw-detector-v1` for `orcahello` |
+| `--model-path` | HuggingFace Hub model ID or path to a local podsai model directory (default: `davethaler/whale-call-detector`) |
 
-**Example — node name and timestamp inferred from filename (PODS-AI model)**
+**Example — node name and timestamp inferred from filename**
 
 ```bash
 cd src
-python add_samples.py rpi-orcasound-lab_2025_01_15_12_30_00_PST.wav \
-    --model podsai \
-    --model-path /path/to/podsai-model
+python add_samples.py rpi-orcasound-lab_2025_01_15_12_30_00_PST.wav
 ```
 
-**Example — explicit node name and timestamp (PODS-AI model)**
+**Example — explicit node name and timestamp with custom model**
 
 ```bash
 cd src
 python add_samples.py /path/to/recording.wav \
     --node-name rpi_orcasound_lab \
     --timestamp 2025_01_15_12_30_00_PST \
-    --model podsai \
-    --model-path /path/to/podsai-model
+    --model-path /path/to/local-model
 ```
 
 Output:
@@ -228,22 +225,13 @@ Saved: new/rpi-orcasound-lab_2025_01_15_12_30_02_PST.wav
 Saved: new/rpi-orcasound-lab_2025_01_15_12_30_04_PST.wav
 ...
 
-Loading podsai model from /path/to/podsai-model...
+Loading podsai model from davethaler/whale-call-detector...
 
 Segment predictions:
   rpi-orcasound-lab_2025_01_15_12_30_00_PST.wav: water
   rpi-orcasound-lab_2025_01_15_12_30_02_PST.wav: resident
   rpi-orcasound-lab_2025_01_15_12_30_04_PST.wav: resident
   ...
-```
-
-**Example — FastAI model**
-
-```bash
-cd src
-python add_samples.py rpi-sunset-bay_2025_06_01_08_15_30_PST.wav \
-    --model fastai \
-    --model-path ../model
 ```
 
 ### run_inference.py

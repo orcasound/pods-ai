@@ -6,21 +6,23 @@ Split a WAV file into 3-second segments and run inference on each segment.
 
 Usage:
     # Node name and timestamp inferred from filename:
-    python add_samples.py rpi-orcasound-lab_2025_01_15_12_30_00_PST.wav \\
-        --model-path /path/to/model
+    python add_samples.py rpi-orcasound-lab_2025_01_15_12_30_00_PST.wav
 
     # Override node name and/or timestamp explicitly:
     python add_samples.py recording.wav --node-name rpi_orcasound_lab \\
-        --timestamp 2025_01_15_12_30_00_PST --model-path /path/to/model
+        --timestamp 2025_01_15_12_30_00_PST
     python add_samples.py recording.wav --node-name rpi_sunset_bay \\
-        --timestamp 2025_01_15_12_30_00_PST --model fastai
+        --timestamp 2025_01_15_12_30_00_PST \\
+        --model-path /path/to/custom-model
 
 Saves 3-second segments with a 2-second hop to the "new/" output directory
 (configurable with --output-dir) using the same filename convention as
 output/wav/humpback/ etc.: {node_name_with_hyphens}_{timestamp_pst}.wav.
 The timestamp in each filename reflects the actual start time of that sample.
 
-Then runs inference on each saved segment and prints the predicted class label.
+Runs inference using the PODS-AI model (podsai) and prints the predicted class
+label for each segment.  The default model is davethaler/whale-call-detector on
+HuggingFace Hub; override with --model-path.
 
 If --node-name and --timestamp are omitted the script parses them from the
 input filename.  The filename must follow the convention used by the
@@ -45,6 +47,7 @@ from model_inference import get_model_inference
 SEGMENT_DURATION = 3  # Duration of each segment in seconds.
 HOP_DURATION = 2  # Hop size between segments in seconds.
 DEFAULT_OUTPUT_DIR = "new"  # Default output directory for segments.
+DEFAULT_MODEL_PATH = "davethaler/whale-call-detector"  # Default HuggingFace model ID.
 PACIFIC_TZ = timezone("US/Pacific")  # Pacific timezone for timestamp formatting.
 
 # Regex that matches filenames produced by download_wavs.py:
@@ -202,14 +205,16 @@ def split_wav_into_segments(
     return segments
 
 
-def get_segment_prediction(model: object, segment_path: Path, model_type: str) -> str:
+def get_segment_prediction(model: object, segment_path: Path) -> str:
     """
     Run inference on a single segment WAV file and return the predicted class label.
+
+    Uses the PODS-AI (podsai) model output format: the predicted label is taken
+    from the 'global_prediction_label' key in the result dict.
 
     Args:
         model: Loaded model inference object (from get_model_inference).
         segment_path: Path to the segment WAV file to score.
-        model_type: Model type string ('podsai', 'fastai', or 'orcahello').
 
     Returns:
         Predicted class label string (e.g., "resident", "humpback", "other").
@@ -221,14 +226,7 @@ def get_segment_prediction(model: object, segment_path: Path, model_type: str) -
         print(f"Warning: Inference failed for {segment_path}: {e}", file=sys.stderr)
         return "unknown"
 
-    if model_type == "podsai":
-        label = result.get("global_prediction_label", "unknown")
-    else:
-        # FastAI and OrcaHello use binary predictions (0 = other, 1 = resident).
-        global_prediction = result.get("global_prediction", 0)
-        label = "resident" if global_prediction else "other"
-
-    return label
+    return result.get("global_prediction_label", "unknown")
 
 
 def add_samples(
@@ -236,15 +234,15 @@ def add_samples(
     node_name: Optional[str] = None,
     base_timestamp: Optional[str] = None,
     output_dir: str = DEFAULT_OUTPUT_DIR,
-    model_type: str = "podsai",
-    model_path: Optional[str] = None,
+    model_path: str = DEFAULT_MODEL_PATH,
 ) -> list[tuple[str, str]]:
     """
     Split a WAV file into 3-second segments, save them, and run inference on each.
 
     Saves segments to output_dir using the filename convention
     {node_name_with_hyphens}_{timestamp_pst}.wav and returns a list of
-    (filename, predicted_class) pairs.
+    (filename, predicted_class) pairs.  Inference always uses the PODS-AI
+    (podsai) model type.
 
     If node_name or base_timestamp are not provided they are inferred from the
     wav_file filename, which must follow the convention used by download_wavs.py:
@@ -259,16 +257,15 @@ def add_samples(
             (e.g., "2025_01_15_12_30_00_PST").
             Inferred from wav_file filename if not provided.
         output_dir: Directory to save segments (default: "new").
-        model_type: Model type to use ('podsai', 'fastai', or 'orcahello').
-        model_path: Path to model directory or HuggingFace Hub model ID.
-            Required for podsai.
+        model_path: HuggingFace Hub model ID or path to a local model directory
+            (default: "davethaler/whale-call-detector").
 
     Returns:
         List of (filepath, predicted_class) tuples, one per segment.
 
     Raises:
         ValueError: If node_name or base_timestamp cannot be inferred and are
-            not provided, or if model_path is not provided for the podsai model type.
+            not provided.
     """
     if node_name is None or base_timestamp is None:
         inferred_node, inferred_ts = parse_node_and_timestamp_from_filename(wav_file)
@@ -283,28 +280,14 @@ def add_samples(
     if not segments:
         return []
 
-    # Resolve default model paths (matching run_inference.py conventions).
-    if model_type == "fastai":
-        if model_path is None:
-            model_path = "./model"
-    elif model_type == "orcahello":
-        if model_path is None:
-            model_path = "orcasound/orcahello-srkw-detector-v1"
-    elif model_type == "podsai":
-        if model_path is None:
-            raise ValueError(
-                "model_path is required for --model podsai. "
-                "Provide a path to a fine-tuned model directory or a HuggingFace Hub model ID."
-            )
-
     # Load the model once and run inference on each segment.
-    print(f"\nLoading {model_type} model from {model_path}...")
-    model = get_model_inference(model_type=model_type, model_path=model_path)
+    print(f"\nLoading podsai model from {model_path}...")
+    model = get_model_inference(model_type="podsai", model_path=model_path)
 
     results: list[tuple[str, str]] = []
     print("\nSegment predictions:")
     for seg_path, _timestamp_str in segments:
-        label = get_segment_prediction(model, seg_path, model_type)
+        label = get_segment_prediction(model, seg_path)
         results.append((str(seg_path), label))
         print(f"  {seg_path.name}: {label}")
 
@@ -354,24 +337,11 @@ def main() -> int:
         help=f"Directory to save segments (default: {DEFAULT_OUTPUT_DIR!r}).",
     )
     parser.add_argument(
-        "--model",
-        choices=["podsai", "fastai", "orcahello"],
-        default="podsai",
-        help=(
-            "Model type to use for inference (default: podsai). "
-            "podsai: 7-class model (water, resident, transient, humpback, vessel, jingle, human). "
-            "fastai: 2-class model (other, resident). "
-            "orcahello: 2-class SRKW detector (other, resident)."
-        ),
-    )
-    parser.add_argument(
         "--model-path",
-        default=None,
+        default=DEFAULT_MODEL_PATH,
         help=(
-            "Path to model directory or HuggingFace Hub model ID. "
-            "Required for --model podsai. "
-            "Defaults to ./model for --model fastai. "
-            "Defaults to orcasound/orcahello-srkw-detector-v1 for --model orcahello."
+            "HuggingFace Hub model ID or path to a local podsai model directory "
+            f"(default: {DEFAULT_MODEL_PATH!r})."
         ),
     )
 
@@ -387,7 +357,6 @@ def main() -> int:
             node_name=args.node_name,
             base_timestamp=args.timestamp,
             output_dir=args.output_dir,
-            model_type=args.model,
             model_path=args.model_path,
         )
     except ValueError as e:
