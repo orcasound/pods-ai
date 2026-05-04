@@ -96,7 +96,7 @@ class TestParseNodeAndTimestampFromFilename:
         assert ts == "2025_06_01_08_15_30_PST"
 
     def test_raises_for_filename_without_timestamp(self):
-        """Should raise ValueError when the filename has no recognisable timestamp."""
+        """Should raise ValueError when the filename has no recognizable timestamp."""
         with pytest.raises(ValueError, match="Cannot infer"):
             parse_node_and_timestamp_from_filename("recording.wav")
 
