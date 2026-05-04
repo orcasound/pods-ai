@@ -149,6 +149,10 @@ Key dependencies:
 
 - **spectrogram_visualizer.py**: Adapted from [aifororcas-livesystem](https://github.com/orcasound/aifororcas-livesystem/blob/main/InferenceSystem/src/spectrogram_visualizer.py)
 - **model_inference.py**: Provides model inference interface for scoring audio samples
+- **add_samples.py**: Splits a WAV file into 3-second segments (2-second hop), saves each
+  segment to a `new/` directory using the standard filename convention, and prints the
+  predicted class for each segment. Useful for labelling new recordings and adding them
+  to the training set. See [add_samples.py](#add_samplespy) below.
 - **run_inference.py**: Runs a model on a wav file and prints the global prediction,
   confidence, and per-class probabilities.
 - **compare_models.py**: Evaluates and compares fastai, orcahello, and podsai models
@@ -157,6 +161,77 @@ Key dependencies:
   Reports correct identifications, false positives, false negatives, and average prediction time for each model.
 - **get_best_timestamp.py**: Given a node slug and a detection timestamp, runs
   `process_sample()` and prints the corrected URI with the best timestamp.
+
+### add_samples.py
+
+Split a WAV recording into 3-second segments (with a 2-second hop — the same settings
+used by `run_inference.py`), save each segment to a `new/` directory using the standard
+filename convention, and print the predicted class for each segment.  The timestamp
+encoded in each filename reflects the **actual start time** of that sample inside the
+original recording.
+
+Output files follow the same naming convention as `output/wav/humpback/` etc.:
+
+```
+{node_name_with_hyphens}_{YYYY_MM_DD_HH_MM_SS_PST}.wav
+```
+
+After reviewing the predictions you can move the segments into the appropriate
+`output/wav/<category>/` directory to add them to the training set.
+
+```
+usage: python add_samples.py <wav_file> --node-name NAME --timestamp TIMESTAMP
+                             [--output-dir DIR]
+                             [--model {podsai,fastai,orcahello}]
+                             [--model-path PATH]
+```
+
+| Argument | Description |
+|---|---|
+| `wav_file` | Path to the input WAV file to segment |
+| `--node-name` | Hydrophone node name (e.g. `rpi_orcasound_lab`). Underscores are replaced with hyphens in the output filenames |
+| `--timestamp` | PST timestamp of the **start** of the recording (e.g. `2025_01_15_12_30_00_PST`) |
+| `--output-dir` | Directory to save segments (default: `new`) |
+| `--model` | Model type: `podsai` (default), `fastai`, or `orcahello` |
+| `--model-path` | Path to model directory or HuggingFace Hub model ID. Required for `podsai`; defaults to `./model` for `fastai`; defaults to `orcasound/orcahello-srkw-detector-v1` for `orcahello` |
+
+**Example — PODS-AI model**
+
+```bash
+cd src
+python add_samples.py /path/to/recording.wav \
+    --node-name rpi_orcasound_lab \
+    --timestamp 2025_01_15_12_30_00_PST \
+    --model podsai \
+    --model-path /path/to/podsai-model
+```
+
+Output:
+```
+Saved: new/rpi-orcasound-lab_2025_01_15_12_30_00_PST.wav
+Saved: new/rpi-orcasound-lab_2025_01_15_12_30_02_PST.wav
+Saved: new/rpi-orcasound-lab_2025_01_15_12_30_04_PST.wav
+...
+
+Loading podsai model from /path/to/podsai-model...
+
+Segment predictions:
+  rpi-orcasound-lab_2025_01_15_12_30_00_PST.wav: water
+  rpi-orcasound-lab_2025_01_15_12_30_02_PST.wav: resident
+  rpi-orcasound-lab_2025_01_15_12_30_04_PST.wav: resident
+  ...
+```
+
+**Example — FastAI model**
+
+```bash
+cd src
+python add_samples.py /path/to/recording.wav \
+    --node-name rpi_sunset_bay \
+    --timestamp 2025_06_01_08_15_30_PST \
+    --model fastai \
+    --model-path ../model
+```
 
 ### run_inference.py
 
