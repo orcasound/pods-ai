@@ -146,7 +146,6 @@ def main() -> int:
     )
     parser.add_argument(
         "--model",
-        choices=["podsai", "fastai", "orcahello"],
         default="podsai",
         help=(
             "Model type to use (default: podsai). "
@@ -168,7 +167,6 @@ def main() -> int:
     )
 
     args = parser.parse_args()
-
     wav_path = args.wav_file
     if not Path(wav_path).exists():
         print(f"Error: wav file not found: {wav_path}", file=sys.stderr)

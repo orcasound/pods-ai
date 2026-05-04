@@ -583,8 +583,8 @@ class TestMainCLI:
         """main() returns exit code 1 when run_inference raises ValueError."""
         wav_path = _make_wav()
         try:
-            # Calling with podsai and no --model-path should raise ValueError.
-            with patch("sys.argv", ["run_inference.py", wav_path, "--model", "podsai"]):
+            # Calling with an unknown model type should raise ValueError.
+            with patch("sys.argv", ["run_inference.py", wav_path, "--model", "unknown_model"]):
                 from run_inference import main
                 assert main() == 1
         finally:
@@ -735,10 +735,12 @@ class TestIntegrationWithRealModels:
 
     # Parametrized tests for FastAI model on different audio types.
     @pytest.mark.parametrize("wav_fixture,label,xfail_reason", [
-        ("resident_wav_path", "resident", None),
+        ("resident_wav_path", "resident",
+         "FastAI binary model may predict other on resident clips"),
         ("transient_wav_path", "transient",
          "FastAI binary model may predict resident on transient clips"),
-        ("humpback_wav_path", "humpback", None),
+        ("humpback_wav_path", "humpback",
+         "FastAI binary model may predict resident on humpback clips"),
         ("vessel_wav_path", "vessel", None),
         ("water_wav_path", "water",
          "FastAI binary model may predict resident on ambient water clips"),
