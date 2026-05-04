@@ -28,8 +28,9 @@ def run_inference(wav_path: str, model_type: str = "podsai",
         wav_path: Path to the wav file.
         model_type: Type of model to use ('podsai', 'fastai', or 'orcahello').
         model_path: Path to the model directory or HuggingFace Hub model ID.
-                    Required for podsai. Defaults to './model' for fastai
-                    and 'orcasound/orcahello-srkw-detector-v1' for orcahello.
+                    Required for podsai. Defaults to './model' for fastai,
+                    'orcasound/orcahello-srkw-detector-v1' for orcahello,
+                    and 'davethaler/whale-call-detector' for podsai.
 
     Returns:
         Dictionary with:
@@ -84,10 +85,8 @@ def run_inference(wav_path: str, model_type: str = "podsai",
 
     elif model_type == "podsai":
         if model_path is None:
-            raise ValueError(
-                "model_path is required for --model podsai. "
-                "Provide a path to a fine-tuned model directory or a HuggingFace Hub model ID."
-            )
+            model_path = "davethaler/whale-call-detector"
+
         model = get_model_inference(model_type="podsai", model_path=model_path)
 
         start_time = time.perf_counter()
@@ -164,6 +163,7 @@ def main() -> int:
             "Required for --model podsai. "
             "Defaults to ./model for --model fastai. "
             "Defaults to orcasound/orcahello-srkw-detector-v1 for --model orcahello."
+            "Defaults to davethaler/whale-call-detector for --model podsai."
         ),
     )
 
