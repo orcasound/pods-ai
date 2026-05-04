@@ -72,6 +72,13 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
             self.model = Wav2Vec2ForSequenceClassification.from_pretrained(model_path)
             self.model.to(self.device)
             self.model.eval()
+
+            # Print model version/metadata
+            print(f"  Model config: {self.model.config.name_or_path}")
+            if hasattr(self.model.config, '_commit_hash'):
+                print(f"  Commit hash: {self.model.config._commit_hash}")
+            if hasattr(self.model.config, 'transformers_version'):
+                print(f"  Transformers version: {self.model.config.transformers_version}")
         except Exception as e:
             error_msg = f"Error loading model from {model_path}: {type(e).__name__}: {e}"
             print(error_msg)
