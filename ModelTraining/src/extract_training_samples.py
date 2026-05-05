@@ -984,6 +984,44 @@ def merge_manual_samples(
     return merged
 
 
+def validate_unique_uris(samples: list[dict]) -> None:
+    """
+    Validate that all samples have unique URIs.
+
+    Args:
+        samples: List of sample dictionaries with 'URI', 'Category', 'NodeName', and 'Timestamp' fields.
+
+    Raises:
+        ValueError: If duplicate URIs are found, with details about the duplicates.
+    """
+    uri_to_samples = defaultdict(list)
+
+    for sample in samples:
+        uri = sample.get('URI', '')
+        if uri:
+            uri_to_samples[uri].append(sample)
+
+    # Find URIs that appear more than once.
+    duplicates = {uri: samples_list for uri, samples_list in uri_to_samples.items() if len(samples_list) > 1}
+
+    if duplicates:
+        error_lines = ["\nError: Found duplicate URIs in training samples:"]
+        for uri, samples_list in duplicates.items():
+            error_lines.append(f"\n  URI: {uri}")
+            error_lines.append(f"  Appears {len(samples_list)} times:")
+            for sample in samples_list:
+                category = sample.get('Category', '')
+                node_name = sample.get('NodeName', '')
+                timestamp = sample.get('Timestamp', '')
+                error_lines.append(f"    - {category}, {node_name}, {timestamp}")
+
+        error_message = "\n".join(error_lines)
+        error_message += "\n\nEach training sample must have a unique URI. Please review and remove duplicates."
+        raise ValueError(error_message)
+
+    print(f"  Validated: All {len(samples)} samples have unique URIs")
+
+
 def main():
     """Main function to extract training samples."""
     # Parse command line arguments.
@@ -1126,6 +1164,14 @@ def main():
 
     # Combine manual samples with auto-selected samples.
     all_training_samples = merge_manual_samples(samples, manual_samples)
+
+    # Validate that all samples have unique URIs before writing.
+    print("\nValidating unique URIs...")
+    try:
+        validate_unique_uris(all_training_samples)
+    except ValueError as e:
+        print(str(e), file=sys.stderr)
+        sys.exit(1)
 
     print(f"\nWriting {len(all_training_samples)} training samples to {output_path}...")
     write_training_samples(all_training_samples, output_path, manual_timestamps, manual_confidences, model_inference, args.duration)
