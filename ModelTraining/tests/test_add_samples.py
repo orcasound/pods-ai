@@ -382,8 +382,8 @@ class TestAddSamples:
             (seg2, "2025_01_15_12_30_02_PST"),
         ]
 
-    def test_returns_list_of_filepath_label_confidence_tuples(self, tmp_path):
-        """add_samples should return (filepath, label, confidence) tuples for each segment."""
+    def test_returns_list_of_dicts_with_manual_samples_format(self, tmp_path):
+        """add_samples should return list of dicts matching manual_samples.csv format."""
         fake_segments = self._fake_split(tmp_path)
         mock_model = MagicMock()
         mock_model.predict.return_value = {
@@ -392,7 +392,9 @@ class TestAddSamples:
         }
 
         with patch("add_samples.split_wav_into_segments", return_value=fake_segments), \
-             patch("add_samples.get_model_inference", return_value=mock_model):
+             patch("add_samples.get_model_inference", return_value=mock_model), \
+             patch("add_samples.lookup_detection_in_csv", return_value=None), \
+             patch("add_samples.generate_uri", return_value="https://example.com/test"):
 
             results = add_samples(
                 wav_file="fake.wav",
@@ -403,10 +405,15 @@ class TestAddSamples:
             )
 
         assert len(results) == 2
-        for filepath, label, confidence in results:
-            assert isinstance(filepath, str)
-            assert label == "water"
-            assert confidence == 0.92
+        for row in results:
+            assert isinstance(row, dict)
+            assert row["Category"] == "water"
+            assert row["NodeName"] == "rpi_orcasound_lab"
+            assert row["Timestamp"] in ["2025_01_15_12_30_00_PST", "2025_01_15_12_30_02_PST"]
+            assert row["URI"] == "https://example.com/test"
+            assert row["Description"] == ""
+            assert row["Notes"] == "manual"
+            assert row["Confidence"] == "92.0"  # Confidence is percentage string (0.92 * 100 = 92.0)
 
     def test_default_model_path_is_used(self, tmp_path):
         """add_samples should use DEFAULT_MODEL_PATH when model_path is not provided."""
@@ -418,7 +425,9 @@ class TestAddSamples:
         }
 
         with patch("add_samples.split_wav_into_segments", return_value=fake_segments), \
-             patch("add_samples.get_model_inference", return_value=mock_model) as mock_get_model:
+             patch("add_samples.get_model_inference", return_value=mock_model) as mock_get_model, \
+             patch("add_samples.lookup_detection_in_csv", return_value=None), \
+             patch("add_samples.generate_uri", return_value="https://example.com/test"):
 
             add_samples(
                 wav_file="fake.wav",
@@ -453,7 +462,9 @@ class TestAddSamples:
         }
 
         with patch("add_samples.split_wav_into_segments", return_value=fake_segments), \
-             patch("add_samples.get_model_inference", return_value=mock_model) as mock_get_model:
+             patch("add_samples.get_model_inference", return_value=mock_model) as mock_get_model, \
+             patch("add_samples.lookup_detection_in_csv", return_value=None), \
+             patch("add_samples.generate_uri", return_value="https://example.com/test"):
 
             add_samples(
                 wav_file="fake.wav",
@@ -476,7 +487,9 @@ class TestAddSamples:
         }
 
         with patch("add_samples.split_wav_into_segments", return_value=fake_segments), \
-             patch("add_samples.get_model_inference", return_value=mock_model) as mock_get_model:
+             patch("add_samples.get_model_inference", return_value=mock_model) as mock_get_model, \
+             patch("add_samples.lookup_detection_in_csv", return_value=None), \
+             patch("add_samples.generate_uri", return_value="https://example.com/test"):
 
             add_samples(
                 wav_file="fake.wav",
@@ -499,7 +512,9 @@ class TestAddSamples:
         }
 
         with patch("add_samples.split_wav_into_segments", return_value=fake_segments) as mock_split, \
-             patch("add_samples.get_model_inference", return_value=mock_model):
+             patch("add_samples.get_model_inference", return_value=mock_model), \
+             patch("add_samples.lookup_detection_in_csv", return_value=None), \
+             patch("add_samples.generate_uri", return_value="https://example.com/test"):
 
             add_samples(
                 wav_file="rpi-orcasound-lab_2025_01_15_12_30_00_PST.wav",
@@ -522,7 +537,9 @@ class TestAddSamples:
         }
 
         with patch("add_samples.split_wav_into_segments", return_value=fake_segments) as mock_split, \
-             patch("add_samples.get_model_inference", return_value=mock_model):
+             patch("add_samples.get_model_inference", return_value=mock_model), \
+             patch("add_samples.lookup_detection_in_csv", return_value=None), \
+             patch("add_samples.generate_uri", return_value="https://example.com/test"):
 
             add_samples(
                 wav_file="rpi-orcasound-lab_2025_01_15_12_30_00_PST.wav",
