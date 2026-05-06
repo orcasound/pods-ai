@@ -744,31 +744,65 @@ def write_training_samples(
         manual_confidences: Dictionary mapping URIs to confidence strings (0.0-100.0)
         model_inference: Optional model inference instance for tp_human_only timestamp correction
         segment_duration: Duration of each audio segment in seconds
+
+    Raises:
+        ValueError: If duplicate output URIs are detected after processing.
     """
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     # Sort samples by Category, then NodeName, then Timestamp.
     sorted_samples = sorted(samples, key=lambda s: (s['Category'], s['NodeName'], s['Timestamp']))
 
+    # Track output URIs to detect duplicates.
+    output_uris_seen = {}  # URI -> (Category, NodeName, Timestamp)
+    processed_rows = []
+
     # Create a temporary directory for audio downloads.
     with TemporaryDirectory() as tmp_dir:
+        total_samples = len(sorted_samples)
+        print(f"\nProcessing {total_samples} samples...")
+
+        for idx, sample in enumerate(sorted_samples, start=1):
+            print(f"\n[{idx}/{total_samples}] Processing: {sample['Category']} - {sample['NodeName']} - {sample['Timestamp']}")
+
+            output_row = process_sample(
+                sample, manual_timestamps, manual_confidences, model_inference, tmp_dir, segment_duration
+            )
+
+            # Check for duplicate output URI.
+            output_uri = output_row['URI']
+            if output_uri in output_uris_seen:
+                prev_info = output_uris_seen[output_uri]
+                error_msg = (
+                    f"\nError: Duplicate output URI detected after processing:\n"
+                    f"  URI: {output_uri}\n"
+                    f"  First occurrence: {prev_info[0]}, {prev_info[1]}, {prev_info[2]}\n"
+                    f"  Second occurrence: {output_row['Category']}, {output_row['NodeName']}, {output_row['Timestamp']}\n"
+                    f"\nEach training sample must have a unique output URI.\n"
+                    f"This typically means the same timestamp appears twice, or timestamp correction\n"
+                    f"produced the same result for different input samples."
+                )
+                raise ValueError(error_msg)
+
+            output_uris_seen[output_uri] = (
+                output_row['Category'],
+                output_row['NodeName'],
+                output_row['Timestamp']
+            )
+            processed_rows.append(output_row)
+
+        # Write all rows to CSV after validation passes.
+        print(f"\n✓ Validated: All {len(processed_rows)} output samples have unique URIs")
+        print(f"\nWriting to {output_path}...")
+
         with open(output_path, 'w', newline='', encoding='utf-8') as f:
             # Use same columns as detections.csv.
             fieldnames = ['Category', 'NodeName', 'Timestamp', 'URI', 'Description', 'Notes', 'Confidence']
             writer = csv.DictWriter(f, fieldnames=fieldnames, lineterminator='\n')
-
             writer.writeheader()
 
-            total_samples = len(sorted_samples)
-            print(f"\nProcessing {total_samples} samples...")
-
-            for idx, sample in enumerate(sorted_samples, start=1):
-                print(f"\n[{idx}/{total_samples}] Processing: {sample['Category']} - {sample['NodeName']} - {sample['Timestamp']}")
-
-                output_row = process_sample(
-                    sample, manual_timestamps, manual_confidences, model_inference, tmp_dir, segment_duration
-                )
-                writer.writerow(output_row)
+            for row in processed_rows:
+                writer.writerow(row)
 
 
 def write_testing_samples(samples: list[dict], output_path: Path):
@@ -1005,44 +1039,6 @@ def merge_manual_samples(
     return merged
 
 
-def validate_unique_uris(samples: list[dict]) -> None:
-    """
-    Validate that all samples have unique URIs.
-
-    Args:
-        samples: List of sample dictionaries with 'URI', 'Category', 'NodeName', and 'Timestamp' fields.
-
-    Raises:
-        ValueError: If duplicate URIs are found, with details about the duplicates.
-    """
-    uri_to_samples = defaultdict(list)
-
-    for sample in samples:
-        uri = sample.get('URI', '')
-        if uri:
-            uri_to_samples[uri].append(sample)
-
-    # Find URIs that appear more than once.
-    duplicates = {uri: samples_list for uri, samples_list in uri_to_samples.items() if len(samples_list) > 1}
-
-    if duplicates:
-        error_lines = ["\nError: Found duplicate URIs in training samples:"]
-        for uri, samples_list in duplicates.items():
-            error_lines.append(f"\n  URI: {uri}")
-            error_lines.append(f"  Appears {len(samples_list)} times:")
-            for sample in samples_list:
-                category = sample.get('Category', '')
-                node_name = sample.get('NodeName', '')
-                timestamp = sample.get('Timestamp', '')
-                error_lines.append(f"    - {category}, {node_name}, {timestamp}")
-
-        error_message = "\n".join(error_lines)
-        error_message += "\n\nEach training sample must have a unique URI. Please review and remove duplicates."
-        raise ValueError(error_message)
-
-    print(f"  Validated: All {len(samples)} samples have unique URIs")
-
-
 def main():
     """Main function to extract training samples."""
     # Parse command line arguments.
@@ -1183,16 +1179,14 @@ def main():
     # The all_training_samples variable already contains both auto-selected and manual samples.
     all_training_samples = samples  # samples already includes manual samples from earlier merge
 
-    # Validate that all samples have unique URIs before writing.
-    print("\nValidating unique URIs...")
+    # Validation of unique URIs happens inside write_training_samples after processing.
+    print(f"\nWriting {len(all_training_samples)} training samples to {output_path}...")
     try:
-        validate_unique_uris(all_training_samples)
+        write_training_samples(all_training_samples, output_path, manual_timestamps, manual_confidences, model_inference, args.duration)
     except ValueError as e:
         print(str(e), file=sys.stderr)
         sys.exit(1)
 
-    print(f"\nWriting {len(all_training_samples)} training samples to {output_path}...")
-    write_training_samples(all_training_samples, output_path, manual_timestamps, manual_confidences, model_inference, args.duration)
     print(f"Writing testing samples to {testing_output_path}...")
     write_testing_samples(testing_samples, testing_output_path)
     print("Done!")

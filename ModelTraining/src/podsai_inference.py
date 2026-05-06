@@ -15,7 +15,6 @@ from collections import Counter
 from typing import Optional
 from transformers import Wav2Vec2FeatureExtractor, Wav2Vec2ForSequenceClassification
 from pathlib import Path
-import json
 from datetime import datetime
 
 # Import base class to establish inheritance

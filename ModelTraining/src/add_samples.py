@@ -28,8 +28,7 @@ Output is printed in manual_samples.csv format (can be copy-pasted directly):
 Category,NodeName,Timestamp,URI,Description,Notes,Confidence
 
 URI/Description/Notes Lookup:
-- If --uri is specified, all segments use that URI (with empty Description and Notes="manual")
-- Otherwise, the script looks up the detection in detections.csv (default: output/csv/detections.csv)
+- The script looks up the detection in detections.csv (default: output/csv/detections.csv)
   by matching NodeName and Timestamp, and uses the URI, Description, and Notes from that row
 - If not found in detections.csv, generates a URI from the timestamp (with empty Description and Notes="manual")
 
@@ -517,8 +516,7 @@ def main() -> int:
         "--detections-csv",
         default=DEFAULT_DETECTIONS_CSV,
         help=(
-            f"Path to detections.csv for detection lookup (default: {DEFAULT_DETECTIONS_CSV!r}). "
-            "Used only if --uri is not specified."
+            f"Path to detections.csv for detection lookup (default: {DEFAULT_DETECTIONS_CSV!r})."
         ),
     )
 

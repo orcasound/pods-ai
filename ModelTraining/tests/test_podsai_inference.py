@@ -333,7 +333,7 @@ class TestPodsAIInferenceIndexing:
             assert result["local_predictions"] == []
             assert result["local_confidences"] == []
             assert result["local_probs"] == []
-            # global_prediction should be one of the negative classes (water=0, vessel=4, jingle=5, human=6)
+            # global_prediction should be one of the negative classes (water=0, vessel=4, jingle=5, human=6).
             assert result["global_prediction"] in [0, 4, 5, 6]
             assert result["global_confidence"] == 0.0
             # Error returns must always include hop_duration and segment_duration (matching orcahello behavior).
@@ -367,7 +367,7 @@ class TestPodsAIInferenceIndexing:
         
         # Return known probabilities. Handles batched input.
         # water=0.1, resident=0.4, transient=0.1, humpback=0.1, vessel=0.1, jingle=0.1, human=0.1
-        # Total negative (water+vessel+jingle+human) = 0.4, so call-likelihood should be 0.6
+        # Total negative (water+vessel+jingle+human) = 0.4, so call-likelihood should be 0.6.
         def mock_forward(**kwargs):
             # Logits that represent the desired distribution.
             batch_size = kwargs["input_values"].shape[0]
@@ -415,7 +415,7 @@ class TestPodsAIInferenceErrorHandling:
         assert result["local_predictions"] == []
         assert result["local_confidences"] == []
         assert result["local_probs"] == []
-        # Should be one of the negative classes (water=0, vessel=4, jingle=5, human=6)
+        # Should be one of the negative classes (water=0, vessel=4, jingle=5, human=6).
         assert result["global_prediction"] in [0, 4, 5, 6]
         assert result["global_confidence"] == 0.0
         # Error returns must always include hop_duration and segment_duration (matching orcahello behavior).
