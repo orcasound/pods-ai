@@ -369,6 +369,11 @@ class TestPodsAIInferenceIndexing:
         mock_model.config = mock_config
         mock_model.to = Mock(return_value=mock_model)
         mock_model.eval = Mock(return_value=mock_model)
+
+        # Set metadata attributes that _print_model_metadata expects.
+        mock_config._name_or_path = "test-model"
+        mock_config.architectures = ["Wav2Vec2ForSequenceClassification"]
+        mock_config._commit_hash = None  # Optional, can be None
         
         # Return known probabilities. Handles batched input.
         # water=0.1, resident=0.4, transient=0.1, humpback=0.1, vessel=0.1, jingle=0.1, human=0.1
@@ -442,6 +447,11 @@ class TestPodsAIInferenceErrorHandling:
         mock_config.id2label = {0: "resident", 1: "transient", 2: "humpback"}
         mock_config.label2id = {"resident": 0, "transient": 1, "humpback": 2}
         mock_model.config = mock_config
+
+        # Set metadata attributes that _print_model_metadata expects.
+        mock_config._name_or_path = "test-model"
+        mock_config.architectures = ["Wav2Vec2ForSequenceClassification"]
+        mock_config._commit_hash = None  # Optional, can be None
         
         mock_model_class.from_pretrained = Mock(return_value=mock_model)
         
