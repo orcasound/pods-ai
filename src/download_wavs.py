@@ -53,7 +53,7 @@ def parse_csv(csv_path: Path) -> List[CSVRow]:
         List[CSVRow]: List of parsed CSV rows.
     """
     rows = []
-    with open(csv_path, 'r', newline='') as csvfile:
+    with open(csv_path, 'r', newline='', encoding='utf-8') as csvfile:
         csv_reader = csv.reader(csvfile)
         # Skip header
         next(csv_reader)
