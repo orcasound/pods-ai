@@ -2,14 +2,10 @@ Category,NodeName,Timestamp,URI,Description,Notes,Confidence
 human,rpi_sunset_bay,2024_07_12_16_58_08_PST,https://live.orcasound.net/bouts/new/sunset-bay?time=2024-07-12T23%3A58%3A08.000Z,Human voices,fp_machine_only,66.7
 human,rpi_sunset_bay,2024_07_12_16_58_13_PST,https://live.orcasound.net/bouts/new/sunset-bay?time=2024-07-12T23%3A58%3A13.000Z,Human voices,fp_machine_only,75.3
 human,rpi_sunset_bay,2024_07_12_16_58_19_PST,https://live.orcasound.net/bouts/new/sunset-bay?time=2024-07-12T23%3A58%3A19.000Z,Human voices,fp_machine_only,75.5
-human,rpi_sunset_bay,2024_07_19_12_51_06_PST,https://live.orcasound.net/bouts/new/sunset-bay?time=2024-07-19T19%3A51%3A06.000Z,Human voices causing false positives despite significant noise from something contacting ladder and/or hydrophone.,fp_machine_only,54.4
-human,rpi_sunset_bay,2024_07_21_09_13_21_PST,https://live.orcasound.net/bouts/new/sunset-bay?time=2024-07-21T16%3A13%3A21.000Z,Human voices via am radio noise,fp_machine_only,62.6
 human,rpi_sunset_bay,2024_07_22_10_31_32_PST,https://live.orcasound.net/bouts/new/sunset-bay?time=2024-07-22T17%3A31%3A32.000Z,Radio,fp_machine_only,54.1
 human,rpi_sunset_bay,2024_07_22_10_43_02_PST,https://live.orcasound.net/bouts/new/sunset-bay?time=2024-07-22T17%3A43%3A02.000Z,Humans,fp_machine_only,59.2
 human,rpi_sunset_bay,2024_07_22_11_51_06_PST,https://live.orcasound.net/bouts/new/sunset-bay?time=2024-07-22T18%3A51%3A06.000Z,Radio,fp_machine_only,60.7
 human,rpi_sunset_bay,2024_07_22_15_06_05_PST,https://live.orcasound.net/bouts/new/sunset-bay?time=2024-07-22T22%3A06%3A05.000Z,Radio,fp_machine_only,60.4
-human,rpi_sunset_bay,2024_07_23_11_32_48_PST,https://live.orcasound.net/bouts/new/sunset-bay?time=2024-07-23T18%3A32%3A48.000Z,Human voices causing false positives in contact and AM radio noise.,fp_machine_only,54.7
-human,rpi_sunset_bay,2024_07_23_16_54_45_PST,https://live.orcasound.net/bouts/new/sunset-bay?time=2024-07-23T23%3A54%3A45.000Z,"AM radio interference (music, talking) and LF contact noise.",fp_machine_only,57.0
 human,rpi_sunset_bay,2024_07_23_18_06_37_PST,https://live.orcasound.net/bouts/new/sunset-bay?time=2024-07-24T01%3A06%3A37.000Z,AM radio interference,fp_machine_only,61.6
 human,rpi_sunset_bay,2024_07_29_08_51_35_PST,https://live.orcasound.net/bouts/new/sunset-bay?time=2024-07-29T15%3A51%3A35.000Z,AM radio,fp_machine_only,58.2
 human,rpi_sunset_bay,2024_08_02_09_58_11_PST,https://live.orcasound.net/bouts/new/sunset-bay?time=2024-08-02T16%3A58%3A11.000Z,Humans and radio,fp_machine_only,62.0
@@ -39,10 +35,6 @@ human,rpi_sunset_bay,2025_02_17_15_40_27_PST,https://live.orcasound.net/bouts/ne
 human,rpi_sunset_bay,2025_02_17_15_52_41_PST,https://live.orcasound.net/bouts/new/sunset-bay?time=2025-02-17T23%3A52%3A41.000Z,Radio station,fp_machine_only,59.9
 human,rpi_sunset_bay,2025_04_20_13_22_47_PST,https://live.orcasound.net/bouts/new/sunset-bay?time=2025-04-20T20%3A22%3A47.000Z,"Radio triggered detection, some water nose also present",fp_machine_only,59.1
 human,rpi_sunset_bay,2025_04_20_13_39_23_PST,https://live.orcasound.net/bouts/new/sunset-bay?time=2025-04-20T20%3A39%3A23.000Z,Radio,fp_machine_only,76.2
-human,rpi_sunset_bay,2025_04_20_15_20_41_PST,https://live.orcasound.net/bouts/new/sunset-bay?time=2025-04-20T22%3A20%3A41.000Z,Radio,fp_machine_only,63.7
-human,rpi_sunset_bay,2025_04_20_15_37_11_PST,https://live.orcasound.net/bouts/new/sunset-bay?time=2025-04-20T22%3A37%3A11.000Z,Radio,fp_machine_only,66.4
-human,rpi_sunset_bay,2025_04_21_17_13_05_PST,https://live.orcasound.net/bouts/new/sunset-bay?time=2025-04-22T00%3A13%3A05.000Z,Radio,fp_machine_only,59.1
-human,rpi_sunset_bay,2025_05_04_20_12_55_PST,https://live.orcasound.net/bouts/new/sunset-bay?time=2025-05-05T03%3A12%3A55.000Z,radio,fp_machine_only,60.7
 human,rpi_sunset_bay,2025_05_04_20_13_42_PST,https://live.orcasound.net/bouts/new/sunset-bay?time=2025-05-05T03%3A13%3A42.000Z,radio,fp_machine_only,75.4
 human,rpi_sunset_bay,2025_05_04_20_13_46_PST,https://live.orcasound.net/bouts/new/sunset-bay?time=2025-05-05T03%3A13%3A46.000Z,radio,fp_machine_only,69.9
 human,rpi_sunset_bay,2025_05_04_20_13_50_PST,https://live.orcasound.net/bouts/new/sunset-bay?time=2025-05-05T03%3A13%3A50.000Z,radio,fp_machine_only,74.4
@@ -55,6 +47,7 @@ humpback,rpi_andrews_bay,2025_12_17_22_12_00_PST,https://live.orcasound.net/bout
 humpback,rpi_andrews_bay,2025_12_17_22_18_52_PST,https://live.orcasound.net/bouts/new/andrews-bay?time=2025-12-18T06%3A18%3A52.000Z,Clear humpback calls continuing,tp_human_only,57.8
 humpback,rpi_andrews_bay,2025_12_17_22_40_45_PST,https://live.orcasound.net/bouts/new/andrews-bay?time=2025-12-18T06%3A40%3A45.000Z,Humpback song continues in quiet seas,tp_human_only,70.0
 humpback,rpi_orcasound_lab,2023_10_28_07_33_43_PST,https://live.orcasound.net/bouts/new/orcasound-lab?time=2023-10-28T14%3A33%3A43.000Z,Humpback vocalizing,tp_human_only,51.7
+humpback,rpi_orcasound_lab,2025_11_09_03_35_12_PST,https://live.orcasound.net/bouts/new/orcasound-lab?time=2025-11-09T11%3A35%3A12.000Z,"Good humpback calls, quiet ambient",tp_machine_only,57.4
 humpback,rpi_orcasound_lab,2025_11_27_06_03_55_PST,https://live.orcasound.net/bouts/new/orcasound-lab?time=2025-11-27T14%3A03%3A55.000Z,Humpback song,tp_machine_only,100.0
 humpback,rpi_orcasound_lab,2025_12_04_01_40_31_PST,https://live.orcasound.net/bouts/new/orcasound-lab?time=2025-12-04T09%3A40%3A31.000Z,Humpback songlike calls,tp_machine_only,65.9
 humpback,rpi_orcasound_lab,2025_12_04_01_41_03_PST,https://live.orcasound.net/bouts/new/orcasound-lab?time=2025-12-04T09%3A41%3A03.000Z,Humpback calls,tp_machine_only,100.0
@@ -74,6 +67,7 @@ humpback,rpi_orcasound_lab,2025_12_17_22_34_03_PST,https://live.orcasound.net/bo
 humpback,rpi_orcasound_lab,2025_12_17_22_35_12_PST,https://live.orcasound.net/bouts/new/orcasound-lab?time=2025-12-18T06%3A35%3A12.000Z,Humpback whale song,tp_machine_only,59.5
 humpback,rpi_orcasound_lab,2025_12_17_22_41_22_PST,https://live.orcasound.net/bouts/new/orcasound-lab?time=2025-12-18T06%3A41%3A22.000Z,Humpback whale song,tp_machine_only,60.3
 humpback,rpi_orcasound_lab,2025_12_19_04_55_55_PST,https://live.orcasound.net/bouts/new/orcasound-lab?time=2025-12-19T12%3A55%3A55.000Z,Humpback whale song,tp_machine_only,77.1
+humpback,rpi_orcasound_lab,2025_12_19_04_57_38_PST,https://live.orcasound.net/bouts/new/orcasound-lab?time=2025-12-19T12%3A57%3A38.000Z,"Humpback whale song, moderate ship noise",tp_machine_only,55.3
 humpback,rpi_sunset_bay,2025_11_10_13_55_23_PST,https://live.orcasound.net/bouts/new/sunset-bay?time=2025-11-10T21%3A55%3A23.000Z,humpback sound,tp_human_only,3.2
 humpback,rpi_sunset_bay,2025_11_10_13_58_25_PST,https://live.orcasound.net/bouts/new/sunset-bay?time=2025-11-10T21%3A58%3A25.000Z,humpback whale sound,tp_human_only,100.0
 jingle,rpi_andrews_bay,2026_02_18_04_36_17_PST,https://live.orcasound.net/bouts/new/andrews-bay?time=2026-02-18T12%3A36%3A17.000Z,"Jingle, water slosh",fp_machine_only,71.5

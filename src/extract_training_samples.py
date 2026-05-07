@@ -58,6 +58,8 @@ PACIFIC_TZ = timezone('US/Pacific')
 UTC_TZ = timezone('UTC')
 PREFERRED_NOTES = {'tp_machine_only', 'fp_machine_only'}
 QUALITY_FILTER_TERMS = {'faint', 'distant', 'quiet', 'noise'}
+# Maximum number of detections.csv rows to use per category for training (can supplement with unlimited manual_samples.csv).
+MAX_TRAINING_DETECTIONS_PER_CATEGORY = 30
 MIN_TRAINING_SAMPLES_PER_CATEGORY = 30
 # Minimum number of testing samples selected per category.
 MIN_TESTING_SAMPLES_PER_CATEGORY = 10
@@ -210,16 +212,16 @@ def validate_category_sample_counts(
         shortage = max(0, required_total - total_available)
 
         # Calculate training target from detections.csv:
-        # Reserve required_testing for testing, and account for manual samples going to training.
-        # adjusted_training = (total - required_testing) - manual_count
-        # This ensures we leave enough detections.csv samples for testing.
-        if total_available >= required_testing:
-            # We have enough total. Reserve required_testing from detections.csv for testing.
-            # The rest from detections.csv + all manual samples go to training.
-            adjusted_training = max(0, detections_available - required_testing)
+        # Use at most MAX_TRAINING_DETECTIONS_PER_CATEGORY from detections.csv,
+        # but reserve MIN_TESTING_SAMPLES_PER_CATEGORY for testing.
+        # Formula: min(MAX_TRAINING, detections_available - MIN_TESTING)
+        if detections_available >= MIN_TESTING_SAMPLES_PER_CATEGORY:
+            # Reserve testing samples, take up to MAX for training.
+            available_for_training = detections_available - MIN_TESTING_SAMPLES_PER_CATEGORY
+            adjusted_training = min(MAX_TRAINING_DETECTIONS_PER_CATEGORY, available_for_training)
         else:
-            # Not enough total - take what we can from detections.csv.
-            adjusted_training = max(0, detections_available - required_testing)
+            # Not enough for testing minimum - take what we can.
+            adjusted_training = max(0, detections_available - MIN_TESTING_SAMPLES_PER_CATEGORY)
 
         category_stats[category] = {
             'available': total_available,
