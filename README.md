@@ -1,10 +1,10 @@
-# ModelTraining
+# Programmatic Orca Detection System using Artificial Intelligence (PODS-AI)
 
-This directory contains scripts for preparing training data for orca detection models.
+This repository contains scripts for preparing training data for orca detection models.
 
 ## Overview
 
-The `ModelTraining/src` directory has the following scripts for different steps meant to be run in the order listed:
+The `src` directory has the following scripts for different steps meant to be run in the order listed:
 
 1. **make_csv.py**: Create a CSV file (`output/csv/detections.csv`) with a set of detections.
    The CSV file has the following columns: Category, NodeName, Timestamp, URI, Description, and Notes.
@@ -107,7 +107,7 @@ python extract_training_samples.py
 For testing without FastAI dependencies or model download:
 
 ```bash
-cd ModelTraining/src
+cd src
 export MODEL_TYPE=dummy
 python extract_training_samples.py
 ```
