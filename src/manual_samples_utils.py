@@ -22,13 +22,20 @@ def load_existing_uris(manual_samples_path: Path) -> set[str]:
     if not manual_samples_path.exists():
         return set()
 
-    with open(manual_samples_path, "r", encoding="utf-8") as handle:
-        reader = csv.DictReader(handle)
-        return {
-            (row.get("URI") or "").strip()
-            for row in reader
-            if (row.get("URI") or "").strip()
-        }
+    try:
+        with open(manual_samples_path, "r", encoding="utf-8") as handle:
+            reader = csv.DictReader(handle)
+            return {
+                (row.get("URI") or "").strip()
+                for row in reader
+                if (row.get("URI") or "").strip()
+            }
+    except (OSError, UnicodeError, csv.Error) as exc:
+        print(
+            f"Warning: Failed to read existing manual sample URIs from "
+            f"{manual_samples_path}: {exc}"
+        )
+        return set()
 
 
 def append_manual_samples(
