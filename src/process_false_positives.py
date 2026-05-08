@@ -9,8 +9,8 @@ For each rejected OrcaHello detection in the selected timeframe, this script:
 2. Runs PODS-AI inference on the full WAV.
 3. Infers the corrected class from the OrcaHello comments.
 4. Runs add_samples.py on the WAV file.
-5. Appends resident-predicted segments to manual_samples.csv with the corrected class,
-   avoiding duplicates.
+5. Appends whale-predicted segments that do not already match the corrected class
+   to manual_samples.csv with the corrected class, avoiding duplicates.
 """
 
 import argparse
@@ -45,6 +45,7 @@ RESIDENT_TERMS = ("resident", "pod")
 TRANSIENT_TERMS = ("bigg", "transient")
 HUMAN_TERMS = ("human", "radio")
 VESSEL_TERMS = ("vessel", "ship", "boat", "train")
+WHALE_CLASSES = {"resident", "transient", "humpback"}
 
 
 def get_corrected_class(comments: str) -> Optional[str]:
@@ -123,7 +124,7 @@ def process_false_positives(
                 "not_false_positive": 0,
                 "processing_failed": 0,
                 "unknown_class": 0,
-                "resident_segments": 0,
+                "whale_mismatch_segments": 0,
                 "appended": 0,
                 "duplicates": 0,
             }
@@ -144,7 +145,7 @@ def process_false_positives(
         "not_false_positive": 0,
         "processing_failed": 0,
         "unknown_class": 0,
-        "resident_segments": 0,
+        "whale_mismatch_segments": 0,
         "appended": 0,
         "duplicates": 0,
     }
@@ -204,18 +205,19 @@ def process_false_positives(
                     summary["processing_failed"] += 1
                     continue
 
-            resident_rows = []
+            mismatched_whale_rows = []
             for row in segment_rows:
-                if row.get("Category") != "resident":
+                row_category = row.get("Category")
+                if row_category not in WHALE_CLASSES or row_category == corrected_class:
                     continue
                 updated_row = dict(row)
                 updated_row["Category"] = corrected_class
-                resident_rows.append(updated_row)
+                mismatched_whale_rows.append(updated_row)
 
-            summary["resident_segments"] += len(resident_rows)
+            summary["whale_mismatch_segments"] += len(mismatched_whale_rows)
             appended, duplicates = append_manual_samples(
                 manual_samples_path,
-                resident_rows,
+                mismatched_whale_rows,
                 existing_uris,
             )
             summary["appended"] += appended
@@ -229,8 +231,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(
         description=(
             "Process rejected OrcaHello resident detections, re-run PODS-AI on the "
-            "60-second WAV, and append resident sub-segments to manual_samples.csv "
-            "with a corrected class."
+            "60-second WAV, and append mismatched whale-class sub-segments to "
+            "manual_samples.csv with a corrected class."
         )
     )
     parser.add_argument(
