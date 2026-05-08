@@ -310,3 +310,36 @@ class TestGetOrcahelloDetections:
         assert len(detections) == 1
         assert detections[0].status == "rejected"
         assert detections[0].comments == "Boat noise."
+
+    def test_sets_timestamp_to_none_when_parsing_fails(self):
+        """An unparseable OrcaHello timestamp should produce a detection with timestamp=None."""
+        feed = OrcasiteFeed(
+            id="feed_1",
+            name="Test Feed",
+            node_name="rpi_test",
+            slug="test",
+            bucket="audio-orcasound-net",
+            bucket_region="us-west-2",
+            visible=True,
+            location=(47.0, -122.0),
+        )
+        mock_container = MagicMock()
+        mock_container.query_items.return_value = [
+            {
+                "id": "det_1",
+                "SRKWFound": "yes",
+                "reviewed": True,
+                "timestamp": "not-a-timestamp",
+            }
+        ]
+        mock_database = MagicMock()
+        mock_database.get_container_client.return_value = mock_container
+        mock_client = MagicMock()
+        mock_client.get_database_client.return_value = mock_database
+
+        with patch("make_csv.CosmosClient", return_value=mock_client):
+            detections = get_orcahello_detections(feed)
+
+        assert len(detections) == 1
+        assert detections[0].status == "confirmed"
+        assert detections[0].timestamp is None

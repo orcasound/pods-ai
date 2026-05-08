@@ -34,7 +34,7 @@ class OrcasiteDetection:
 class OrcaHelloDetection:
     id: str
     feed: OrcasiteFeed
-    timestamp: datetime
+    timestamp: Optional[datetime]
     status: str                  # e.g., "confirmed", "rejected", etc.
     confidence: Optional[float] = None  # Confidence score from model inference
     comments: str = ""
