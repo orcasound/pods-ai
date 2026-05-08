@@ -600,7 +600,7 @@ def add_samples(
         }
         results.append(row)
 
-        if label != corrected_class:
+        if corrected_class is None or label != corrected_class:
             # Print in CSV format (ready to copy-paste).
             print(
                 f"{label},{node_name},{timestamp_str},{segment_uri},"
