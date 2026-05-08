@@ -175,6 +175,7 @@ class TestProcessFalseNegatives:
         assert summary["duplicates"] == 0
         mock_add_samples.assert_called_once()
         assert mock_add_samples.call_args.kwargs["corrected_class"] == "resident"
+        assert mock_add_samples.call_args.kwargs["fallback_description"] == detection.comments
 
         with open(manual_samples_path, "r", encoding="utf-8") as handle:
             rows = list(csv.DictReader(handle))

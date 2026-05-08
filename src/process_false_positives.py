@@ -157,6 +157,7 @@ def process_false_positives(
                         detections_csv=detections_csv,
                         model=model,
                         corrected_class=corrected_class,
+                        fallback_description=detection.comments,
                     )
                 except Exception as exc:
                     print(f"Skipping {feed.node_name} {timestamp_str}: processing failed ({exc}).")

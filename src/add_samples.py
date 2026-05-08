@@ -36,7 +36,8 @@ corrected class are omitted from the printed output.
 URI/Description/Notes Lookup:
 - The script looks up the detection in detections.csv (default: output/csv/detections.csv)
   by matching NodeName and Timestamp, and uses the URI, Description, and Notes from that row
-- If not found in detections.csv, generates a URI from the timestamp (with empty Description and Notes="manual")
+- If not found in detections.csv, generates a URI from the timestamp and uses
+  fallback_description when provided (otherwise empty Description), with Notes="manual"
 
 If --node-name and --timestamp are omitted the script parses them from the
 input filename.  The filename must follow the convention used by the
@@ -465,6 +466,7 @@ def add_samples(
     detections_csv: str = DEFAULT_DETECTIONS_CSV,
     model: Optional[object] = None,
     corrected_class: Optional[str] = None,
+    fallback_description: Optional[str] = None,
 ) -> list[dict]:
     """
     Split a 60-second audio sample into 3-second segments, save them, and run inference on each.
@@ -499,6 +501,8 @@ def add_samples(
             loading from model_path.
         corrected_class: Optional corrected class. When provided, rows whose
             predicted class already matches this class are not printed.
+        fallback_description: Optional description to use when the detection
+            is not found in detections.csv.
 
     Returns:
         List of dictionaries with keys matching manual_samples.csv format:
@@ -557,7 +561,7 @@ def add_samples(
         shared_description = detection_info.description
         shared_notes = detection_info.notes
     else:
-        shared_description = ""
+        shared_description = (fallback_description or "").strip()
         shared_notes = "manual"
 
     # Split the WAV and save segments.
