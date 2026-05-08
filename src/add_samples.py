@@ -601,7 +601,7 @@ def add_samples(
         results.append(row)
 
         if corrected_class is None or label != corrected_class:
-            # Print in CSV format (ready to copy-paste).
+            # Print in CSV format (ready to copy-paste) unless already corrected.
             print(
                 f"{label},{node_name},{timestamp_str},{segment_uri},"
                 f"{shared_description},{shared_notes},{row['Confidence']}"
