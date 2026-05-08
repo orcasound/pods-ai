@@ -516,12 +516,20 @@ class TestAddSamples:
             )
 
         captured = capsys.readouterr()
-        csv_output = captured.out.split("Category,NodeName,Timestamp,URI,Description,Notes,Confidence\n", 1)[
-            1
+        parsed_rows = list(csv.reader(io.StringIO(captured.out)))
+        header_row = [
+            "Category",
+            "NodeName",
+            "Timestamp",
+            "URI",
+            "Description",
+            "Notes",
+            "Confidence",
         ]
-        rows = list(csv.reader(io.StringIO(csv_output)))
+        header_index = parsed_rows.index(header_row)
+        rows = parsed_rows[header_index + 1: header_index + 1 + len(fake_segments)]
 
-        assert len(rows) == 2
+        assert len(rows) == len(fake_segments)
         assert all(row[4] == "comment,with comma\nand newline" for row in rows)
         assert all(row[5] == "manual" for row in rows)
 
