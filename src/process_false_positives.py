@@ -2,15 +2,14 @@
 # Copyright (c) PODS-AI contributors
 # SPDX-License-Identifier: MIT
 """
-Process rejected OrcaHello resident detections that remain PODS-AI resident predictions.
+Process rejected OrcaHello resident detections into corrected manual samples.
 
 For each rejected OrcaHello detection in the selected timeframe, this script:
 1. Downloads the corresponding 60-second WAV file.
 2. Runs PODS-AI inference on the full WAV.
-3. Skips the detection unless the global prediction is "resident".
-4. Infers the corrected class from the OrcaHello comments.
-5. Runs add_samples.py on the WAV file.
-6. Appends resident-predicted segments to manual_samples.csv with the corrected class,
+3. Infers the corrected class from the OrcaHello comments.
+4. Runs add_samples.py on the WAV file.
+5. Appends resident-predicted segments to manual_samples.csv with the corrected class,
    avoiding duplicates.
 """
 
@@ -122,6 +121,7 @@ def process_false_positives(
                 "rejected": 0,
                 "download_failed": 0,
                 "not_false_positive": 0,
+                "processing_failed": 0,
                 "unknown_class": 0,
                 "resident_segments": 0,
                 "appended": 0,
@@ -142,6 +142,7 @@ def process_false_positives(
         "rejected": 0,
         "download_failed": 0,
         "not_false_positive": 0,
+        "processing_failed": 0,
         "unknown_class": 0,
         "resident_segments": 0,
         "appended": 0,
@@ -174,27 +175,34 @@ def process_false_positives(
                     summary["download_failed"] += 1
                     continue
 
-                inference = model.predict(wav_path)
-                if inference.get("global_prediction_label") != "resident":
-                    print(f"Skipping {feed.node_name} {timestamp_str}: PODS-AI global prediction is not resident.")
-                    summary["not_false_positive"] += 1
-                    continue
+                try:
+                    inference = model.predict(wav_path)
+                    if inference.get("global_prediction_label") != "resident":
+                        print(
+                            f"Continuing with {feed.node_name} {timestamp_str}: "
+                            "PODS-AI global prediction is not resident."
+                        )
+                        summary["not_false_positive"] += 1
 
-                corrected_class = get_corrected_class(detection.comments)
-                if corrected_class is None:
-                    print(f"Skipping {feed.node_name} {timestamp_str}: could not determine corrected class from comments.")
-                    summary["unknown_class"] += 1
-                    continue
+                    corrected_class = get_corrected_class(detection.comments)
+                    if corrected_class is None:
+                        print(f"Skipping {feed.node_name} {timestamp_str}: could not determine corrected class from comments.")
+                        summary["unknown_class"] += 1
+                        continue
 
-                segment_rows = add_samples(
-                    wav_file=wav_path,
-                    node_name=feed.node_name,
-                    base_timestamp=timestamp_str,
-                    output_dir=str(output_dir),
-                    model_path=model_path,
-                    detections_csv=detections_csv,
-                    model=model,
-                )
+                    segment_rows = add_samples(
+                        wav_file=wav_path,
+                        node_name=feed.node_name,
+                        base_timestamp=timestamp_str,
+                        output_dir=str(output_dir),
+                        model_path=model_path,
+                        detections_csv=detections_csv,
+                        model=model,
+                    )
+                except Exception as exc:
+                    print(f"Skipping {feed.node_name} {timestamp_str}: processing failed ({exc}).")
+                    summary["processing_failed"] += 1
+                    continue
 
             resident_rows = []
             for row in segment_rows:

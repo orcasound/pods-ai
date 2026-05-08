@@ -172,8 +172,8 @@ class TestProcessFalsePositives:
         assert rows[-1]["Category"] == "vessel"
         assert rows[-1]["URI"] == "https://example.com/new"
 
-    def test_skips_when_global_prediction_is_not_resident(self, tmp_path):
-        """A non-resident 60-second prediction should not append anything."""
+    def test_continues_when_global_prediction_is_not_resident(self, tmp_path):
+        """A non-resident 60-second prediction should still process resident sub-segments."""
         feed = _make_feed()
         detection = OrcaHelloDetection(
             id="det_1",
@@ -190,7 +190,29 @@ class TestProcessFalsePositives:
              patch("process_false_positives.get_orcasite_feeds", return_value=[feed]), \
              patch("process_false_positives.get_orcahello_detections", return_value=[detection]), \
              patch("process_false_positives.download_60s_audio", return_value=str(wav_path)), \
-             patch("process_false_positives.add_samples") as mock_add_samples:
+             patch(
+                 "process_false_positives.add_samples",
+                 return_value=[
+                     {
+                         "Category": "resident",
+                         "NodeName": "rpi_test",
+                         "Timestamp": "2025_01_01_04_00_02_PST",
+                         "URI": "https://example.com/new",
+                         "Description": "desc",
+                         "Notes": "manual",
+                         "Confidence": "91.0",
+                     },
+                     {
+                         "Category": "water",
+                         "NodeName": "rpi_test",
+                         "Timestamp": "2025_01_01_04_00_04_PST",
+                         "URI": "https://example.com/water",
+                         "Description": "desc",
+                         "Notes": "manual",
+                         "Confidence": "20.0",
+                     },
+                 ],
+             ) as mock_add_samples:
             mock_get_model.return_value.predict.return_value = {
                 "global_prediction_label": "water",
                 "global_confidence": 0.91,
@@ -201,5 +223,78 @@ class TestProcessFalsePositives:
             )
 
         assert summary["not_false_positive"] == 1
-        assert summary["appended"] == 0
-        mock_add_samples.assert_not_called()
+        assert summary["resident_segments"] == 1
+        assert summary["appended"] == 1
+        mock_add_samples.assert_called_once()
+
+        with open(manual_samples_path, "r", encoding="utf-8") as handle:
+            rows = list(csv.DictReader(handle))
+
+        assert len(rows) == 1
+        assert rows[0]["Category"] == "vessel"
+        assert rows[0]["URI"] == "https://example.com/new"
+
+    def test_continues_after_processing_failure(self, tmp_path):
+        """A processing error for one detection should be counted and not stop later detections."""
+        feed = _make_feed()
+        failed_detection = OrcaHelloDetection(
+            id="det_1",
+            feed=feed,
+            timestamp=datetime(2025, 1, 1, 12, 0, 0, tzinfo=timezone.utc),
+            status="rejected",
+            comments="Boat noise from a nearby vessel.",
+        )
+        next_detection = OrcaHelloDetection(
+            id="det_2",
+            feed=feed,
+            timestamp=datetime(2025, 1, 1, 12, 5, 0, tzinfo=timezone.utc),
+            status="rejected",
+            comments="Boat noise from a nearby vessel.",
+        )
+        wav_path = tmp_path / "input.wav"
+        wav_path.write_bytes(b"wav")
+        manual_samples_path = tmp_path / "manual_samples.csv"
+
+        with patch("process_false_positives.get_model_inference") as mock_get_model, \
+             patch("process_false_positives.get_orcasite_feeds", return_value=[feed]), \
+             patch(
+                 "process_false_positives.get_orcahello_detections",
+                 return_value=[next_detection, failed_detection],
+             ), \
+             patch("process_false_positives.download_60s_audio", return_value=str(wav_path)), \
+             patch(
+                 "process_false_positives.add_samples",
+                 side_effect=[
+                     RuntimeError("decode error"),
+                     [
+                         {
+                             "Category": "resident",
+                             "NodeName": "rpi_test",
+                             "Timestamp": "2025_01_01_04_05_02_PST",
+                             "URI": "https://example.com/new",
+                             "Description": "desc",
+                             "Notes": "manual",
+                             "Confidence": "91.0",
+                         },
+                     ],
+                 ],
+             ):
+            mock_get_model.return_value.predict.return_value = {
+                "global_prediction_label": "resident",
+                "global_confidence": 0.91,
+            }
+            summary = process_false_positives(
+                manual_samples_path=manual_samples_path,
+                output_dir=tmp_path / "segments",
+            )
+
+        assert summary["rejected"] == 2
+        assert summary["processing_failed"] == 1
+        assert summary["appended"] == 1
+
+        with open(manual_samples_path, "r", encoding="utf-8") as handle:
+            rows = list(csv.DictReader(handle))
+
+        assert len(rows) == 1
+        assert rows[0]["Category"] == "vessel"
+        assert rows[0]["URI"] == "https://example.com/new"
