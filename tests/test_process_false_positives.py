@@ -164,6 +164,7 @@ class TestProcessFalsePositives:
         assert summary["duplicates"] == 1
         assert mock_model.predict.call_count == 1
         assert mock_add_samples.call_args.kwargs["model"] is mock_model
+        assert mock_add_samples.call_args.kwargs["corrected_class"] == "vessel"
 
         with open(manual_samples_path, "r", encoding="utf-8") as handle:
             rows = list(csv.DictReader(handle))

@@ -30,6 +30,9 @@ HuggingFace Hub; override with --model-path.
 Output is printed in manual_samples.csv format (can be copy-pasted directly):
 Category,NodeName,Timestamp,URI,Description,Notes,Confidence
 
+If a corrected class is provided, rows whose predicted class already matches the
+corrected class are omitted from the printed output.
+
 URI/Description/Notes Lookup:
 - The script looks up the detection in detections.csv (default: output/csv/detections.csv)
   by matching NodeName and Timestamp, and uses the URI, Description, and Notes from that row
@@ -461,6 +464,7 @@ def add_samples(
     model_path: str = DEFAULT_MODEL_PATH,
     detections_csv: str = DEFAULT_DETECTIONS_CSV,
     model: Optional[object] = None,
+    corrected_class: Optional[str] = None,
 ) -> list[dict]:
     """
     Split a 60-second audio sample into 3-second segments, save them, and run inference on each.
@@ -493,6 +497,8 @@ def add_samples(
         detections_csv: Path to detections.csv for detection lookup (default: "output/csv/detections.csv").
         model: Optional preloaded PODS-AI inference model to reuse instead of
             loading from model_path.
+        corrected_class: Optional corrected class. When provided, rows whose
+            predicted class already matches this class are not printed.
 
     Returns:
         List of dictionaries with keys matching manual_samples.csv format:
@@ -594,8 +600,12 @@ def add_samples(
         }
         results.append(row)
 
-        # Print in CSV format (ready to copy-paste).
-        print(f"{label},{node_name},{timestamp_str},{segment_uri},{shared_description},{shared_notes},{row['Confidence']}")
+        if label != corrected_class:
+            # Print in CSV format (ready to copy-paste).
+            print(
+                f"{label},{node_name},{timestamp_str},{segment_uri},"
+                f"{shared_description},{shared_notes},{row['Confidence']}"
+            )
 
     return results
 
@@ -669,6 +679,15 @@ def main() -> int:
             f"Path to detections.csv for detection lookup (default: {DEFAULT_DETECTIONS_CSV!r})."
         ),
     )
+    parser.add_argument(
+        "--class",
+        dest="corrected_class",
+        default=None,
+        help=(
+            "Optional corrected class. When provided, printed rows whose "
+            "predicted class already matches it are omitted."
+        ),
+    )
 
     args = parser.parse_args()
 
@@ -695,6 +714,7 @@ def main() -> int:
             output_dir=args.output_dir,
             model_path=args.model_path,
             detections_csv=args.detections_csv,
+            corrected_class=args.corrected_class,
         )
     except ValueError as e:
         print(f"Error: {e}", file=sys.stderr)
