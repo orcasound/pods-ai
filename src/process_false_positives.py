@@ -42,6 +42,10 @@ CSV_FIELDNAMES = [
     "Confidence",
 ]
 DEFAULT_MANUAL_SAMPLES_CSV = "output/csv/manual_samples.csv"
+RESIDENT_TERMS = ("resident", "pod")
+TRANSIENT_TERMS = ("bigg", "transient")
+HUMAN_TERMS = ("human", "radio")
+VESSEL_TERMS = ("vessel", "ship", "boat", "train")
 
 
 def get_corrected_class(comments: str) -> Optional[str]:
@@ -50,15 +54,15 @@ def get_corrected_class(comments: str) -> Optional[str]:
     if not text or any(term in text for term in SKIP_TERMS):
         return None
 
-    if "resident" in text or "pod" in text:
+    if any(term in text for term in RESIDENT_TERMS):
         return "resident"
-    if "bigg" in text or "transient" in text:
+    if any(term in text for term in TRANSIENT_TERMS):
         return "transient"
     if "humpback" in text:
         return "humpback"
-    if "human" in text or "radio" in text:
+    if any(term in text for term in HUMAN_TERMS):
         return "human"
-    if "vessel" in text or "ship" in text or "boat" in text or "train" in text:
+    if any(term in text for term in VESSEL_TERMS):
         return "vessel"
     if "jingl" in text:
         return "jingle"
