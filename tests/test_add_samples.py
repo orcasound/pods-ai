@@ -477,6 +477,32 @@ class TestAddSamples:
         assert mock_get_model.call_count == 1
         assert mock_model.predict.call_count == 2
 
+    def test_uses_preloaded_model_without_loading_again(self, tmp_path):
+        """A supplied model should be reused instead of calling get_model_inference."""
+        fake_segments = self._fake_split(tmp_path)
+        mock_model = MagicMock()
+        mock_model.predict.return_value = {
+            "global_prediction_label": "water",
+            "global_confidence": 0.80
+        }
+
+        with patch("add_samples.split_wav_into_segments", return_value=fake_segments), \
+             patch("add_samples.get_model_inference") as mock_get_model, \
+             patch("add_samples.lookup_detection_in_csv", return_value=None), \
+             patch("add_samples.generate_uri", return_value="https://example.com/test"):
+
+            add_samples(
+                wav_file="fake.wav",
+                node_name="rpi_orcasound_lab",
+                base_timestamp="2025_01_15_12_30_00_PST",
+                output_dir=str(tmp_path),
+                model_path="/path/to/model",
+                model=mock_model,
+            )
+
+        mock_get_model.assert_not_called()
+        assert mock_model.predict.call_count == 2
+
     def test_always_uses_podsai_model_type(self, tmp_path):
         """add_samples should always call get_model_inference with model_type='podsai'."""
         fake_segments = self._fake_split(tmp_path)

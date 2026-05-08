@@ -29,8 +29,8 @@ from make_csv import (
     get_orcahello_detections,
     parse_pst_timestamp,
 )
+from model_inference import get_model_inference
 from orcasite_feeds import get_orcasite_feeds
-from run_inference import run_inference
 
 CSV_FIELDNAMES = [
     "Category",
@@ -147,6 +147,8 @@ def process_false_positives(
         "appended": 0,
         "duplicates": 0,
     }
+    print(f"Loading podsai model from {model_path}...")
+    model = get_model_inference(model_type="podsai", model_path=model_path)
 
     for feed in feeds:
         print(f"Processing feed {feed.node_name}")
@@ -169,11 +171,7 @@ def process_false_positives(
                     summary["download_failed"] += 1
                     continue
 
-                inference = run_inference(
-                    wav_path,
-                    model_type="podsai",
-                    model_path=model_path,
-                )
+                inference = model.predict(wav_path)
                 if inference.get("global_prediction_label") != "resident":
                     print(f"Skipping {feed.node_name} {timestamp_str}: PODS-AI global prediction is not resident.")
                     summary["not_false_positive"] += 1
@@ -192,6 +190,7 @@ def process_false_positives(
                     output_dir=str(output_dir),
                     model_path=model_path,
                     detections_csv=detections_csv,
+                    model=model,
                 )
 
             resident_rows = []

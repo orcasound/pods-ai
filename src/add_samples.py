@@ -460,6 +460,7 @@ def add_samples(
     output_dir: str = DEFAULT_OUTPUT_DIR,
     model_path: str = DEFAULT_MODEL_PATH,
     detections_csv: str = DEFAULT_DETECTIONS_CSV,
+    model: Optional[object] = None,
 ) -> list[dict]:
     """
     Split a 60-second audio sample into 3-second segments, save them, and run inference on each.
@@ -490,6 +491,8 @@ def add_samples(
         model_path: HuggingFace Hub model ID or path to a local model directory
             (default: "davethaler/whale-call-detector").
         detections_csv: Path to detections.csv for detection lookup (default: "output/csv/detections.csv").
+        model: Optional preloaded PODS-AI inference model to reuse instead of
+            loading from model_path.
 
     Returns:
         List of dictionaries with keys matching manual_samples.csv format:
@@ -562,8 +565,9 @@ def add_samples(
         return []
 
     # Load the model once and run inference on each segment.
-    print(f"\nLoading podsai model from {model_path}...")
-    model = get_model_inference(model_type="podsai", model_path=model_path)
+    if model is None:
+        print(f"\nLoading podsai model from {model_path}...")
+        model = get_model_inference(model_type="podsai", model_path=model_path)
 
     results: list[dict] = []
     print("\nSegments in manual_samples.csv format:")
