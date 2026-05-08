@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: MIT
 """Unit tests for add_samples.py."""
 
+import csv
+import io
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -491,6 +493,37 @@ class TestAddSamples:
         captured = capsys.readouterr()
         assert "vessel,rpi_orcasound_lab,2025_01_15_12_30_00_PST" not in captured.out
         assert "resident,rpi_orcasound_lab,2025_01_15_12_30_02_PST" in captured.out
+
+    def test_printed_rows_are_valid_csv_with_special_description(self, tmp_path, capsys):
+        """Printed CSV rows should remain valid when description contains commas/newlines."""
+        fake_segments = self._fake_split(tmp_path)
+        mock_model = MagicMock()
+        mock_model.predict.return_value = {
+            "global_prediction_label": "resident",
+            "global_confidence": 0.85,
+        }
+
+        with patch("add_samples.split_wav_into_segments", return_value=fake_segments), \
+             patch("add_samples.lookup_detection_in_csv", return_value=None), \
+             patch("add_samples.generate_uri", return_value="https://example.com/test"):
+            add_samples(
+                wav_file="fake.wav",
+                node_name="rpi_orcasound_lab",
+                base_timestamp="2025_01_15_12_30_00_PST",
+                output_dir=str(tmp_path),
+                model=mock_model,
+                fallback_description="comment,with comma\nand newline",
+            )
+
+        captured = capsys.readouterr()
+        csv_output = captured.out.split("Category,NodeName,Timestamp,URI,Description,Notes,Confidence\n", 1)[
+            1
+        ]
+        rows = list(csv.reader(io.StringIO(csv_output)))
+
+        assert len(rows) == 2
+        assert all(row[4] == "comment,with comma\nand newline" for row in rows)
+        assert all(row[5] == "manual" for row in rows)
 
     def test_returns_empty_when_no_segments(self, tmp_path):
         """add_samples should return [] if split_wav_into_segments yields nothing."""

@@ -581,7 +581,10 @@ def add_samples(
 
     results: list[dict] = []
     print("\nSegments in manual_samples.csv format:")
-    print("Category,NodeName,Timestamp,URI,Description,Notes,Confidence")
+    csv_writer = csv.writer(sys.stdout, lineterminator="\n")
+    csv_writer.writerow(
+        ["Category", "NodeName", "Timestamp", "URI", "Description", "Notes", "Confidence"]
+    )
 
     for seg_path, timestamp_str in segments:
         label, confidence = get_segment_prediction(model, seg_path)
@@ -606,9 +609,16 @@ def add_samples(
 
         if corrected_class is None or label != corrected_class:
             # Print in CSV format (ready to copy-paste) unless already corrected.
-            print(
-                f"{label},{node_name},{timestamp_str},{segment_uri},"
-                f"{shared_description},{shared_notes},{row['Confidence']}"
+            csv_writer.writerow(
+                [
+                    label,
+                    node_name,
+                    timestamp_str,
+                    segment_uri,
+                    shared_description,
+                    shared_notes,
+                    row["Confidence"],
+                ]
             )
 
     return results
