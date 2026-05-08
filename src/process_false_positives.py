@@ -191,6 +191,8 @@ def process_false_positives(
                         summary["unknown_class"] += 1
                         continue
 
+                    print(f"Running add_samples.py for {feed.node_name} {timestamp_str} with corrected class '{corrected_class}'...")
+
                     segment_rows = add_samples(
                         wav_file=wav_path,
                         node_name=feed.node_name,
