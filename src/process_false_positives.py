@@ -155,8 +155,11 @@ def process_false_positives(
         for detection in get_orcahello_detections(feed):
             if detection.status.lower() != "rejected" or detection.timestamp is None:
                 continue
+            # OrcaHello detections are returned in descending timestamp order.
+            # Once we are older than the requested start time, the remaining
+            # detections for this feed will also be too old.
             if start_time is not None and detection.timestamp < start_time:
-                continue
+                break
             if end_time is not None and detection.timestamp > end_time:
                 continue
 
