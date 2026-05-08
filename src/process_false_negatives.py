@@ -121,6 +121,7 @@ def process_false_negatives(
                         model=podsai_model,
                         corrected_class="resident",
                         fallback_description=detection.comments,
+                        fallback_notes="tp_machine",
                     )
                 except Exception as exc:
                     print(f"Skipping {feed.node_name} {timestamp_str}: processing failed ({exc}).")

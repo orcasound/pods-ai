@@ -158,6 +158,7 @@ def process_false_positives(
                         model=model,
                         corrected_class=corrected_class,
                         fallback_description=detection.comments,
+                        fallback_notes="fp_machine",
                     )
                 except Exception as exc:
                     print(f"Skipping {feed.node_name} {timestamp_str}: processing failed ({exc}).")

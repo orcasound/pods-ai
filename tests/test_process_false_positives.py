@@ -166,6 +166,7 @@ class TestProcessFalsePositives:
         assert mock_add_samples.call_args.kwargs["model"] is mock_model
         assert mock_add_samples.call_args.kwargs["corrected_class"] == "vessel"
         assert mock_add_samples.call_args.kwargs["fallback_description"] == detection.comments
+        assert mock_add_samples.call_args.kwargs["fallback_notes"] == "fp_machine"
 
         with open(manual_samples_path, "r", encoding="utf-8") as handle:
             rows = list(csv.DictReader(handle))

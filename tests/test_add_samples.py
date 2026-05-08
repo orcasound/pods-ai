@@ -468,6 +468,30 @@ class TestAddSamples:
         assert all(row["Description"] == "Moderator note about this sample." for row in results)
         assert all(row["Notes"] == "manual" for row in results)
 
+    def test_uses_fallback_notes_when_detection_missing(self, tmp_path):
+        """When detections.csv has no match, fallback_notes should populate Notes."""
+        fake_segments = self._fake_split(tmp_path)
+        mock_model = MagicMock()
+        mock_model.predict.return_value = {
+            "global_prediction_label": "water",
+            "global_confidence": 0.75,
+        }
+
+        with patch("add_samples.split_wav_into_segments", return_value=fake_segments), \
+             patch("add_samples.lookup_detection_in_csv", return_value=None), \
+             patch("add_samples.generate_uri", return_value="https://example.com/test"):
+            results = add_samples(
+                wav_file="fake.wav",
+                node_name="rpi_orcasound_lab",
+                base_timestamp="2025_01_15_12_30_00_PST",
+                output_dir=str(tmp_path),
+                model=mock_model,
+                fallback_notes="fp_machine",
+            )
+
+        assert len(results) == len(fake_segments)
+        assert all(row["Notes"] == "fp_machine" for row in results)
+
     def test_corrected_class_suppresses_matching_printed_rows(self, tmp_path, capsys):
         """Printed output should omit rows whose predicted class matches corrected_class."""
         fake_segments = self._fake_split(tmp_path)
