@@ -94,9 +94,6 @@ class TestProcessFalsePositives:
     def test_appends_only_resident_segments_with_corrected_class(self, tmp_path):
         """Resident sub-segments should be rewritten to the corrected class and deduplicated."""
         feed = _make_feed()
-        mock_model = patch("process_false_positives.get_model_inference").start().return_value
-        self.addCleanup(patch.stopall)
-        mock_model.predict.return_value = {"global_prediction_label": "resident", "global_confidence": 0.91}
         detection = OrcaHelloDetection(
             id="det_1",
             feed=feed,
@@ -113,7 +110,8 @@ class TestProcessFalsePositives:
             encoding="utf-8",
         )
 
-        with patch("process_false_positives.get_orcasite_feeds", return_value=[feed]), \
+        with patch("process_false_positives.get_model_inference") as mock_get_model, \
+             patch("process_false_positives.get_orcasite_feeds", return_value=[feed]), \
              patch("process_false_positives.get_orcahello_detections", return_value=[detection]), \
              patch("process_false_positives.download_60s_audio", return_value=str(wav_path)), \
              patch(
@@ -145,9 +143,14 @@ class TestProcessFalsePositives:
                          "Description": "desc",
                          "Notes": "manual",
                          "Confidence": "20.0",
-                     },
-                 ],
-             ) as mock_add_samples:
+                      },
+                  ],
+              ) as mock_add_samples:
+            mock_model = mock_get_model.return_value
+            mock_model.predict.return_value = {
+                "global_prediction_label": "resident",
+                "global_confidence": 0.91,
+            }
             summary = process_false_positives(
                 manual_samples_path=manual_samples_path,
                 output_dir=tmp_path / "segments",
@@ -172,9 +175,6 @@ class TestProcessFalsePositives:
     def test_skips_when_global_prediction_is_not_resident(self, tmp_path):
         """A non-resident 60-second prediction should not append anything."""
         feed = _make_feed()
-        mock_model = patch("process_false_positives.get_model_inference").start().return_value
-        self.addCleanup(patch.stopall)
-        mock_model.predict.return_value = {"global_prediction_label": "water", "global_confidence": 0.91}
         detection = OrcaHelloDetection(
             id="det_1",
             feed=feed,
@@ -186,10 +186,15 @@ class TestProcessFalsePositives:
         wav_path.write_bytes(b"wav")
         manual_samples_path = tmp_path / "manual_samples.csv"
 
-        with patch("process_false_positives.get_orcasite_feeds", return_value=[feed]), \
+        with patch("process_false_positives.get_model_inference") as mock_get_model, \
+             patch("process_false_positives.get_orcasite_feeds", return_value=[feed]), \
              patch("process_false_positives.get_orcahello_detections", return_value=[detection]), \
              patch("process_false_positives.download_60s_audio", return_value=str(wav_path)), \
              patch("process_false_positives.add_samples") as mock_add_samples:
+            mock_get_model.return_value.predict.return_value = {
+                "global_prediction_label": "water",
+                "global_confidence": 0.91,
+            }
             summary = process_false_positives(
                 manual_samples_path=manual_samples_path,
                 output_dir=tmp_path / "segments",
