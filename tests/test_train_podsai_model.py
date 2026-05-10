@@ -143,6 +143,9 @@ def test_whale_f1_computed_from_whale_classes_only(monkeypatch):
     metrics = module.compute_metrics(eval_pred)
 
     assert metrics["f1"] == 1.0
+    assert metrics["f1_resident"] == 1.0
+    assert metrics["f1_transient"] == 1.0
+    assert metrics["f1_humpback"] == 1.0
     assert metrics["f1_water"] == 0.0
     assert metrics["f1_vessel"] == 0.0
 
