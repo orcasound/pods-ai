@@ -11,7 +11,7 @@ import numpy as np
 import pytest
 
 
-def _import_train_module_with_stubs(monkeypatch):
+def _import_stubbed_train_module(monkeypatch):
     """Import train_podsai_model with lightweight dependency stubs.
 
     Returns:
@@ -67,7 +67,7 @@ class _FakeMetric:
     external metric dependencies.
 
     The ``compute`` method accepts predictions/references and optional averaging
-    configuration, and returns a dictionary keyed by ``metric_name``.
+    configuration, and returns ``{metric_name: value}``.
 
     Args:
         metric_name: Metric key name ("accuracy", "precision", "recall", or "f1").
@@ -123,9 +123,17 @@ def _patch_metrics(module):
 
 def test_whale_f1_computed_from_whale_classes_only(monkeypatch):
     """f1 should be macro F1 over resident/transient/humpback in multiclass mode."""
-    module = _import_train_module_with_stubs(monkeypatch)
+    module = _import_stubbed_train_module(monkeypatch)
     _patch_metrics(module)
-    module.ID2LABEL = {0: "water", 1: "resident", 2: "transient", 3: "humpback", 4: "vessel", 5: "jingle", 6: "human"}
+    module.ID2LABEL = {
+        0: "water",
+        1: "resident",
+        2: "transient",
+        3: "humpback",
+        4: "vessel",
+        5: "jingle",
+        6: "human",
+    }
 
     labels = np.array([1, 2, 3, 0, 4, 5, 6])
     predictions = np.array([1, 2, 3, 4, 5, 6, 0])
@@ -141,7 +149,7 @@ def test_whale_f1_computed_from_whale_classes_only(monkeypatch):
 
 def test_f1_falls_back_to_weighted_without_whale_classes(monkeypatch):
     """f1 should remain the default weighted F1 when whale class labels are not present."""
-    module = _import_train_module_with_stubs(monkeypatch)
+    module = _import_stubbed_train_module(monkeypatch)
     _patch_metrics(module)
     module.ID2LABEL = {0: "other", 1: "whale"}
 
