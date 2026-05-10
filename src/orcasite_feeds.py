@@ -90,6 +90,10 @@ def get_orcasite_feeds_with_retry(
 ) -> List[OrcasiteFeed]:
     """Fetch Orcasite feeds, retrying when the API read times out.
 
+    Args:
+        max_attempts: Maximum number of fetch attempts before giving up.
+        retry_delay_seconds: Seconds to wait between retry attempts.
+
     Returns:
         List[OrcasiteFeed]: Feed metadata records, or an empty list when retries are exhausted.
     """
