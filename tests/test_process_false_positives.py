@@ -6,6 +6,8 @@ import csv
 from datetime import datetime, timezone
 from unittest.mock import patch
 
+import requests
+
 from make_csv import OrcaHelloDetection
 from orcasite_feeds import OrcasiteFeed
 from process_false_positives import (
@@ -90,6 +92,24 @@ class TestAppendManualSamples:
 
 class TestProcessFalsePositives:
     """Integration-style tests for process_false_positives."""
+
+    def test_retries_when_getting_orcasite_feeds_times_out(self, tmp_path):
+        """A ReadTimeout fetching feeds should be retried."""
+        feed = _make_feed()
+        with patch(
+            "process_false_positives.get_orcasite_feeds",
+            side_effect=[requests.exceptions.ReadTimeout("timed out"), [feed]],
+        ) as mock_get_feeds, patch("process_false_positives.time.sleep") as mock_sleep, patch(
+            "process_false_positives.get_model_inference"
+        ), patch("process_false_positives.get_orcahello_detections", return_value=[]):
+            summary = process_false_positives(
+                manual_samples_path=tmp_path / "manual_samples.csv",
+                output_dir=tmp_path / "segments",
+            )
+
+        assert summary["rejected"] == 0
+        assert mock_get_feeds.call_count == 2
+        mock_sleep.assert_called_once_with(2)
 
     def test_appends_only_mismatched_whale_segments_with_corrected_class(self, tmp_path):
         """Whale-class segments should be rewritten unless they already match the corrected class."""

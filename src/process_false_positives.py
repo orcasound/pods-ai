@@ -14,10 +14,13 @@ For each rejected OrcaHello detection in the selected timeframe, this script:
 """
 
 import argparse
+import time
 from datetime import datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Optional
+
+import requests
 
 from add_samples import DEFAULT_DETECTIONS_CSV, DEFAULT_MODEL_PATH, DEFAULT_OUTPUT_DIR, add_samples
 from extract_training_samples import download_60s_audio
@@ -37,6 +40,8 @@ TRANSIENT_TERMS = ("bigg", "transient")
 HUMAN_TERMS = ("human", "radio")
 VESSEL_TERMS = ("vessel", "ship", "boat", "train")
 WHALE_CLASSES = {"resident", "transient", "humpback"}
+FEED_FETCH_MAX_ATTEMPTS = 3
+FEED_FETCH_RETRY_DELAY_SECONDS = 2
 
 
 def get_corrected_class(comments: str) -> Optional[str]:
@@ -63,6 +68,26 @@ def get_corrected_class(comments: str) -> Optional[str]:
     return None
 
 
+def get_orcasite_feeds_with_retry(
+    max_attempts: int = FEED_FETCH_MAX_ATTEMPTS,
+    retry_delay_seconds: int = FEED_FETCH_RETRY_DELAY_SECONDS,
+):
+    """Fetch Orcasite feeds, retrying when the API read times out."""
+    for attempt in range(1, max_attempts + 1):
+        try:
+            return get_orcasite_feeds()
+        except requests.exceptions.ReadTimeout as exc:
+            if attempt == max_attempts:
+                print(f"Error fetching Orcasite feeds after {max_attempts} attempts: {exc}")
+                break
+            print(
+                "Read timeout fetching Orcasite feeds "
+                f"(attempt {attempt}/{max_attempts}); retrying in {retry_delay_seconds} seconds."
+            )
+            time.sleep(retry_delay_seconds)
+    return []
+
+
 def process_false_positives(
     manual_samples_path: Path,
     output_dir: Path,
@@ -73,24 +98,6 @@ def process_false_positives(
     end_time: Optional[datetime] = None,
 ) -> dict[str, int]:
     """Process rejected OrcaHello resident detections in the selected timeframe."""
-    feeds = get_orcasite_feeds()
-    if feed_filter:
-        feeds = [feed for feed in feeds if feed.node_name == feed_filter]
-        if not feeds:
-            print(f"No feed found with node_name '{feed_filter}'")
-            return {
-                "rejected": 0,
-                "download_failed": 0,
-                "not_false_positive": 0,
-                "processing_failed": 0,
-                "unknown_class": 0,
-                "whale_mismatch_segments": 0,
-                "appended": 0,
-                "duplicates": 0,
-            }
-
-    existing_uris = load_existing_uris(manual_samples_path)
-
     summary = {
         "rejected": 0,
         "download_failed": 0,
@@ -101,6 +108,17 @@ def process_false_positives(
         "appended": 0,
         "duplicates": 0,
     }
+    feeds = get_orcasite_feeds_with_retry()
+    if not feeds:
+        print("No Orcasite feeds available; nothing to process.")
+        return summary
+    if feed_filter:
+        feeds = [feed for feed in feeds if feed.node_name == feed_filter]
+        if not feeds:
+            print(f"No feed found with node_name '{feed_filter}'")
+            return summary
+
+    existing_uris = load_existing_uris(manual_samples_path)
     print(f"Loading podsai model from {model_path}...")
     model = get_model_inference(model_type="podsai", model_path=model_path)
 
