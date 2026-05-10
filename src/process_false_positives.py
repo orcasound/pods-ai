@@ -72,7 +72,11 @@ def get_orcasite_feeds_with_retry(
     max_attempts: int = FEED_FETCH_MAX_ATTEMPTS,
     retry_delay_seconds: int = FEED_FETCH_RETRY_DELAY_SECONDS,
 ):
-    """Fetch Orcasite feeds, retrying when the API read times out."""
+    """Fetch Orcasite feeds, retrying when the API read times out.
+
+    Returns:
+        list: Feed metadata records, or an empty list when retries are exhausted.
+    """
     for attempt in range(1, max_attempts + 1):
         try:
             return get_orcasite_feeds()
