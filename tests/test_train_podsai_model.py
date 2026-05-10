@@ -56,7 +56,12 @@ def _import_train_module_with_stubs(monkeypatch):
 
 
 class _FakeMetric:
-    """Simple metric implementation for precision/recall/f1/accuracy tests."""
+    """Lightweight metric helper matching sklearn-style averaging/label behavior.
+
+    This supports per-class output and weighted/macro averaging for accuracy,
+    precision, recall, and F1 so compute_metrics can be validated without
+    external metric dependencies.
+    """
 
     def __init__(self, metric_name: str):
         self.metric_name = metric_name
@@ -99,7 +104,7 @@ def _patch_metrics(module):
     module.F1_METRIC = _FakeMetric("f1")
 
 
-def test_compute_metrics_uses_whale_only_f1_for_multiclass(monkeypatch):
+def test_whale_f1_computed_from_whale_classes_only(monkeypatch):
     """f1 should be macro F1 over resident/transient/humpback in multiclass mode."""
     module = _import_train_module_with_stubs(monkeypatch)
     _patch_metrics(module)
@@ -117,7 +122,7 @@ def test_compute_metrics_uses_whale_only_f1_for_multiclass(monkeypatch):
     assert metrics["f1_vessel"] == 0.0
 
 
-def test_compute_metrics_falls_back_to_default_f1_when_whale_classes_absent(monkeypatch):
+def test_f1_falls_back_to_weighted_without_whale_classes(monkeypatch):
     """f1 should remain the default weighted F1 when whale class labels are not present."""
     module = _import_train_module_with_stubs(monkeypatch)
     _patch_metrics(module)
