@@ -12,7 +12,11 @@ import pytest
 
 
 def _import_train_module_with_stubs(monkeypatch):
-    """Import train_podsai_model with lightweight dependency stubs."""
+    """Import train_podsai_model with lightweight dependency stubs.
+
+    Returns:
+        The imported train_podsai_model module with stubbed dependencies.
+    """
     fake_datasets = types.ModuleType("datasets")
     fake_datasets_config = types.ModuleType("datasets.config")
     fake_datasets_config.AUDIO_BACKENDS_USE_TORCH = False
@@ -61,6 +65,11 @@ class _FakeMetric:
     This supports per-class output and weighted/macro averaging for accuracy,
     precision, recall, and F1 so compute_metrics can be validated without
     external metric dependencies.
+    Args:
+        metric_name: Metric key name ("accuracy", "precision", "recall", or "f1").
+
+    The ``compute`` method accepts predictions/references and optional averaging
+    configuration, and returns a dictionary keyed by ``metric_name``.
     """
 
     def __init__(self, metric_name: str):
@@ -97,7 +106,11 @@ class _FakeMetric:
 
 
 def _patch_metrics(module):
-    """Patch module-level metric objects with deterministic fake metrics."""
+    """Patch module-level metric objects with deterministic fake metrics.
+
+    Args:
+        module: train_podsai_model module instance to patch.
+    """
     module.ACCURACY_METRIC = _FakeMetric("accuracy")
     module.PRECISION_METRIC = _FakeMetric("precision")
     module.RECALL_METRIC = _FakeMetric("recall")
