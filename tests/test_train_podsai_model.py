@@ -65,11 +65,12 @@ class _FakeMetric:
     This supports per-class output and weighted/macro averaging for accuracy,
     precision, recall, and F1 so compute_metrics can be validated without
     external metric dependencies.
-    Args:
-        metric_name: Metric key name ("accuracy", "precision", "recall", or "f1").
 
     The ``compute`` method accepts predictions/references and optional averaging
     configuration, and returns a dictionary keyed by ``metric_name``.
+
+    Args:
+        metric_name: Metric key name ("accuracy", "precision", "recall", or "f1").
     """
 
     def __init__(self, metric_name: str):
@@ -78,7 +79,10 @@ class _FakeMetric:
     def compute(self, predictions, references, average=None, labels=None):
         preds = np.asarray(predictions)
         refs = np.asarray(references)
-        all_labels = list(labels) if labels is not None else sorted(set(refs.tolist()) | set(preds.tolist()))
+        if labels is None:
+            all_labels = sorted(set(refs.tolist()) | set(preds.tolist()))
+        else:
+            all_labels = list(labels)
 
         if self.metric_name == "accuracy":
             return {"accuracy": float(np.mean(preds == refs))}

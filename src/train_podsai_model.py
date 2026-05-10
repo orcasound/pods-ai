@@ -281,7 +281,8 @@ def compute_metrics(eval_pred: EvalPrediction) -> dict:
 
     print("="*60 + "\n")
 
-    # Optimize for whale classes when available.
+    # Optimize model selection for whale classes by using macro F1 over
+    # humpback, resident, and transient when those labels are present.
     whale_class_ids = [class_id for class_id, class_name in ID2LABEL.items() if class_name in WHALE_CLASS_NAMES]
     if whale_class_ids:
         f1_whale = F1_METRIC.compute(
