@@ -147,6 +147,31 @@ def test_whale_f1_computed_from_whale_classes_only(monkeypatch):
     assert metrics["f1_vessel"] == 0.0
 
 
+def test_whale_f1_reflects_mixed_whale_predictions(monkeypatch):
+    """f1 should drop when whale-class predictions include errors."""
+    module = _import_stubbed_train_module(monkeypatch)
+    _patch_metrics(module)
+    module.ID2LABEL = {
+        0: "water",
+        1: "resident",
+        2: "transient",
+        3: "humpback",
+        4: "vessel",
+        5: "jingle",
+        6: "human",
+    }
+
+    labels = np.array([1, 2, 3, 0, 4, 5, 6])
+    predictions = np.array([1, 1, 2, 4, 5, 6, 0])
+    logits = np.eye(7)[predictions]
+
+    eval_pred = module.EvalPrediction(predictions=logits, label_ids=labels)
+    metrics = module.compute_metrics(eval_pred)
+
+    # Whale-class F1s are resident=2/3, transient=0, humpback=0 => macro = 2/9.
+    assert metrics["f1"] == pytest.approx(2.0 / 9.0)
+
+
 def test_f1_falls_back_to_weighted_without_whale_classes(monkeypatch):
     """f1 should remain the default weighted F1 when whale class labels are not present."""
     module = _import_stubbed_train_module(monkeypatch)
@@ -163,3 +188,20 @@ def test_f1_falls_back_to_weighted_without_whale_classes(monkeypatch):
     # Weighted F1 for this case:
     # class 0 f1=0.8 (support=2), class 1 f1=2/3 (support=2) => 0.7333...
     assert metrics["f1"] == pytest.approx(11.0 / 15.0)
+
+
+def test_f1_fallback_supports_multiclass_non_whale_labels(monkeypatch):
+    """Fallback weighted F1 should work with non-whale multiclass mappings."""
+    module = _import_stubbed_train_module(monkeypatch)
+    _patch_metrics(module)
+    module.ID2LABEL = {0: "water", 1: "vessel", 2: "human", 3: "jingle"}
+
+    labels = np.array([0, 0, 1, 1, 2, 2, 3, 3])
+    predictions = np.array([0, 1, 1, 2, 2, 3, 3, 0])
+    logits = np.eye(4)[predictions]
+
+    eval_pred = module.EvalPrediction(predictions=logits, label_ids=labels)
+    metrics = module.compute_metrics(eval_pred)
+
+    # Symmetric confusion gives per-class F1=0.5 for all classes => weighted F1=0.5.
+    assert metrics["f1"] == pytest.approx(0.5)
