@@ -1,0 +1,135 @@
+#!/usr/bin/env python3
+# Copyright (c) PODS-AI contributors
+# SPDX-License-Identifier: MIT
+"""Unit tests for train_podsai_model.py metric selection."""
+
+import importlib
+import sys
+import types
+
+import numpy as np
+import pytest
+
+
+def _import_train_module_with_stubs(monkeypatch):
+    """Import train_podsai_model with lightweight dependency stubs."""
+    fake_datasets = types.ModuleType("datasets")
+    fake_datasets_config = types.ModuleType("datasets.config")
+    fake_datasets_config.AUDIO_BACKENDS_USE_TORCH = False
+    fake_datasets_config.AUDIOCODEC_DEFAULT_DECODER = "soundfile"
+    fake_datasets.config = fake_datasets_config
+    fake_datasets.Dataset = object
+    fake_datasets.Audio = object
+    fake_datasets.DatasetDict = object
+    fake_datasets.ClassLabel = object
+
+    fake_transformers = types.ModuleType("transformers")
+    fake_transformers.Wav2Vec2FeatureExtractor = object
+    fake_transformers.Wav2Vec2ForSequenceClassification = object
+    fake_transformers.TrainingArguments = object
+    fake_transformers.Trainer = object
+
+    class _EvalPrediction:
+        def __init__(self, predictions, label_ids):
+            self.predictions = predictions
+            self.label_ids = label_ids
+
+    fake_transformers.EvalPrediction = _EvalPrediction
+
+    fake_evaluate = types.ModuleType("evaluate")
+
+    class _DummyMetric:
+        def __init__(self, key):
+            self._key = key
+
+        def compute(self, **_kwargs):
+            return {self._key: 0.0}
+
+    fake_evaluate.load = lambda name: _DummyMetric(name)
+
+    monkeypatch.setitem(sys.modules, "datasets", fake_datasets)
+    monkeypatch.setitem(sys.modules, "datasets.config", fake_datasets_config)
+    monkeypatch.setitem(sys.modules, "transformers", fake_transformers)
+    monkeypatch.setitem(sys.modules, "evaluate", fake_evaluate)
+    sys.modules.pop("train_podsai_model", None)
+    return importlib.import_module("train_podsai_model")
+
+
+class _FakeMetric:
+    """Simple metric implementation for precision/recall/f1/accuracy tests."""
+
+    def __init__(self, metric_name: str):
+        self.metric_name = metric_name
+
+    def compute(self, predictions, references, average=None, labels=None):
+        preds = np.asarray(predictions)
+        refs = np.asarray(references)
+        all_labels = list(labels) if labels is not None else sorted(set(refs.tolist()) | set(preds.tolist()))
+
+        if self.metric_name == "accuracy":
+            return {"accuracy": float(np.mean(preds == refs))}
+
+        supports = np.array([np.sum(refs == class_id) for class_id in all_labels], dtype=float)
+        tps = np.array([np.sum((preds == class_id) & (refs == class_id)) for class_id in all_labels], dtype=float)
+        fps = np.array([np.sum((preds == class_id) & (refs != class_id)) for class_id in all_labels], dtype=float)
+        fns = np.array([np.sum((preds != class_id) & (refs == class_id)) for class_id in all_labels], dtype=float)
+
+        precision = np.divide(tps, tps + fps, out=np.zeros_like(tps), where=(tps + fps) != 0)
+        recall = np.divide(tps, tps + fns, out=np.zeros_like(tps), where=(tps + fns) != 0)
+        f1 = np.divide(2 * precision * recall, precision + recall, out=np.zeros_like(precision), where=(precision + recall) != 0)
+
+        per_class = {"precision": precision, "recall": recall, "f1": f1}[self.metric_name]
+        if average is None:
+            return {self.metric_name: per_class}
+        if average == "weighted":
+            total = np.sum(supports)
+            weighted = float(np.sum(per_class * supports) / total) if total else 0.0
+            return {self.metric_name: weighted}
+        if average == "macro":
+            macro = float(np.mean(per_class)) if len(per_class) else 0.0
+            return {self.metric_name: macro}
+        raise ValueError(f"Unsupported average: {average}")
+
+
+def _patch_metrics(module):
+    """Patch module-level metric objects with deterministic fake metrics."""
+    module.ACCURACY_METRIC = _FakeMetric("accuracy")
+    module.PRECISION_METRIC = _FakeMetric("precision")
+    module.RECALL_METRIC = _FakeMetric("recall")
+    module.F1_METRIC = _FakeMetric("f1")
+
+
+def test_compute_metrics_uses_whale_only_f1_for_multiclass(monkeypatch):
+    """f1 should be macro F1 over resident/transient/humpback in multiclass mode."""
+    module = _import_train_module_with_stubs(monkeypatch)
+    _patch_metrics(module)
+    module.ID2LABEL = {0: "water", 1: "resident", 2: "transient", 3: "humpback", 4: "vessel", 5: "jingle", 6: "human"}
+
+    labels = np.array([1, 2, 3, 0, 4, 5, 6])
+    predictions = np.array([1, 2, 3, 4, 5, 6, 0])
+    logits = np.eye(7)[predictions]
+
+    eval_pred = module.EvalPrediction(predictions=logits, label_ids=labels)
+    metrics = module.compute_metrics(eval_pred)
+
+    assert metrics["f1"] == 1.0
+    assert metrics["f1_water"] == 0.0
+    assert metrics["f1_vessel"] == 0.0
+
+
+def test_compute_metrics_falls_back_to_default_f1_when_whale_classes_absent(monkeypatch):
+    """f1 should remain the default weighted F1 when whale class labels are not present."""
+    module = _import_train_module_with_stubs(monkeypatch)
+    _patch_metrics(module)
+    module.ID2LABEL = {0: "other", 1: "whale"}
+
+    labels = np.array([1, 1, 0, 0])
+    predictions = np.array([1, 0, 0, 0])
+    logits = np.eye(2)[predictions]
+
+    eval_pred = module.EvalPrediction(predictions=logits, label_ids=labels)
+    metrics = module.compute_metrics(eval_pred)
+
+    # Weighted F1 for this case:
+    # class 0 f1=0.8 (support=2), class 1 f1=2/3 (support=2) => 0.7333...
+    assert metrics["f1"] == pytest.approx(11.0 / 15.0)
