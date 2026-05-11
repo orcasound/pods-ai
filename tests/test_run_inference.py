@@ -25,7 +25,7 @@ import soundfile as sf
 
 # Pinned PODS-AI model revision for integration-test stability.
 PODSAI_TEST_MODEL_ID = "davethaler/whale-call-detector"
-# renovate: datasource=git-refs depName=https://huggingface.co/davethaler/whale-call-detector versioning=git
+# renovate: datasource=git-refs depName=https://huggingface.co/davethaler/whale-call-detector versioning=git.
 PODSAI_TEST_MODEL_REVISION = "adb2da7fd0e67b9075b699648f578ff880f45c2c"
 
 
