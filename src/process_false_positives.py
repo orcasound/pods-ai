@@ -114,17 +114,16 @@ def process_false_positives(
             if end_time is not None and detection.timestamp > end_time:
                 continue
 
+            timestamp_str = format_timestamp_pst(detection.timestamp)
             summary["rejected"] += 1
             corrected_class = get_corrected_class(detection.comments)
             if corrected_class is None:
-                timestamp_str = format_timestamp_pst(detection.timestamp)
                 print(f"Skipping {feed.node_name} {timestamp_str}: could not determine corrected class from comments.")
                 summary["unknown_class"] += 1
                 continue
             if normalized_category_filter and corrected_class != normalized_category_filter:
                 continue
 
-            timestamp_str = format_timestamp_pst(detection.timestamp)
             print(f"Checking rejected OrcaHello detection at {timestamp_str}")
 
             with TemporaryDirectory() as temp_dir:
