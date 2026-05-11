@@ -774,7 +774,7 @@ class TestIntegrationWithRealModels:
         ("resident_wav_path", "resident", None),
         ("transient_wav_path", "transient", None),
         ("humpback_wav_path", "humpback",
-         "PODS-AI model may misclassify transient orca as another whale class"),
+         "PODS-AI model may misclassify humpback as another whale class"),
         ("vessel_wav_path", "vessel", None),
         ("water_wav_path", "water", None),
         ("human_wav_path", "human", None),
