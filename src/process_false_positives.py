@@ -112,11 +112,16 @@ def process_false_positives(
             if end_time is not None and detection.timestamp > end_time:
                 continue
 
+            summary["rejected"] += 1
             corrected_class = get_corrected_class(detection.comments)
+            if corrected_class is None:
+                timestamp_str = format_timestamp_pst(detection.timestamp)
+                print(f"Skipping {feed.node_name} {timestamp_str}: could not determine corrected class from comments.")
+                summary["unknown_class"] += 1
+                continue
             if normalized_category_filter and corrected_class != normalized_category_filter:
                 continue
 
-            summary["rejected"] += 1
             timestamp_str = format_timestamp_pst(detection.timestamp)
             print(f"Checking rejected OrcaHello detection at {timestamp_str}")
 
@@ -135,11 +140,6 @@ def process_false_positives(
                             "PODS-AI global prediction is not resident."
                         )
                         summary["not_false_positive"] += 1
-
-                    if corrected_class is None:
-                        print(f"Skipping {feed.node_name} {timestamp_str}: could not determine corrected class from comments.")
-                        summary["unknown_class"] += 1
-                        continue
 
                     print(
                         f"Running add_samples.py for {feed.node_name} {timestamp_str} "

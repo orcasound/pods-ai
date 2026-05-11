@@ -454,7 +454,7 @@ class TestProcessFalsePositives:
                 actual_category_filter="VESSEL",
             )
 
-        assert summary["rejected"] == 1
+        assert summary["rejected"] == 2
         assert summary["whale_mismatch_segments"] == 1
         assert summary["appended"] == 1
         assert mock_model.predict.call_count == 1
