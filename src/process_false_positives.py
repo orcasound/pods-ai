@@ -84,7 +84,9 @@ def process_false_positives(
         "appended": 0,
         "duplicates": 0,
     }
-    normalized_category_filter = (actual_category_filter or "").strip().lower() or None
+    normalized_category_filter = (
+        actual_category_filter.strip().lower() if actual_category_filter else None
+    )
     feeds = get_orcasite_feeds_with_retry()
     if not feeds:
         print("No Orcasite feeds available; nothing to process.")
