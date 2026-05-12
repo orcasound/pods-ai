@@ -28,6 +28,8 @@ jobs:
     if: github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     outputs:
+      should_run_base_csv: ${{ steps.detect.outputs.should_run_base_csv }}
+      should_run_make_csv: ${{ steps.detect.outputs.should_run_make_csv }}
       should_run_merge: ${{ steps.detect.outputs.should_run_merge }}
     steps:
       - name: Harden Runner
@@ -40,10 +42,27 @@ jobs:
           fetch-depth: 0
 
       - id: detect
-        name: Detect merge-training-samples changes
+        name: Detect CSV workflow changes
         run: |
           git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.sha }}" > changed_files.txt
           cat changed_files.txt
+          base_csv_inputs=(
+            '^src/make_csv.py$'
+            '^src/extract_training_samples.py$'
+            '^src/process_humpback_wavs.py$'
+            '^output/csv/detections.csv$'
+            '^output/csv/manual_timestamps.csv$'
+            '^output/csv/initial_training_samples.csv$'
+            '^output/csv/testing_samples.csv$'
+            '^requirements.txt$'
+            '^\.github/workflows/check_csv.yml$'
+          )
+          make_csv_inputs=(
+            '^src/make_csv.py$'
+            '^output/csv/detections.csv$'
+            '^requirements.txt$'
+            '^\.github/workflows/check_csv.yml$'
+          )
           merge_inputs=(
             '^src/extract_training_samples.py$'
             '^src/merge_training_samples.py$'
@@ -54,6 +73,20 @@ jobs:
             '^requirements.txt$'
             '^\.github/workflows/check_csv.yml$'
           )
+          should_run_base_csv=false
+          for pattern in "${base_csv_inputs[@]}"; do
+            if grep -Eq "$pattern" changed_files.txt; then
+              should_run_base_csv=true
+              break
+            fi
+          done
+          should_run_make_csv=false
+          for pattern in "${make_csv_inputs[@]}"; do
+            if grep -Eq "$pattern" changed_files.txt; then
+              should_run_make_csv=true
+              break
+            fi
+          done
           should_run_merge=false
           for pattern in "${merge_inputs[@]}"; do
             if grep -Eq "$pattern" changed_files.txt; then
@@ -61,11 +94,13 @@ jobs:
               break
             fi
           done
+          echo "should_run_base_csv=$should_run_base_csv" >> "$GITHUB_OUTPUT"
+          echo "should_run_make_csv=$should_run_make_csv" >> "$GITHUB_OUTPUT"
           echo "should_run_merge=$should_run_merge" >> "$GITHUB_OUTPUT"
 
   make_csv_ubuntu:
     needs: detect_merge_inputs
-    if: github.actor != 'dependabot[bot]'
+    if: github.actor != 'dependabot[bot]' && needs.detect_merge_inputs.outputs.should_run_base_csv == 'true'
     permissions:
       actions: write  # for fkirc/skip-duplicate-actions to skip or stop workflow runs
       contents: read  # for actions/checkout to fetch code
@@ -109,12 +144,12 @@ jobs:
         run: bash patch_fastai_audio.sh
 
       - name: Make CSV
-        if: steps.skip_check.outputs.should_skip != 'true' && env.COSMOS_KEY != ''
+        if: steps.skip_check.outputs.should_skip != 'true' && needs.detect_merge_inputs.outputs.should_run_make_csv == 'true' && env.COSMOS_KEY != ''
         run: |
           python src/make_csv.py --end 2026_03_17_00_00_00_PST
 
       - name: Verify there are no changes in detections.csv
-        if: steps.skip_check.outputs.should_skip != 'true'
+        if: steps.skip_check.outputs.should_skip != 'true' && needs.detect_merge_inputs.outputs.should_run_make_csv == 'true'
         run: |
           git diff --exit-code
 
@@ -136,7 +171,7 @@ jobs:
 
   make_csv_windows:
     needs: detect_merge_inputs
-    if: github.actor != 'dependabot[bot]'
+    if: github.actor != 'dependabot[bot]' && needs.detect_merge_inputs.outputs.should_run_base_csv == 'true'
     permissions:
       actions: write  # for fkirc/skip-duplicate-actions to skip or stop workflow runs
       contents: read  # for actions/checkout to fetch code
@@ -179,12 +214,12 @@ jobs:
         run: patch_fastai_audio.bat
 
       - name: Make CSV
-        if: steps.skip_check.outputs.should_skip != 'true' && env.COSMOS_KEY != ''
+        if: steps.skip_check.outputs.should_skip != 'true' && needs.detect_merge_inputs.outputs.should_run_make_csv == 'true' && env.COSMOS_KEY != ''
         run: |
           python src/make_csv.py --end 2026_03_17_00_00_00_PST
 
       - name: Verify there are no changes in detections.csv
-        if: steps.skip_check.outputs.should_skip != 'true'
+        if: steps.skip_check.outputs.should_skip != 'true' && needs.detect_merge_inputs.outputs.should_run_make_csv == 'true'
         run: |
           git diff --exit-code
 
