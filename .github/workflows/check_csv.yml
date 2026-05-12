@@ -44,11 +44,24 @@ jobs:
         run: |
           git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.sha }}" > changed_files.txt
           cat changed_files.txt
-          if grep -Eq '^(src/extract_training_samples.py|src/merge_training_samples.py|output/csv/initial_training_samples.csv|output/csv/manual_samples.csv|output/csv/manual_timestamps.csv|output/csv/training_samples.csv|requirements.txt|\.github/workflows/check_csv.yml)$' changed_files.txt; then
-            echo "should_run_merge=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "should_run_merge=false" >> "$GITHUB_OUTPUT"
-          fi
+          merge_inputs=(
+            '^src/extract_training_samples.py$'
+            '^src/merge_training_samples.py$'
+            '^output/csv/initial_training_samples.csv$'
+            '^output/csv/manual_samples.csv$'
+            '^output/csv/manual_timestamps.csv$'
+            '^output/csv/training_samples.csv$'
+            '^requirements.txt$'
+            '^\.github/workflows/check_csv.yml$'
+          )
+          should_run_merge=false
+          for pattern in "${merge_inputs[@]}"; do
+            if grep -Eq "$pattern" changed_files.txt; then
+              should_run_merge=true
+              break
+            fi
+          done
+          echo "should_run_merge=$should_run_merge" >> "$GITHUB_OUTPUT"
 
   make_csv_ubuntu:
     needs: detect_merge_inputs
