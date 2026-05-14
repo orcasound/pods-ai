@@ -35,7 +35,12 @@ def _freq_label(hz):
 
 
 def _pick_freq_ticks(f_min, f_max):
-    """Choose ~5-8 log-spaced tick positions between f_min and f_max."""
+    """Choose ~5-8 log-spaced tick positions between f_min and f_max.
+
+    Args:
+        f_min: Minimum frequency in Hz. Must be positive.
+        f_max: Maximum frequency in Hz.
+    """
     candidates = [
         40, 250, 500, 750, 1000, 1500, 2000, 3000, 5000, 7500, 10000, 15000, 20000, 30000, 48000,
     ]
@@ -114,7 +119,7 @@ def _compute_mel_for_clip(wav_file_path, native_sr):
     Returns:
         Tuple of (spectrogram_np, times_np, freqs_np) where spectrogram_np is a
         2D dB-scaled mel spectrogram (n_mels, n_frames), times_np is a 1D array
-        of frame times in seconds, and freqs_np is a 1D array of mel centre
+        of frame times in seconds, and freqs_np is a 1D array of mel center
         frequencies in Hz.
     """
     n_mels = _VIZ_IMAGE_HEIGHT
