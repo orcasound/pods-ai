@@ -364,6 +364,9 @@ class TestGetOrcasiteDetectionsWithRetry:
             detections = get_orcasite_detections(self._feed(), max_attempts=2, retry_delay_seconds=1)
 
         assert len(detections) == 1
+        assert detections[0].id == "det_1"
+        assert detections[0].source == "human"
+        assert detections[0].category == "whale"
         assert mock_get.call_count == 3
         mock_sleep.assert_called_once_with(1)
 

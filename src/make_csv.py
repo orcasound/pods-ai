@@ -219,9 +219,14 @@ def get_orcasite_detections(
         List[OrcasiteDetection]: Detections associated with the specified feed.
 
     Raises:
+        ValueError: If ``max_attempts`` is less than 1.
         requests.exceptions.ReadTimeout: If the Orcasite API read times out on every retry attempt.
         Exception: Re-raises non-timeout request/parsing errors immediately.
     """
+    if max_attempts < 1:
+        raise ValueError("max_attempts must be >= 1")
+    if retry_delay_seconds < 0:
+        raise ValueError("retry_delay_seconds must be >= 0")
 
     # Base endpoint.
     base_url = "https://live.orcasound.net/api/json/detections"
@@ -234,7 +239,6 @@ def get_orcasite_detections(
 
     # Build query parameters.
     limit = 250
-    offset = 0
     params = {
         "page[limit]": limit,
         "fields[detection]": fields,
@@ -303,9 +307,6 @@ def get_orcasite_detections(
         except Exception as e:
             print(f"Error fetching detections for feed {feed.id}: {e}")
             raise
-
-    # This line is unreachable but keeps static analyzers satisfied.
-    return []
 
 def get_node_name_for_feed(feed: OrcasiteFeed) -> str:
     """
