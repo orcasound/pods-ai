@@ -4,6 +4,7 @@
 
 import numpy as np
 import pytest
+from pathlib import Path
 
 import spectrogram_visualizer
 
@@ -88,8 +89,6 @@ class TestWriteSpectrogram:
 
     def test_accepts_pathlib_path(self, tmp_path) -> None:
         """write_spectrogram works with pathlib.Path as wav_file_path."""
-        from pathlib import Path
-
         wav_path = self._make_wav(tmp_path)
         result = spectrogram_visualizer.write_spectrogram(Path(wav_path))
         assert result.endswith(".png")

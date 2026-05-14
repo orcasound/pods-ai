@@ -1,3 +1,5 @@
+# Copyright (c) PODS-AI contributors
+# SPDX-License-Identifier: MIT
 # Adapted from:
 # https://github.com/orcasound/orcahello/blob/main/InferenceSystem/src/spectrogram_visualizer.py
 import gc
@@ -123,7 +125,7 @@ def _compute_mel_for_clip(wav_file_path, native_sr):
 
     with warnings.catch_warnings():
         # High n_mels relative to n_fft can leave empty top bins; that is intentional
-        # for 1:1 pixel rendering and simply renders as a low-intensity colour.
+        # for 1:1 pixel rendering and simply renders as a low-intensity color.
         warnings.filterwarnings("ignore", message="At least one mel filterbank")
         mel = librosa.feature.melspectrogram(
             y=y,
