@@ -274,7 +274,7 @@ class TestProcessFalseNegatives:
 
         podsai_model = Mock()
         podsai_model.predict.side_effect = [
-            {"global_prediction_label": "water", "global_confidence": 0.9},
+            {"global_prediction_label": "WATER", "global_confidence": 0.9},
             {"global_prediction_label": "transient", "global_confidence": 0.9},
         ]
 
@@ -311,11 +311,13 @@ class TestProcessFalseNegatives:
             summary = process_false_negatives(
                 manual_samples_path=manual_samples_path,
                 output_dir=segment_dir,
-                predicted_category_filter="WATER",
+                predicted_category_filter="water",
             )
 
         assert summary["confirmed"] == 2
         assert summary["mismatched_segments"] == 1
         assert summary["appended"] == 1
         assert podsai_model.predict.call_count == 2
+        assert orcahello_model.predict.call_count == 1
         assert mock_add_samples.call_count == 1
+        assert mock_add_samples.call_args.kwargs["base_timestamp"] == "2025_01_01_04_05_00_PST"
