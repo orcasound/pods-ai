@@ -4,8 +4,10 @@
 """
 Train a PODS-AI audio classification model for orca call detection.
 
-This script uses the Wav2Vec2 model architecture fine-tuned on orca call audio.
-The trained model can be pushed to HuggingFace Hub or saved locally.
+This script fine-tunes a HuggingFace audio classification model on orca call
+audio. The default base model uses spectrogram features rather than raw-audio
+Wav2Vec2 embeddings. The trained model can be pushed to HuggingFace Hub or
+saved locally.
 
 Usage:
     # Binary classification (other vs any call)
@@ -27,12 +29,12 @@ datasets.config.AUDIOCODEC_DEFAULT_DECODER = "soundfile"
 
 from datasets import Dataset, Audio, DatasetDict, ClassLabel
 from transformers import (
-    Wav2Vec2FeatureExtractor,
-    Wav2Vec2ForSequenceClassification,
-    TrainingArguments,
+    AutoFeatureExtractor,
+    AutoModelForAudioClassification,
+    EvalPrediction,
     Trainer,
+    TrainingArguments,
 )
-from transformers import EvalPrediction
 import evaluate
 
 # Verify audio decoding dependencies are available.
@@ -177,13 +179,13 @@ def load_audio_dataset(data_dir: Path, num_classes: int) -> DatasetDict:
     return dataset
 
 
-def preprocess_function(examples: dict, feature_extractor: Wav2Vec2FeatureExtractor, max_duration: float = 3.0) -> dict:
+def preprocess_function(examples: dict, feature_extractor: AutoFeatureExtractor, max_duration: float = 3.0) -> dict:
     """
     Preprocess audio files for the model.
 
     Args:
         examples: Batch of examples with audio data
-        feature_extractor: Wav2Vec2FeatureExtractor instance
+        feature_extractor: HuggingFace audio feature extractor instance
         max_duration: Maximum audio duration in seconds
 
     Returns:
@@ -191,7 +193,7 @@ def preprocess_function(examples: dict, feature_extractor: Wav2Vec2FeatureExtrac
     """
     audio_arrays = [x["array"] for x in examples["audio"]]
 
-    # Pad or truncate to max_duration. Wav2Vec2 expects fixed-length inputs.
+    # Pad or truncate to max_duration so every training example has the same clip length.
     target_length = int(max_duration * 16000)  # 16kHz sample rate.
     processed_audio = []
     for audio in audio_arrays:
@@ -208,8 +210,6 @@ def preprocess_function(examples: dict, feature_extractor: Wav2Vec2FeatureExtrac
         processed_audio,
         sampling_rate=16000,
         padding=True,
-        max_length=target_length,
-        truncation=True,
     )
 
     # Ensure input_values is a NumPy array (feature_extractor returns this by default).
@@ -376,8 +376,11 @@ def main() -> None:
     parser.add_argument(
         "--model_name",
         type=str,
-        default="facebook/wav2vec2-base",
-        help="Base model to fine-tune (default: facebook/wav2vec2-base)",
+        default="MIT/ast-finetuned-audioset-10-10-0.4593",
+        help=(
+            "Base model to fine-tune "
+            "(default: MIT/ast-finetuned-audioset-10-10-0.4593)"
+        ),
     )
     parser.add_argument(
         "--epochs",
@@ -434,7 +437,7 @@ def main() -> None:
     print(f"Loading feature extractor and model: {args.model_name}")
 
     try:
-        feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(args.model_name)
+        feature_extractor = AutoFeatureExtractor.from_pretrained(args.model_name)
     except Exception as e:
         error_msg = f"Error loading feature extractor from {args.model_name}: {type(e).__name__}: {e}"
         print(error_msg)
@@ -442,7 +445,7 @@ def main() -> None:
         raise RuntimeError(error_msg) from e
 
     try:
-        model = Wav2Vec2ForSequenceClassification.from_pretrained(
+        model = AutoModelForAudioClassification.from_pretrained(
             args.model_name,
             num_labels=len(LABEL2ID),
             label2id=LABEL2ID,
@@ -513,7 +516,7 @@ def main() -> None:
 
     if args.push_to_hub:
         # The Trainer already pushed the model weights; also push the feature extractor
-        # so that inference code can call Wav2Vec2FeatureExtractor.from_pretrained()
+        # so that inference code can call AutoFeatureExtractor.from_pretrained()
         # on the Hub model ID.
         print(f"Pushing feature extractor to HuggingFace Hub: {args.hub_model_id}...")
         feature_extractor.push_to_hub(args.hub_model_id)
