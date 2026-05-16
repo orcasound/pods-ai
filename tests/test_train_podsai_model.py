@@ -198,6 +198,33 @@ def test_default_training_model_uses_spectrogram_checkpoint(monkeypatch, tmp_pat
     assert captured["model_name"] == "MIT/ast-finetuned-audioset-10-10-0.4593"
 
 
+def test_preprocess_function_normalizes_audio_length_before_extractor(monkeypatch):
+    """preprocess_function should pad/truncate clips before calling the extractor."""
+    module = _import_stubbed_train_module(monkeypatch)
+
+    captured = {}
+
+    class _CapturingFeatureExtractor:
+        def __call__(self, processed_audio, **kwargs):
+            captured["processed_audio"] = processed_audio
+            captured["kwargs"] = kwargs
+            return {"input_values": processed_audio}
+
+    examples = {
+        "audio": [
+            {"array": np.ones(16000, dtype=np.float32)},
+            {"array": np.ones(64000, dtype=np.float32)},
+        ],
+        "label": [0, 1],
+    }
+
+    result = module.preprocess_function(examples, _CapturingFeatureExtractor(), max_duration=3.0)
+
+    assert all(len(audio) == 48000 for audio in captured["processed_audio"])
+    assert captured["kwargs"] == {"sampling_rate": 16000, "padding": True}
+    assert result["labels"] == [0, 1]
+
+
 def test_push_to_hub_uses_last_six_checkpoints(monkeypatch, tmp_path):
     """Hub uploads should retain and publish the last 6 epoch checkpoints."""
     module = _import_stubbed_train_module(monkeypatch)

@@ -70,7 +70,7 @@ CHECKPOINT_SAVE_LIMIT = 6
 class FeatureExtractorProtocol(Protocol):
     """Protocol for audio feature extractors used during PODS-AI training."""
 
-    def __call__(self, processed_audio: list[np.ndarray], sampling_rate: int, padding: bool) -> dict:
+    def __call__(self, processed_audio: list[np.ndarray], *, sampling_rate: int, padding: bool) -> dict:
         """Convert audio arrays into model inputs."""
 
 
