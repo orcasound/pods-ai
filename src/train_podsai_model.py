@@ -21,7 +21,7 @@ import argparse
 import numpy as np
 from pathlib import Path
 from collections import Counter
-from typing import Any
+from typing import Protocol
 
 # Configure datasets to use soundfile for audio decoding BEFORE importing datasets components.
 import datasets.config
@@ -65,6 +65,13 @@ F1_METRIC = evaluate.load("f1")
 # Whale classes for optimization in multi-class mode.
 WHALE_CLASS_NAMES = {"humpback", "resident", "transient"}
 CHECKPOINT_SAVE_LIMIT = 6
+
+
+class FeatureExtractorProtocol(Protocol):
+    """Protocol for audio feature extractors used during PODS-AI training."""
+
+    def __call__(self, processed_audio: list[np.ndarray], sampling_rate: int, padding: bool) -> dict:
+        """Convert audio arrays into model inputs."""
 
 
 def setup_label_mappings(num_classes: int) -> None:
@@ -180,7 +187,7 @@ def load_audio_dataset(data_dir: Path, num_classes: int) -> DatasetDict:
     return dataset
 
 
-def preprocess_function(examples: dict, feature_extractor: Any, max_duration: float = 3.0) -> dict:
+def preprocess_function(examples: dict, feature_extractor: FeatureExtractorProtocol, max_duration: float = 3.0) -> dict:
     """
     Preprocess audio files for the model.
 
@@ -206,7 +213,8 @@ def preprocess_function(examples: dict, feature_extractor: Any, max_duration: fl
         processed_audio.append(audio)
 
     # The audio is already padded/truncated above, so we only need the extractor's
-    # feature conversion here rather than a second length-normalization pass.
+    # feature conversion here. Keep padding=True so the extractor still returns a
+    # consistent batch tensor/array shape for downstream dataset serialization.
     inputs = feature_extractor(
         processed_audio,
         sampling_rate=16000,
