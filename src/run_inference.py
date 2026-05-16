@@ -37,7 +37,7 @@ def _build_proposed_description(
 
     Returns:
         Proposed description text beginning with "AI:" and optionally appending
-        a dominant non-whale context class.
+        a dominant non-whale context class from {"vessel", "human", "jingle"}.
     """
     proposed_description = f"AI: {global_prediction_label}"
     if not local_prediction_labels:

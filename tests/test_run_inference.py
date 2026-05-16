@@ -305,7 +305,7 @@ class TestRunInferencePodsAI:
         finally:
             Path(wav_path).unlink(missing_ok=True)
 
-    def test_proposed_description_appends_vessel_when_most_common_segment(self):
+    def test_proposed_description_appends_context_class_when_most_common_segment(self):
         """Append 'and vessel' when vessel is most common and differs from global label."""
         wav_path = _make_wav()
         try:
