@@ -21,6 +21,7 @@ import argparse
 import numpy as np
 from pathlib import Path
 from collections import Counter
+from typing import Any
 
 # Configure datasets to use soundfile for audio decoding BEFORE importing datasets components.
 import datasets.config
@@ -179,7 +180,7 @@ def load_audio_dataset(data_dir: Path, num_classes: int) -> DatasetDict:
     return dataset
 
 
-def preprocess_function(examples: dict, feature_extractor: AutoFeatureExtractor, max_duration: float = 3.0) -> dict:
+def preprocess_function(examples: dict, feature_extractor: Any, max_duration: float = 3.0) -> dict:
     """
     Preprocess audio files for the model.
 
@@ -204,8 +205,8 @@ def preprocess_function(examples: dict, feature_extractor: AutoFeatureExtractor,
             audio = np.pad(audio, (0, padding), mode='constant')
         processed_audio.append(audio)
 
-    # Return NumPy arrays instead of PyTorch tensors for dataset caching/serialization.
-    # The Trainer's data collator will convert to tensors during batching.
+    # The audio is already padded/truncated above, so we only need the extractor's
+    # feature conversion here rather than a second length-normalization pass.
     inputs = feature_extractor(
         processed_audio,
         sampling_rate=16000,
