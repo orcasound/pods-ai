@@ -18,10 +18,11 @@ Usage:
 """
 
 import argparse
-import numpy as np
-from pathlib import Path
 from collections import Counter
 from typing import Protocol
+from pathlib import Path
+
+import numpy as np
 
 # Configure datasets to use soundfile for audio decoding BEFORE importing datasets components.
 import datasets.config
@@ -71,7 +72,16 @@ class FeatureExtractorProtocol(Protocol):
     """Protocol for audio feature extractors used during PODS-AI training."""
 
     def __call__(self, processed_audio: list[np.ndarray], *, sampling_rate: int, padding: bool) -> dict:
-        """Convert audio arrays into model inputs."""
+        """Convert audio arrays into model inputs.
+
+        Args:
+            processed_audio: Fixed-length audio clips for the current batch.
+            sampling_rate: Sampling rate of the provided clips.
+            padding: Whether the extractor should apply its batch padding logic.
+
+        Returns:
+            Dictionary of model-ready features such as input_values or attention_mask.
+        """
 
 
 def setup_label_mappings(num_classes: int) -> None:
