@@ -277,7 +277,7 @@ class TestRunInferencePodsAI:
     """Tests for run_inference() with a mocked PODS-AI model."""
 
     def test_returns_expected_keys(self):
-        """run_inference returns a dict with probabilities, labels, and description fields."""
+        """run_inference returns probabilities, labels, confidence, and proposed description."""
         wav_path = _make_wav()
         try:
             mock_model = _make_podsai_model_mock()
@@ -306,12 +306,14 @@ class TestRunInferencePodsAI:
             Path(wav_path).unlink(missing_ok=True)
 
     def test_proposed_description_appends_vessel_when_most_common_segment(self):
-        """Append 'and vessel' when vessel is the most common local segment prediction."""
+        """Append 'and vessel' when vessel is most common and differs from global label."""
         wav_path = _make_wav()
         try:
             mock_model = _make_podsai_model_mock(num_local=29)
+            resident_class = 1
+            vessel_class = 4
             mock_model.predict.return_value = {
-                "local_predictions": [1] * 4 + [4] * 25,
+                "local_predictions": [resident_class] * 4 + [vessel_class] * 25,
                 "local_confidences": [0.7] * 4 + [0.8] * 25,
                 "global_prediction": 1,
                 "global_prediction_label": "resident",

@@ -25,14 +25,28 @@ PODSAI_MODEL_REVISION = "f3ece5f8060891831c04014a40097507c2f324b1"
 PROPOSED_DESCRIPTION_EXTRA_CLASSES = {"vessel", "human", "jingle"}
 
 
-def _build_proposed_description(global_prediction_label: str,
-                                local_prediction_labels: list[str]) -> str:
-    """Build a proposed description string from global and local predictions."""
+def _build_proposed_description(
+    global_prediction_label: str,
+    local_prediction_labels: list[str],
+) -> str:
+    """Build a proposed description string from global and local predictions.
+
+    Args:
+        global_prediction_label: Predicted class label for the whole file.
+        local_prediction_labels: Segment-level predicted class labels.
+
+    Returns:
+        Proposed description text beginning with "AI:" and optionally appending
+        a dominant non-whale context class.
+    """
     proposed_description = f"AI: {global_prediction_label}"
     if not local_prediction_labels:
         return proposed_description
 
-    most_common_label, _ = Counter(local_prediction_labels).most_common(1)[0]
+    most_common = Counter(local_prediction_labels).most_common(1)
+    if not most_common:
+        return proposed_description
+    most_common_label, _ = most_common[0]
     if (
         most_common_label in PROPOSED_DESCRIPTION_EXTRA_CLASSES
         and most_common_label != global_prediction_label
@@ -170,7 +184,7 @@ def print_results(results: dict, model_type: str) -> None:
     probabilities = results["probabilities"]
     label = results["global_prediction_label"]
     confidence = results["global_confidence"]
-    proposed_description = results.get("proposed_description", f"AI: {label}")
+    proposed_description = results["proposed_description"]
     predict_time = results.get("predict_time", 0.0)
 
     print(f"Model type: {model_type}")
