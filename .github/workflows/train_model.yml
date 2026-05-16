@@ -9,7 +9,7 @@ on:
       epochs:
         description: 'Number of training epochs'
         required: false
-        default: '10'
+        default: '15'
         type: string
       batch_size:
         description: 'Training batch size'
@@ -19,7 +19,7 @@ on:
       output_dir:
         description: 'Output directory for the trained model'
         required: false
-        default: 'model/podsai'
+        default: 'model/multiclass'
         type: string
       hub_model_id:
         description: 'HuggingFace Hub model ID (e.g., username/model-name)'
