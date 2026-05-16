@@ -213,8 +213,9 @@ def preprocess_function(examples: dict, feature_extractor: FeatureExtractorProto
         processed_audio.append(audio)
 
     # The audio is already padded/truncated above, so we only need the extractor's
-    # feature conversion here. Keep padding=True so the extractor still returns a
-    # consistent batch tensor/array shape for downstream dataset serialization.
+    # feature conversion here. Keep padding=True for compatibility with extractors
+    # that still expect batched padding logic even when every clip is already the
+    # same length.
     inputs = feature_extractor(
         processed_audio,
         sampling_rate=16000,

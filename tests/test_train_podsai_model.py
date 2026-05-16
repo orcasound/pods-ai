@@ -148,7 +148,7 @@ def test_default_training_model_uses_spectrogram_checkpoint(monkeypatch, tmp_pat
 
     class _FakeTrainingArguments:
         def __init__(self, **kwargs):
-            self.kwargs = kwargs
+            captured["training_args"] = kwargs
 
     class _FakeTrainer:
         def __init__(self, model, args, train_dataset, eval_dataset, compute_metrics):

@@ -84,7 +84,7 @@ class OrcaHelloSRKWInference(ModelInference):
     orcasound/orcahello-srkw-detector-v1) via the orcahello submodule.
 
     The model is a binary classifier (0 = no SRKW, 1 = SRKW detected).
-    Like the current PODS-AI migration target, this model uses mel
+    Like the updated PODS-AI default training path, this model uses mel
     spectrogram features instead of raw-audio Wav2Vec2 embeddings.
     """
 
