@@ -446,7 +446,7 @@ def main() -> None:
         "--preprocessing_workers",
         type=int,
         default=max(1, min(DEFAULT_MAX_PREPROCESSING_WORKERS, os.cpu_count() or 1)),
-        help="Number of parallel workers for AST feature preprocessing (default: up to 8 CPU cores)",
+        help="Number of parallel workers for AST feature preprocessing (default: min of 8 or available CPU cores)",
     )
     parser.add_argument(
         "--push_to_hub",

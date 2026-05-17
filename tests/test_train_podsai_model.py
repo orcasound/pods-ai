@@ -279,7 +279,8 @@ def test_preprocessing_workers_are_capped_by_smallest_split(monkeypatch, tmp_pat
             return None
 
     class _FakeDatasetDict(dict):
-        def map(self, _func, **kwargs):
+        def map(self, func, **kwargs):
+            assert callable(func)
             captured["map_kwargs"] = kwargs
             return self
 
@@ -361,7 +362,12 @@ def test_training_enables_fp16_when_cuda_is_available(monkeypatch, tmp_path):
             return None
 
     class _FakeDatasetDict(dict):
-        def map(self, _func, batched, remove_columns):
+        def map(self, func, batched, remove_columns):
+            assert callable(func)
+            captured["map_kwargs"] = {
+                "batched": batched,
+                "remove_columns": remove_columns,
+            }
             assert batched is True
             assert remove_columns == ["audio"]
             return self
@@ -389,6 +395,7 @@ def test_training_enables_fp16_when_cuda_is_available(monkeypatch, tmp_path):
     module.main()
 
     assert captured["training_args"]["fp16"] is True
+    assert "num_proc" not in captured.get("map_kwargs", {})
 
 
 def test_push_to_hub_uses_last_six_checkpoints(monkeypatch, tmp_path):
