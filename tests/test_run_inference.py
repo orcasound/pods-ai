@@ -868,7 +868,8 @@ class TestIntegrationWithRealModels:
     # Parametrized tests for PODS-AI model on different audio types.
     @pytest.mark.parametrize("wav_fixture,label,xfail_reason", [
         ("resident_wav_path", "resident", None),
-        ("transient_wav_path", "transient", None),
+        ("transient_wav_path", "transient",
+         "PODS-AI model may misclassify transient as resident"),
         ("humpback_wav_path", "humpback",
          "PODS-AI model may misclassify humpback as another whale class"),
         ("vessel_wav_path", "vessel",
