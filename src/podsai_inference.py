@@ -176,6 +176,7 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
         """
         Resize AST position embeddings to match the requested spectrogram shape.
         This updates model embeddings in-place for the requested token shape.
+        Callers should not share this inference instance across threads.
 
         Returns:
             True if embeddings already match target shape or were resized successfully.
@@ -188,11 +189,14 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
             return False
 
         config = self.model.config
-        patch_size = int(getattr(config, "patch_size", DEFAULT_AST_PATCH_SIZE))
-        freq_stride = int(getattr(config, "frequency_stride", DEFAULT_AST_FREQUENCY_STRIDE))
-        time_stride = int(getattr(config, "time_stride", DEFAULT_AST_TIME_STRIDE))
-        cfg_max_length = int(getattr(config, "max_length", target_frames))
-        cfg_num_mel_bins = int(getattr(config, "num_mel_bins", num_mel_bins))
+        try:
+            patch_size = int(getattr(config, "patch_size", DEFAULT_AST_PATCH_SIZE))
+            freq_stride = int(getattr(config, "frequency_stride", DEFAULT_AST_FREQUENCY_STRIDE))
+            time_stride = int(getattr(config, "time_stride", DEFAULT_AST_TIME_STRIDE))
+            cfg_max_length = int(getattr(config, "max_length", target_frames))
+            cfg_num_mel_bins = int(getattr(config, "num_mel_bins", num_mel_bins))
+        except (TypeError, ValueError):
+            return False
 
         target_freq = (num_mel_bins - patch_size) // freq_stride + 1
         target_time = (target_frames - patch_size) // time_stride + 1

@@ -16,6 +16,7 @@ import soundfile as sf
 from pathlib import Path
 from unittest.mock import Mock, patch, MagicMock
 import torch
+from podsai_inference import NUM_SPECIAL_TOKENS
 
 
 # Pinned PODS-AI model revision for integration-test stability.
@@ -479,7 +480,6 @@ class TestPodsAIInferenceIndexing:
         mock_model.audio_spectrogram_transformer.embeddings = Mock()
         freq_tokens = (mock_config.num_mel_bins - mock_config.patch_size) // mock_config.frequency_stride + 1
         time_tokens = (mock_config.max_length - mock_config.patch_size) // mock_config.time_stride + 1
-        from podsai_inference import NUM_SPECIAL_TOKENS
         original_token_count = (freq_tokens * time_tokens) + NUM_SPECIAL_TOKENS
         mock_model.audio_spectrogram_transformer.embeddings.position_embeddings = torch.nn.Parameter(
             torch.zeros((1, original_token_count, 4), dtype=torch.float32)
