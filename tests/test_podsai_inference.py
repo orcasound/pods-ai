@@ -520,7 +520,7 @@ class TestIntegrationWithRealModels:
         """Inference on a 60-second wav file must complete in under 10 seconds.
 
         This test guards against performance regressions in the inference pipeline.
-        For AST models the full-audio spectrogram optimisation (one fbank call
+        For AST models the full-audio spectrogram optimization (one fbank call
         instead of one per segment) keeps the budget well under 10 seconds on a
         CPU-only machine.  For Wav2Vec2 (and other raw-audio) models the raw-audio
         path is used instead; both should comfortably fit the 10-second budget.

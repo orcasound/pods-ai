@@ -26,6 +26,11 @@ from model_inference import ModelInference
 # For every SEGMENT_GROUP_SIZE segments, require at least 1 positive prediction.
 SEGMENT_GROUP_SIZE = 10
 
+# HuggingFace model_type value for the Audio Spectrogram Transformer architecture.
+# AST models expect a pre-computed mel spectrogram; raw-audio models (e.g. Wav2Vec2)
+# use the feature extractor directly.
+MODEL_TYPE_AST = "audio-spectrogram-transformer"
+
 
 class PodsAIInference(ModelInference):  # Inherit from ModelInference
     """
@@ -113,7 +118,7 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
         # of shape (batch, max_length, num_mel_bins).  All other models (e.g. Wav2Vec2)
         # expect raw audio samples of shape (batch, sequence_length).
         self._use_spectrogram_input = (
-            getattr(self.model.config, 'model_type', '') == "audio-spectrogram-transformer"
+            getattr(self.model.config, 'model_type', '') == MODEL_TYPE_AST
         )
 
         # Get label mapping. This assumes the model was trained with a config that includes id2label and label2id.
