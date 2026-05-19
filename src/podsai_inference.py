@@ -210,6 +210,8 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
 
         source_embeddings = self._ast_pos_embed_cache.get(int(position_embeddings.shape[1]))
         if source_embeddings is None:
+            # Keep an immutable copy of the current embeddings because we mutate
+            # model embeddings in-place for resized token grids.
             source_embeddings = position_embeddings.detach().clone()
             self._ast_pos_embed_cache[int(source_embeddings.shape[1])] = source_embeddings
 
@@ -229,9 +231,7 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
         )
         # Convert back from [batch, hidden, freq, time] to token sequence format.
         resized_patch = resized_patch.permute(0, 2, 3, 1).reshape(1, target_freq * target_time, hidden_dim)
-        resized = torch.cat([source_embeddings[:, :NUM_SPECIAL_TOKENS, :], resized_patch], dim=1).to(
-            device=position_embeddings.device, dtype=position_embeddings.dtype
-        )
+        resized = torch.cat([source_embeddings[:, :NUM_SPECIAL_TOKENS, :], resized_patch], dim=1)
 
         self._ast_pos_embed_cache[target_tokens] = resized.detach()
         embeddings.position_embeddings = torch.nn.Parameter(resized, requires_grad=False)
@@ -355,6 +355,7 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
         target_frames = max(1, min(max_length, seg_frames))
         if self._use_spectrogram_input:
             if not self._ensure_ast_position_embeddings(target_frames, num_mel_bins):
+                print("Warning: AST positional embedding resize unavailable; using full max_length input.")
                 target_frames = max_length
 
         # Slice each window, apply per-utterance mean normalisation, and pad to target_frames.
