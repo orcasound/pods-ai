@@ -30,7 +30,9 @@ SEGMENT_GROUP_SIZE = 10
 # AST models expect a pre-computed mel spectrogram; raw-audio models (e.g. Wav2Vec2)
 # use the feature extractor directly.
 MODEL_TYPE_AST = "audio-spectrogram-transformer"
+# AST adds two learned special tokens: [CLS] and distillation token.
 NUM_SPECIAL_TOKENS = 2
+# Default AST patch geometry when config omits explicit values.
 DEFAULT_AST_PATCH_SIZE = 16
 DEFAULT_AST_FREQUENCY_STRIDE = 10
 DEFAULT_AST_TIME_STRIDE = 10
@@ -124,6 +126,7 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
         self._use_spectrogram_input = (
             getattr(self.model.config, 'model_type', '') == MODEL_TYPE_AST
         )
+        # Cache resized AST positional embeddings by token count to avoid re-interpolating.
         self._ast_pos_embed_cache: dict[int, torch.Tensor] = {}
 
         # Get label mapping. This assumes the model was trained with a config that includes id2label and label2id.
@@ -172,6 +175,7 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
     ) -> bool:
         """
         Resize AST position embeddings to match the requested spectrogram shape.
+        This updates model embeddings in-place for the requested token shape.
 
         Returns:
             True if embeddings already match target shape or were resized successfully.
@@ -218,12 +222,13 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
 
         # Convert token sequence [batch, tokens, hidden] into [batch, hidden, freq, time]
         # so bilinear interpolation can resize the 2D patch grid.
-        source_patch = source_patch.reshape(1, source_freq, source_time, source_embeddings.shape[-1]).permute(0, 3, 1, 2)
+        hidden_dim = source_embeddings.shape[-1]
+        source_patch = source_patch.reshape(1, source_freq, source_time, hidden_dim).permute(0, 3, 1, 2)
         resized_patch = torch.nn.functional.interpolate(
             source_patch, size=(target_freq, target_time), mode="bilinear", align_corners=False
         )
         # Convert back from [batch, hidden, freq, time] to token sequence format.
-        resized_patch = resized_patch.permute(0, 2, 3, 1).reshape(1, target_freq * target_time, source_embeddings.shape[-1])
+        resized_patch = resized_patch.permute(0, 2, 3, 1).reshape(1, target_freq * target_time, hidden_dim)
         resized = torch.cat([source_embeddings[:, :NUM_SPECIAL_TOKENS, :], resized_patch], dim=1).to(
             device=position_embeddings.device, dtype=position_embeddings.dtype
         )
