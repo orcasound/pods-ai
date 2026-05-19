@@ -275,10 +275,11 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
         hop_frames = round(hop_samples / sr * frames_per_second)
         seg_frames = round(segment_samples / sr * frames_per_second)
 
-        # Use the minimum of segment length and feature-extractor max_length as the
-        # model time dimension. For 3-second windows this avoids padding every window
-        # to the AST pretraining length (typically 1024), which wastes CPU/GPU work.
-        target_frames = max(1, min(max_length, seg_frames))
+        # AST models use learned positional embeddings with a fixed token length,
+        # so each window must be padded/truncated to the configured max_length.
+        # Prefer model config value when present, then fall back to feature extractor.
+        model_max_length = getattr(self.model.config, "max_length", max_length)
+        target_frames = model_max_length if isinstance(model_max_length, int) and model_max_length > 0 else max_length
 
         # Slice each window, apply per-utterance mean normalisation, and pad to target_frames.
         # This replicates ASTFeatureExtractor._extract_fbank_features() for each window.

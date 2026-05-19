@@ -450,11 +450,11 @@ class TestPodsAIInferenceIndexing:
 
     @patch('podsai_inference.AutoModelForAudioClassification')
     @patch('podsai_inference.AutoFeatureExtractor')
-    def test_ast_path_uses_segment_frame_length(
+    def test_ast_path_uses_fixed_model_max_length(
         self, mock_extractor_class, mock_model_class,
         mock_feature_extractor, synthetic_audio_60s
     ):
-        """AST path should avoid padding 3s windows to full pretraining max_length."""
+        """AST path must use fixed max_length for positional-embedding compatibility."""
         mock_model = Mock()
         mock_config = Mock()
         mock_config.id2label = {
@@ -494,8 +494,7 @@ class TestPodsAIInferenceIndexing:
 
         assert len(result["local_confidences"]) == 29
         assert call_shapes, "Expected at least one AST forward pass."
-        # 3 seconds with 10ms frame shift -> 300 frames, not 1024.
-        assert all(shape[1] == 300 for shape in call_shapes)
+        assert all(shape[1] == mock_feature_extractor.max_length for shape in call_shapes)
 
 
 class TestPodsAIInferenceErrorHandling:
