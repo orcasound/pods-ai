@@ -448,6 +448,54 @@ class TestPodsAIInferenceIndexing:
         assert all(0.0 <= c <= 1.0 for c in result["local_confidences"])
         assert len(result["local_confidences"]) == 29  # 60s audio, 2s hop
 
+    @patch('podsai_inference.AutoModelForAudioClassification')
+    @patch('podsai_inference.AutoFeatureExtractor')
+    def test_ast_path_uses_fixed_model_max_length(
+        self, mock_extractor_class, mock_model_class,
+        mock_feature_extractor, synthetic_audio_60s
+    ):
+        """AST path must use fixed max_length for positional-embedding compatibility."""
+        mock_model = Mock()
+        mock_config = Mock()
+        mock_config.id2label = {
+            0: "water", 1: "resident", 2: "transient", 3: "humpback",
+            4: "vessel", 5: "jingle", 6: "human"
+        }
+        mock_config.label2id = {
+            "water": 0, "resident": 1, "transient": 2, "humpback": 3,
+            "vessel": 4, "jingle": 5, "human": 6
+        }
+        mock_config._name_or_path = "test-model"
+        mock_config.architectures = ["ASTForAudioClassification"]
+        mock_config.model_type = "audio-spectrogram-transformer"
+        mock_config._commit_hash = None
+        mock_model.config = mock_config
+        mock_model.to = Mock(return_value=mock_model)
+        mock_model.eval = Mock(return_value=mock_model)
+
+        call_shapes: list[tuple[int, ...]] = []
+
+        def mock_forward(**kwargs):
+            call_shapes.append(tuple(kwargs["input_values"].shape))
+            batch_size = kwargs["input_values"].shape[0]
+            logits = torch.tensor([[2.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0]]).repeat(batch_size, 1)
+            mock_output = Mock()
+            mock_output.logits = logits
+            return mock_output
+
+        mock_model.side_effect = mock_forward
+        mock_extractor_class.from_pretrained = Mock(return_value=mock_feature_extractor)
+        mock_model_class.from_pretrained = Mock(return_value=mock_model)
+
+        from podsai_inference import PodsAIInference
+
+        model = PodsAIInference("test-model-path")
+        result = model.predict(synthetic_audio_60s, segment_duration=3, hop_duration=2)
+
+        assert len(result["local_confidences"]) == 29
+        assert call_shapes, "Expected at least one AST forward pass."
+        assert all(shape[1] == mock_feature_extractor.max_length for shape in call_shapes)
+
 
 class TestPodsAIInferenceErrorHandling:
     """Test error handling in PodsAIInference."""

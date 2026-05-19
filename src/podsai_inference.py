@@ -244,7 +244,7 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
             segment_samples: Segment size in samples.
 
         Returns:
-            Tensor of shape (num_positions, max_length, num_mel_bins) ready for the model.
+            Tensor of shape (num_positions, target_frames, num_mel_bins) ready for the model.
         """
         import torchaudio
 
@@ -275,7 +275,14 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
         hop_frames = round(hop_samples / sr * frames_per_second)
         seg_frames = round(segment_samples / sr * frames_per_second)
 
-        # Slice each window, apply per-utterance mean normalisation, and pad to max_length.
+        # AST models use learned positional embeddings with a fixed token length,
+        # so each window must be padded/truncated to the configured max_length.
+        # Prefer model config value when present, then fall back to feature extractor.
+        model_max_length = getattr(self.model.config, "max_length", max_length)
+        has_valid_model_max_length = isinstance(model_max_length, int) and model_max_length > 0
+        target_frames = model_max_length if has_valid_model_max_length else max_length
+
+        # Slice each window, apply per-utterance mean normalisation, and pad to target_frames.
         # This replicates ASTFeatureExtractor._extract_fbank_features() for each window.
         windows: list[torch.Tensor] = []
         for pos_idx in range(num_positions):
@@ -286,12 +293,12 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
             # Per-utterance mean subtraction (matches ASTFeatureExtractor._extract_fbank_features).
             window = window - window.mean()
 
-            # Pad or truncate to max_length.
-            if window.shape[0] < max_length:
-                pad_len = max_length - window.shape[0]
+            # Pad or truncate to target_frames.
+            if window.shape[0] < target_frames:
+                pad_len = target_frames - window.shape[0]
                 window = torch.nn.functional.pad(window, (0, 0, 0, pad_len))
             else:
-                window = window[:max_length, :]
+                window = window[:target_frames, :]
 
             windows.append(window)
 
