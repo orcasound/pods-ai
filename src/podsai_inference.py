@@ -30,6 +30,7 @@ SEGMENT_GROUP_SIZE = 10
 # AST models expect a pre-computed mel spectrogram; raw-audio models (e.g. Wav2Vec2)
 # use the feature extractor directly.
 MODEL_TYPE_AST = "audio-spectrogram-transformer"
+NUM_SPECIAL_TOKENS = 2
 
 
 class PodsAIInference(ModelInference):  # Inherit from ModelInference
@@ -184,7 +185,7 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
         target_time = (target_frames - patch_size) // time_stride + 1
         if target_freq < 1 or target_time < 1:
             return False
-        target_tokens = target_freq * target_time + 2
+        target_tokens = target_freq * target_time + NUM_SPECIAL_TOKENS
 
         if position_embeddings.shape[1] == target_tokens:
             return True
@@ -199,19 +200,22 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
             source = position_embeddings.detach().clone()
             self._ast_pos_embed_cache[int(source.shape[1])] = source
 
-        source_patch = source[:, 2:, :]
+        source_patch = source[:, NUM_SPECIAL_TOKENS:, :]
         source_tokens = source_patch.shape[1]
         source_freq = (cfg_num_mel_bins - patch_size) // freq_stride + 1
         source_time = (cfg_max_length - patch_size) // time_stride + 1
         if source_freq < 1 or source_time < 1 or source_freq * source_time != source_tokens:
             return False
 
+        # Convert token sequence [batch, tokens, hidden] into [batch, hidden, freq, time]
+        # so bilinear interpolation can resize the 2D patch grid.
         source_patch = source_patch.reshape(1, source_freq, source_time, source.shape[-1]).permute(0, 3, 1, 2)
         resized_patch = torch.nn.functional.interpolate(
             source_patch, size=(target_freq, target_time), mode="bilinear", align_corners=False
         )
+        # Convert back from [batch, hidden, freq, time] to token sequence format.
         resized_patch = resized_patch.permute(0, 2, 3, 1).reshape(1, target_freq * target_time, source.shape[-1])
-        resized = torch.cat([source[:, :2, :], resized_patch], dim=1).to(
+        resized = torch.cat([source[:, :NUM_SPECIAL_TOKENS, :], resized_patch], dim=1).to(
             device=position_embeddings.device, dtype=position_embeddings.dtype
         )
 

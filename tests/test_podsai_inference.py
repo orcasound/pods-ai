@@ -477,8 +477,11 @@ class TestPodsAIInferenceIndexing:
         mock_model.config = mock_config
         mock_model.audio_spectrogram_transformer = Mock()
         mock_model.audio_spectrogram_transformer.embeddings = Mock()
+        original_freq_tokens = (mock_config.num_mel_bins - mock_config.patch_size) // mock_config.frequency_stride + 1
+        original_time_tokens = (mock_config.max_length - mock_config.patch_size) // mock_config.time_stride + 1
+        original_token_count = (original_freq_tokens * original_time_tokens) + 2
         mock_model.audio_spectrogram_transformer.embeddings.position_embeddings = torch.nn.Parameter(
-            torch.zeros((1, 1214, 4), dtype=torch.float32)
+            torch.zeros((1, original_token_count, 4), dtype=torch.float32)
         )
         mock_model.to = Mock(return_value=mock_model)
         mock_model.eval = Mock(return_value=mock_model)
