@@ -450,11 +450,11 @@ class TestPodsAIInferenceIndexing:
 
     @patch('podsai_inference.AutoModelForAudioClassification')
     @patch('podsai_inference.AutoFeatureExtractor')
-    def test_ast_path_uses_fixed_model_max_length(
+    def test_ast_path_uses_segment_frame_length(
         self, mock_extractor_class, mock_model_class,
         mock_feature_extractor, synthetic_audio_60s
     ):
-        """AST path must use fixed max_length for positional-embedding compatibility."""
+        """AST path should use segment frame length when embeddings can be resized."""
         mock_model = Mock()
         mock_config = Mock()
         mock_config.id2label = {
@@ -469,7 +469,17 @@ class TestPodsAIInferenceIndexing:
         mock_config.architectures = ["ASTForAudioClassification"]
         mock_config.model_type = "audio-spectrogram-transformer"
         mock_config._commit_hash = None
+        mock_config.patch_size = 16
+        mock_config.frequency_stride = 10
+        mock_config.time_stride = 10
+        mock_config.max_length = 1024
+        mock_config.num_mel_bins = 128
         mock_model.config = mock_config
+        mock_model.audio_spectrogram_transformer = Mock()
+        mock_model.audio_spectrogram_transformer.embeddings = Mock()
+        mock_model.audio_spectrogram_transformer.embeddings.position_embeddings = torch.nn.Parameter(
+            torch.zeros((1, 1214, 4), dtype=torch.float32)
+        )
         mock_model.to = Mock(return_value=mock_model)
         mock_model.eval = Mock(return_value=mock_model)
 
@@ -494,7 +504,8 @@ class TestPodsAIInferenceIndexing:
 
         assert len(result["local_confidences"]) == 29
         assert call_shapes, "Expected at least one AST forward pass."
-        assert all(shape[1] == mock_feature_extractor.max_length for shape in call_shapes)
+        # 3 seconds with 10ms frame shift -> 300 frames.
+        assert all(shape[1] == 300 for shape in call_shapes)
 
 
 class TestPodsAIInferenceErrorHandling:
