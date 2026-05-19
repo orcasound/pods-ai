@@ -279,7 +279,8 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
         # so each window must be padded/truncated to the configured max_length.
         # Prefer model config value when present, then fall back to feature extractor.
         model_max_length = getattr(self.model.config, "max_length", max_length)
-        target_frames = model_max_length if isinstance(model_max_length, int) and model_max_length > 0 else max_length
+        has_valid_model_max_length = isinstance(model_max_length, int) and model_max_length > 0
+        target_frames = model_max_length if has_valid_model_max_length else max_length
 
         # Slice each window, apply per-utterance mean normalisation, and pad to target_frames.
         # This replicates ASTFeatureExtractor._extract_fbank_features() for each window.
