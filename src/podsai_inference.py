@@ -31,6 +31,9 @@ SEGMENT_GROUP_SIZE = 10
 # use the feature extractor directly.
 MODEL_TYPE_AST = "audio-spectrogram-transformer"
 NUM_SPECIAL_TOKENS = 2
+DEFAULT_AST_PATCH_SIZE = 16
+DEFAULT_AST_FREQUENCY_STRIDE = 10
+DEFAULT_AST_TIME_STRIDE = 10
 
 
 class PodsAIInference(ModelInference):  # Inherit from ModelInference
@@ -167,7 +170,13 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
     def _ensure_ast_position_embeddings(
         self, target_frames: int, num_mel_bins: int
     ) -> bool:
-        """Resize AST position embeddings to match the requested spectrogram shape."""
+        """
+        Resize AST position embeddings to match the requested spectrogram shape.
+
+        Returns:
+            True if embeddings already match target shape or were resized successfully.
+            False if AST embedding resize is unavailable for the current model.
+        """
         ast_module = getattr(self.model, "audio_spectrogram_transformer", None)
         embeddings = getattr(ast_module, "embeddings", None)
         position_embeddings = getattr(embeddings, "position_embeddings", None)
@@ -175,9 +184,9 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
             return False
 
         config = self.model.config
-        patch_size = int(getattr(config, "patch_size", 16))
-        freq_stride = int(getattr(config, "frequency_stride", 10))
-        time_stride = int(getattr(config, "time_stride", 10))
+        patch_size = int(getattr(config, "patch_size", DEFAULT_AST_PATCH_SIZE))
+        freq_stride = int(getattr(config, "frequency_stride", DEFAULT_AST_FREQUENCY_STRIDE))
+        time_stride = int(getattr(config, "time_stride", DEFAULT_AST_TIME_STRIDE))
         cfg_max_length = int(getattr(config, "max_length", target_frames))
         cfg_num_mel_bins = int(getattr(config, "num_mel_bins", num_mel_bins))
 
@@ -195,12 +204,12 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
             embeddings.position_embeddings = torch.nn.Parameter(resized, requires_grad=False)
             return True
 
-        source = self._ast_pos_embed_cache.get(int(position_embeddings.shape[1]))
-        if source is None:
-            source = position_embeddings.detach().clone()
-            self._ast_pos_embed_cache[int(source.shape[1])] = source
+        source_embeddings = self._ast_pos_embed_cache.get(int(position_embeddings.shape[1]))
+        if source_embeddings is None:
+            source_embeddings = position_embeddings.detach().clone()
+            self._ast_pos_embed_cache[int(source_embeddings.shape[1])] = source_embeddings
 
-        source_patch = source[:, NUM_SPECIAL_TOKENS:, :]
+        source_patch = source_embeddings[:, NUM_SPECIAL_TOKENS:, :]
         source_tokens = source_patch.shape[1]
         source_freq = (cfg_num_mel_bins - patch_size) // freq_stride + 1
         source_time = (cfg_max_length - patch_size) // time_stride + 1
@@ -209,13 +218,13 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
 
         # Convert token sequence [batch, tokens, hidden] into [batch, hidden, freq, time]
         # so bilinear interpolation can resize the 2D patch grid.
-        source_patch = source_patch.reshape(1, source_freq, source_time, source.shape[-1]).permute(0, 3, 1, 2)
+        source_patch = source_patch.reshape(1, source_freq, source_time, source_embeddings.shape[-1]).permute(0, 3, 1, 2)
         resized_patch = torch.nn.functional.interpolate(
             source_patch, size=(target_freq, target_time), mode="bilinear", align_corners=False
         )
         # Convert back from [batch, hidden, freq, time] to token sequence format.
-        resized_patch = resized_patch.permute(0, 2, 3, 1).reshape(1, target_freq * target_time, source.shape[-1])
-        resized = torch.cat([source[:, :NUM_SPECIAL_TOKENS, :], resized_patch], dim=1).to(
+        resized_patch = resized_patch.permute(0, 2, 3, 1).reshape(1, target_freq * target_time, source_embeddings.shape[-1])
+        resized = torch.cat([source_embeddings[:, :NUM_SPECIAL_TOKENS, :], resized_patch], dim=1).to(
             device=position_embeddings.device, dtype=position_embeddings.dtype
         )
 
