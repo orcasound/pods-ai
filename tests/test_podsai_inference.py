@@ -84,6 +84,7 @@ def mock_podsai_model():
     # Set metadata attributes that _print_model_metadata expects.
     mock_config._name_or_path = "test-model"
     mock_config.architectures = ["Wav2Vec2ForSequenceClassification"]
+    mock_config.model_type = "wav2vec2"
     mock_config._commit_hash = None  # Optional, can be None
 
     mock_model.config = mock_config
@@ -507,7 +508,6 @@ class TestPodsAIInferenceErrorHandling:
             PodsAIInference("test-model-path")
 
 
-@pytest.mark.usefixtures()
 class TestIntegrationWithRealModels:
     """Integration tests that require the real PODS-AI model."""
 
@@ -520,9 +520,10 @@ class TestIntegrationWithRealModels:
         """Inference on a 60-second wav file must complete in under 10 seconds.
 
         This test guards against performance regressions in the inference pipeline.
-        With the full-audio spectrogram optimisation (one fbank call instead of 29)
-        and mini-batched model forward passes, inference on a 60-second clip should
-        complete well within the 10-second budget even on a CPU-only machine.
+        For AST models the full-audio spectrogram optimisation (one fbank call
+        instead of one per segment) keeps the budget well under 10 seconds on a
+        CPU-only machine.  For Wav2Vec2 (and other raw-audio) models the raw-audio
+        path is used instead; both should comfortably fit the 10-second budget.
         """
         from podsai_inference import PodsAIInference
 
