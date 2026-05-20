@@ -8,7 +8,8 @@ Usage:
     python compare_models.py [options]
 
 Loads a test set from testing_samples.csv, then runs each enabled model
-(fastai, orcahello, podsai, oldpodsai) on the corresponding 60-second WAV files and
+(fastai, orcahello, podsai (AST), oldpodsai (Wav2Vec2)) on the corresponding
+60-second WAV files and
 reports correct identifications, false positives, and false negatives per model.
 
 A "correct" identification means:
@@ -34,6 +35,12 @@ PODSAI_MODEL_ID = "davethaler/whale-call-detector"
 # renovate: datasource=git-refs depName=https://huggingface.co/davethaler/whale-call-detector versioning=git.
 PODSAI_MODEL_REVISION = "d1eedf5c614268da7551039a84dfc35d317168b9"
 OLD_PODSAI_MODEL_REVISION = "cef82c6e9ee661646ea0c583aeb68f4f7ec6d9d8"
+MODEL_TYPE_TO_INFERENCE_TYPE = {
+    "fastai": "fastai",
+    "orcahello": "orcahello",
+    "podsai": "podsai",
+    "oldpodsai": "podsai",
+}
 
 
 @dataclass
@@ -184,23 +191,27 @@ def evaluate_model(
     samples: list[TestSample],
     wav_dir: Path,
     model_revision: Optional[str] = None,
+    result_model_type: Optional[str] = None,
 ) -> ModelResult:
     """
     Run a model against all test samples and accumulate results.
 
     Args:
-        model_type: One of 'fastai', 'orcahello', or 'podsai'.
+        model_type: One of 'fastai', 'orcahello', 'podsai', or 'oldpodsai'.
+                    'oldpodsai' is mapped to 'podsai' inference internally.
         model_path: Path to the model (or HuggingFace Hub model ID).
         samples: List of testing samples.
         wav_dir: Root directory containing testing WAV files.
         model_revision: Git commit hash to pin the HuggingFace Hub model revision.
                         Only used when model_path is a Hub model ID (not a local path).
+        result_model_type: Optional display name to store in ModelResult.model_type.
+                           If omitted, model_type is used.
 
     Returns:
         ModelResult with counts of correct, false positive, and false negative predictions,
         plus timing information for predict() calls.
     """
-    result = ModelResult(model_type=model_type, total=len(samples))
+    result = ModelResult(model_type=result_model_type or model_type, total=len(samples))
 
     for sample in samples:
         wav_path = find_wav_file(sample, wav_dir)
@@ -503,15 +514,15 @@ def main() -> int:
     results = []
     for model_type in models:
         print(f"Evaluating model: {model_type}")
-        inference_model_type = "podsai" if model_type == "oldpodsai" else model_type
+        inference_model_type = MODEL_TYPE_TO_INFERENCE_TYPE[model_type]
         model_result = evaluate_model(
             model_type=inference_model_type,
             model_path=model_paths[model_type],
             samples=samples,
             wav_dir=wav_dir,
             model_revision=model_revisions[model_type],
+            result_model_type=model_type,
         )
-        model_result.model_type = model_type
         results.append(model_result)
         print()
 

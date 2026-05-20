@@ -434,7 +434,7 @@ class TestRunInferencePodsAI:
         finally:
             Path(wav_path).unlink(missing_ok=True)
 
-    def test_wav2vec2_type_uses_wav2vec2_revision(self):
+    def test_wav2vec2_variant_uses_wav2vec2_revision(self):
         """When --type wav2vec2 is selected, the Wav2Vec2 pinned revision is used."""
         wav_path = _make_wav()
         try:
@@ -664,7 +664,7 @@ class TestRunInferenceErrors:
         wav_path = _make_wav()
         try:
             from run_inference import run_inference
-            with pytest.raises(ValueError, match="Unknown PODS-AI model type"):
+            with pytest.raises(ValueError, match="Unknown PODS-AI model variant"):
                 run_inference(wav_path, model_type="podsai", model_path=None, model_variant="unknown")
         finally:
             Path(wav_path).unlink(missing_ok=True)

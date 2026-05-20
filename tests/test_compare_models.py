@@ -770,6 +770,7 @@ class TestMainCLI:
 
         assert result == 0
         assert mock_evaluate.call_count == 4
+        # Order matches default models: fastai, orcahello, podsai, oldpodsai.
         called_revisions = [call.kwargs["model_revision"] for call in mock_evaluate.call_args_list]
         assert called_revisions == [None, None, PODSAI_MODEL_REVISION, OLD_PODSAI_MODEL_REVISION]
 
