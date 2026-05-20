@@ -449,7 +449,7 @@ python src/compare_models.py \
     --podsai-model-path /path/to/podsai-model
 ```
 
-Output:
+Output with a Wav2Vec2 model:
 ```
 Loaded 160 test samples from output\csv\testing_samples.csv
 WAV directory: output/testing-wav
@@ -512,9 +512,9 @@ Model Comparison Summary
 ==========================================================================================
 Model           Evaluated   Correct  Accuracy     FP     FP%     FN     FN%   Avg Time
 ------------------------------------------------------------------------------------------
-fastai                160        68     42.5%     61   38.1%     31   19.4%     11.56s
-orcahello             160        42     26.2%     95   59.4%     23   14.4%      4.08s
-podsai                160       116     72.5%     24   15.0%     20   12.5%     26.79s
+fastai                160        68     42.5%     61   38.1%     31   19.4%     19.48s
+orcahello             160        42     26.2%     95   59.4%     23   14.4%      4.95s
+podsai                160       119     74.4%     20   12.5%     21   13.1%      6.56s
 ==========================================================================================
 
 Definitions:
@@ -546,10 +546,10 @@ Confusion Matrix for orcahello (rows=actual, cols=predicted):
 Confusion Matrix for podsai (rows=actual, cols=predicted):
                  human   humpback     jingle   resident  transient     vessel      water
       human          9          1          0          0          0          0          0
-   humpback          0         15          0          6          0          8          1
-     jingle          0          0          6          0          0          4          0
-   resident          1          0          0         40          0         12          7
-  transient          0          1          0         18         11          0          0
+   humpback          0         19          0          3          0          7          1
+     jingle          0          0          9          0          0          1          0
+   resident          1          3          0         39          0         12          5
+  transient          0          4          0         17          8          1          0
      vessel          0          0          0          0          0         10          0
       water          0          0          0          0          0          0         10
 ```
