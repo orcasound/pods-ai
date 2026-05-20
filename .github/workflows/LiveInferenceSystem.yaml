@@ -85,4 +85,6 @@ jobs:
             pods-ai-inference:ci \
             --max_live_iterations 2 2>&1 | tee output.log
           grep -q "\[iter 1\]" output.log
-          grep -q "No HLS folders" output.log || grep -q "Failed to load M3U8" output.log || grep -q "global_prediction" output.log
+          grep -q "No HLS folders" output.log || \
+          grep -q "Failed to load M3U8" output.log || \
+          grep -q "Inference: prediction=" output.log
