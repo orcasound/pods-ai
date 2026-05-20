@@ -49,6 +49,8 @@ jobs:
     runs-on: ubuntu-latest
     needs: changes
     if: ${{ needs.changes.outputs.src == 'true' }}
+    env:
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
 
     permissions:
       contents: read
