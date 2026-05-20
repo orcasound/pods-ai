@@ -504,12 +504,23 @@ class TestPodsAIInferenceIndexing:
         from podsai_inference import PodsAIInference
 
         model = PodsAIInference("test-model-path")
+
         result = model.predict(synthetic_audio_60s, segment_duration=3, hop_duration=2)
+        first_call_shapes = call_shapes.copy()
 
         assert len(result["local_confidences"]) == 29
-        assert call_shapes, "Expected at least one AST forward pass."
+        assert first_call_shapes, "Expected at least one AST forward pass."
         # 3 seconds with 10ms frame shift -> 300 frames.
-        assert all(shape[1] == 300 for shape in call_shapes)
+        assert all(shape[1] == 300 for shape in first_call_shapes)
+
+        call_shapes.clear()
+        second_result = model.predict(synthetic_audio_60s, segment_duration=5, hop_duration=2)
+        second_call_shapes = call_shapes.copy()
+
+        assert len(second_result["local_confidences"]) == 28
+        assert second_call_shapes, "Expected at least one AST forward pass on repeated predict()."
+        # 5 seconds with 10ms frame shift -> 500 frames.
+        assert all(shape[1] == 500 for shape in second_call_shapes)
 
 
 class TestPodsAIInferenceErrorHandling:

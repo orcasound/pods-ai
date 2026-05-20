@@ -203,27 +203,32 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
         if target_freq < 1 or target_time < 1:
             return False
         target_tokens = target_freq * target_time + NUM_SPECIAL_TOKENS
+        target_cache_key = (target_freq, target_time)
 
         if position_embeddings.shape[1] == target_tokens:
             return True
 
-        if target_tokens in self._ast_pos_embed_cache:
-            resized = self._ast_pos_embed_cache[target_tokens]
+        if target_cache_key in self._ast_pos_embed_cache:
+            resized = self._ast_pos_embed_cache[target_cache_key]
             embeddings.position_embeddings = torch.nn.Parameter(resized, requires_grad=False)
             return True
 
-        source_embeddings = self._ast_pos_embed_cache.get(int(position_embeddings.shape[1]))
+        source_freq = (cfg_num_mel_bins - patch_size) // freq_stride + 1
+        source_time = (cfg_max_length - patch_size) // time_stride + 1
+        if source_freq < 1 or source_time < 1:
+            return False
+        source_cache_key = (source_freq, source_time)
+
+        source_embeddings = self._ast_pos_embed_cache.get(source_cache_key)
         if source_embeddings is None:
             # Keep an immutable copy of the current embeddings because we mutate
             # model embeddings in-place for resized token grids.
             source_embeddings = position_embeddings.detach().clone()
-            self._ast_pos_embed_cache[int(source_embeddings.shape[1])] = source_embeddings
+            self._ast_pos_embed_cache[source_cache_key] = source_embeddings
 
         source_patch = source_embeddings[:, NUM_SPECIAL_TOKENS:, :]
         source_tokens = source_patch.shape[1]
-        source_freq = (cfg_num_mel_bins - patch_size) // freq_stride + 1
-        source_time = (cfg_max_length - patch_size) // time_stride + 1
-        if source_freq < 1 or source_time < 1 or source_freq * source_time != source_tokens:
+        if source_freq * source_time != source_tokens:
             return False
 
         # Convert token sequence [batch, tokens, hidden] into [batch, hidden, freq, time]
