@@ -25,7 +25,7 @@ PODSAI_MODEL_REVISION = "d1eedf5c614268da7551039a84dfc35d317168b9"
 PROPOSED_DESCRIPTION_EXTRA_CLASSES = {"vessel", "human", "jingle"}
 
 
-def _build_proposed_description(
+def build_proposed_description(
     global_prediction_label: str,
     local_prediction_labels: list[str],
 ) -> str:
@@ -163,7 +163,7 @@ def run_inference(wav_path: str, model_type: str = "podsai",
             f"Unknown model type: {model_type!r}. Use 'podsai', 'fastai', or 'orcahello'."
         )
 
-    proposed_description = _build_proposed_description(global_prediction_label, local_prediction_labels)
+    proposed_description = build_proposed_description(global_prediction_label, local_prediction_labels)
 
     return {
         "probabilities": probabilities,
