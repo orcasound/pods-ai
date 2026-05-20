@@ -8,7 +8,9 @@ on:
     branches:
       - main
     paths:
-      - 'LiveInferenceSystem/deploy/*-configmap.yaml'
+      # Only andrews-bay is deployed to AKS for now (testing phase).
+      # Add more locations here once side-by-side testing with OrcaHello is complete.
+      - 'LiveInferenceSystem/deploy/andrews-bay-configmap.yaml'
   workflow_dispatch:  # Allow manual workflow invocation from the Github Actions UI
 
 concurrency:
@@ -46,10 +48,11 @@ jobs:
         id: changed-files
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            # For manual triggers, apply all configmap files
-            CHANGED=$(ls LiveInferenceSystem/deploy/*-configmap.yaml 2>/dev/null || true)
+            # For manual triggers, apply only the currently-enabled location(s).
+            # Other locations exist in the repo but are not yet deployed to AKS.
+            CHANGED=$(ls LiveInferenceSystem/deploy/andrews-bay-configmap.yaml 2>/dev/null || true)
           else
-            CHANGED=$(git diff --name-only HEAD~1 HEAD -- 'LiveInferenceSystem/deploy/*-configmap.yaml')
+            CHANGED=$(git diff --name-only HEAD~1 HEAD -- 'LiveInferenceSystem/deploy/andrews-bay-configmap.yaml')
           fi
           echo "files=$CHANGED" >> $GITHUB_OUTPUT
 
