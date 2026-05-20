@@ -81,7 +81,7 @@ jobs:
       - name: Smoke test container (LiveHLS)
         run: |
           docker run --rm \
-            -v $PWD/LiveInferenceSystem/tests/orch_configs/LiveHLS/LiveHLS_OrcasoundLab.yml:/config/config.yml \
+            -v $PWD/LiveInferenceSystem/tests/orch_configs/LiveHLS/LiveHLS_AndrewsBay.yml:/config/config.yml \
             pods-ai-inference:ci \
             --max_live_iterations 2 2>&1 | tee output.log
           grep -q "\[iter 1\]" output.log
