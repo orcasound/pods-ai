@@ -101,7 +101,7 @@ def test_build_cosmosdb_metadata_comments_appends_dominant_extra_class() -> None
 
 
 def test_upload_detection_to_azure_skips_existing_blobs(tmp_path) -> None:
-    """Blob uploads should be skipped when the clip/spectrogram names already exist."""
+    """BlobAlreadyExists upload races should be treated as skip/no-op."""
     clip_path = tmp_path / "existing.wav"
     clip_path.write_bytes(b"clip")
     spectrogram_path = tmp_path / "existing.png"
@@ -114,10 +114,13 @@ def test_upload_detection_to_azure_skips_existing_blobs(tmp_path) -> None:
         "global_prediction_label": "resident",
     }
 
+    class BlobAlreadyExistsError(Exception):
+        error_code = "BlobAlreadyExists"
+
     audio_blob_client = Mock()
-    audio_blob_client.exists.return_value = True
+    audio_blob_client.upload_blob.side_effect = BlobAlreadyExistsError()
     spectrogram_blob_client = Mock()
-    spectrogram_blob_client.exists.return_value = True
+    spectrogram_blob_client.upload_blob.side_effect = BlobAlreadyExistsError()
     blob_service_client = Mock()
     blob_service_client.get_blob_client.side_effect = [
         audio_blob_client,
@@ -142,7 +145,7 @@ def test_upload_detection_to_azure_skips_existing_blobs(tmp_path) -> None:
         logger=Mock(),
     )
 
-    audio_blob_client.exists.assert_called_once_with()
-    spectrogram_blob_client.exists.assert_called_once_with()
-    audio_blob_client.upload_blob.assert_not_called()
-    spectrogram_blob_client.upload_blob.assert_not_called()
+    audio_blob_client.exists.assert_not_called()
+    spectrogram_blob_client.exists.assert_not_called()
+    audio_blob_client.upload_blob.assert_called_once()
+    spectrogram_blob_client.upload_blob.assert_called_once()

@@ -337,16 +337,23 @@ def upload_detection_to_azure(
     negative_labels: Optional[set[str]] = None,
 ) -> tuple[str, str, str]:
     """Upload detection assets and metadata for a positive multiclass detection."""
+
+    def _upload_or_skip_existing(blob_client: Any, file_path: str, blob_name: str) -> None:
+        try:
+            with open(file_path, "rb") as data:
+                blob_client.upload_blob(data)
+        except Exception as exc:
+            if getattr(exc, "error_code", None) == "BlobAlreadyExists":
+                logger.info(f"Blob already exists, skipping upload: {blob_name}")
+                return
+            raise
+
     audio_clip_name = os.path.basename(clip_path)
     audio_blob_client = blob_service_client.get_blob_client(
         container=AZURE_STORAGE_AUDIO_CONTAINER_NAME,
         blob=audio_clip_name,
     )
-    if audio_blob_client.exists():
-        logger.info(f"Audio blob already exists, skipping upload: {audio_clip_name}")
-    else:
-        with open(clip_path, "rb") as data:
-            audio_blob_client.upload_blob(data)
+    _upload_or_skip_existing(audio_blob_client, clip_path, audio_clip_name)
     audio_uri = assemble_blob_uri(AZURE_STORAGE_AUDIO_CONTAINER_NAME, audio_clip_name)
 
     spectrogram_name = os.path.basename(spectrogram_path)
@@ -354,11 +361,9 @@ def upload_detection_to_azure(
         container=AZURE_STORAGE_SPECTROGRAM_CONTAINER_NAME,
         blob=spectrogram_name,
     )
-    if spectrogram_blob_client.exists():
-        logger.info(f"Spectrogram blob already exists, skipping upload: {spectrogram_name}")
-    else:
-        with open(spectrogram_path, "rb") as data:
-            spectrogram_blob_client.upload_blob(data)
+    _upload_or_skip_existing(
+        spectrogram_blob_client, spectrogram_path, spectrogram_name
+    )
     spectrogram_uri = assemble_blob_uri(
         AZURE_STORAGE_SPECTROGRAM_CONTAINER_NAME,
         spectrogram_name,
