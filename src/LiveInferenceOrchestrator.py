@@ -342,8 +342,11 @@ def upload_detection_to_azure(
         container=AZURE_STORAGE_AUDIO_CONTAINER_NAME,
         blob=audio_clip_name,
     )
-    with open(clip_path, "rb") as data:
-        audio_blob_client.upload_blob(data, overwrite=True)
+    if audio_blob_client.exists():
+        logger.info(f"Audio blob already exists, skipping upload: {audio_clip_name}")
+    else:
+        with open(clip_path, "rb") as data:
+            audio_blob_client.upload_blob(data)
     audio_uri = assemble_blob_uri(AZURE_STORAGE_AUDIO_CONTAINER_NAME, audio_clip_name)
 
     spectrogram_name = os.path.basename(spectrogram_path)
@@ -351,8 +354,11 @@ def upload_detection_to_azure(
         container=AZURE_STORAGE_SPECTROGRAM_CONTAINER_NAME,
         blob=spectrogram_name,
     )
-    with open(spectrogram_path, "rb") as data:
-        spectrogram_blob_client.upload_blob(data, overwrite=True)
+    if spectrogram_blob_client.exists():
+        logger.info(f"Spectrogram blob already exists, skipping upload: {spectrogram_name}")
+    else:
+        with open(spectrogram_path, "rb") as data:
+            spectrogram_blob_client.upload_blob(data)
     spectrogram_uri = assemble_blob_uri(
         AZURE_STORAGE_SPECTROGRAM_CONTAINER_NAME,
         spectrogram_name,

@@ -100,8 +100,8 @@ def test_build_cosmosdb_metadata_comments_appends_dominant_extra_class() -> None
     assert metadata["comments"] == "AI: resident and vessel"
 
 
-def test_upload_detection_to_azure_overwrites_existing_blobs(tmp_path) -> None:
-    """Blob uploads should be idempotent when the clip/spectrogram names already exist."""
+def test_upload_detection_to_azure_skips_existing_blobs(tmp_path) -> None:
+    """Blob uploads should be skipped when the clip/spectrogram names already exist."""
     clip_path = tmp_path / "existing.wav"
     clip_path.write_bytes(b"clip")
     spectrogram_path = tmp_path / "existing.png"
@@ -115,7 +115,9 @@ def test_upload_detection_to_azure_overwrites_existing_blobs(tmp_path) -> None:
     }
 
     audio_blob_client = Mock()
+    audio_blob_client.exists.return_value = True
     spectrogram_blob_client = Mock()
+    spectrogram_blob_client.exists.return_value = True
     blob_service_client = Mock()
     blob_service_client.get_blob_client.side_effect = [
         audio_blob_client,
@@ -140,5 +142,7 @@ def test_upload_detection_to_azure_overwrites_existing_blobs(tmp_path) -> None:
         logger=Mock(),
     )
 
-    assert audio_blob_client.upload_blob.call_args.kwargs["overwrite"] is True
-    assert spectrogram_blob_client.upload_blob.call_args.kwargs["overwrite"] is True
+    audio_blob_client.exists.assert_called_once_with()
+    spectrogram_blob_client.exists.assert_called_once_with()
+    audio_blob_client.upload_blob.assert_not_called()
+    spectrogram_blob_client.upload_blob.assert_not_called()
