@@ -132,6 +132,7 @@ def test_upload_detection_to_azure_skips_existing_blobs(tmp_path) -> None:
     database.get_container_client.return_value = container
     cosmos_client = Mock()
     cosmos_client.get_database_client.return_value = database
+    logger = Mock()
 
     orchestrator.upload_detection_to_azure(
         clip_path=str(clip_path),
@@ -142,10 +143,12 @@ def test_upload_detection_to_azure_skips_existing_blobs(tmp_path) -> None:
         model_id="podsai-model",
         blob_service_client=blob_service_client,
         cosmos_client=cosmos_client,
-        logger=Mock(),
+        logger=logger,
     )
 
     audio_blob_client.exists.assert_not_called()
     spectrogram_blob_client.exists.assert_not_called()
     audio_blob_client.upload_blob.assert_called_once()
     spectrogram_blob_client.upload_blob.assert_called_once()
+    logger.info.assert_any_call("Blob already exists, skipping upload: existing.wav")
+    logger.info.assert_any_call("Blob already exists, skipping upload: existing.png")
