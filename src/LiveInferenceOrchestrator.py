@@ -343,7 +343,7 @@ def upload_detection_to_azure(
         blob=audio_clip_name,
     )
     with open(clip_path, "rb") as data:
-        audio_blob_client.upload_blob(data)
+        audio_blob_client.upload_blob(data, overwrite=True)
     audio_uri = assemble_blob_uri(AZURE_STORAGE_AUDIO_CONTAINER_NAME, audio_clip_name)
 
     spectrogram_name = os.path.basename(spectrogram_path)
@@ -352,7 +352,7 @@ def upload_detection_to_azure(
         blob=spectrogram_name,
     )
     with open(spectrogram_path, "rb") as data:
-        spectrogram_blob_client.upload_blob(data)
+        spectrogram_blob_client.upload_blob(data, overwrite=True)
     spectrogram_uri = assemble_blob_uri(
         AZURE_STORAGE_SPECTROGRAM_CONTAINER_NAME,
         spectrogram_name,
