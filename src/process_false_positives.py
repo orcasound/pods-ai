@@ -49,8 +49,7 @@ def get_corrected_class(comments: str) -> Optional[str]:
     phrases like "AI: humpback" do not influence the result.  Explicit negations
     ("No humpback", "No humpback nor vessel") are recognised:
 
-    * "No humpback" alone – corrected class is not a whale; returns ``None``
-      when no other positive signal is present (ambiguous).
+    * "No humpback" alone (no other positive signal) – returns ``"water"``.
     * "No humpback nor vessel" (and no other positive signal) – returns
       ``"water"``.
     """
@@ -82,11 +81,8 @@ def get_corrected_class(comments: str) -> Optional[str]:
         return "jingle"
     if "water" in text:
         return "water"
-    # "No humpback nor vessel" with no remaining positive signal → water.
-    if no_humpback and no_vessel:
-        return "water"
-
-    return None
+    # No positive signal found: the sound is ambient noise.
+    return "water"
 
 
 def process_false_positives(

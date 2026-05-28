@@ -49,13 +49,13 @@ class TestGetCorrectedClass:
         # Only the auto-generated line is present; nothing else to infer from → None.
         assert get_corrected_class("AI: humpback") is None
 
-    def test_no_humpback_alone_is_ambiguous(self):
-        """'No humpback' alone gives no positive signal → None."""
-        assert get_corrected_class("No humpback") is None
+    def test_no_humpback_alone_returns_water(self):
+        """'No humpback' alone gives no positive signal → water."""
+        assert get_corrected_class("No humpback") == "water"
 
-    def test_ai_prefix_plus_no_humpback_is_ambiguous(self):
-        """'AI: humpback\\nNo humpback' is a false humpback with no other signal → None."""
-        assert get_corrected_class("AI: humpback\nNo humpback") is None
+    def test_ai_prefix_plus_no_humpback_returns_water(self):
+        """'AI: humpback\\nNo humpback' is a false humpback with no other signal → water."""
+        assert get_corrected_class("AI: humpback\nNo humpback") == "water"
 
     def test_no_humpback_nor_vessel_returns_water(self):
         """'No humpback nor vessel' with no other signal should resolve to water."""
@@ -74,8 +74,8 @@ class TestGetCorrectedClass:
         assert get_corrected_class("Humpback whale song") == "humpback"
 
     def test_no_vessel_prevents_vessel_match(self):
-        """'No vessel' should suppress the vessel keyword match."""
-        assert get_corrected_class("No vessel here") is None
+        """'No vessel' should suppress the vessel keyword match → water."""
+        assert get_corrected_class("No vessel here") == "water"
 
 
 class TestAppendManualSamples:
