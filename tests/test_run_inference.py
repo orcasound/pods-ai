@@ -691,6 +691,15 @@ class TestMainCLI:
             from run_inference import main
             assert main() == 1
 
+    def test_main_returns_one_when_only_one_download_arg_provided(self):
+        """main() returns exit code 1 when only one of download args is provided."""
+        with patch(
+            "sys.argv",
+            ["run_inference.py", "--node-name", "rpi_sunset_bay", "--model", "fastai", "--model-path", "./model"],
+        ):
+            from run_inference import main
+            assert main() == 1
+
     def test_main_returns_one_when_wav_and_download_args_provided(self):
         """main() returns exit code 1 when both wav_file and download args are provided."""
         wav_path = _make_wav()
@@ -732,7 +741,7 @@ class TestMainCLI:
         wav_path = _make_wav()
         try:
             fake_extract_module = SimpleNamespace(
-                download_60s_audio=lambda _node_name, _timestamp_str, _tmp_dir: wav_path
+                download_60s_audio=lambda node_name, timestamp_str, tmp_dir: wav_path
             )
             mock_model = _make_fastai_model_mock()
             with patch(
@@ -759,7 +768,7 @@ class TestMainCLI:
     def test_main_returns_one_when_download_fails(self):
         """main() returns exit code 1 when download_60s_audio returns None."""
         fake_extract_module = SimpleNamespace(
-            download_60s_audio=lambda _node_name, _timestamp_str, _tmp_dir: None
+            download_60s_audio=lambda node_name, timestamp_str, tmp_dir: None
         )
         with patch(
             "sys.argv",

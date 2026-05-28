@@ -15,6 +15,7 @@ import argparse
 import sys
 import time
 from collections import Counter
+from contextlib import ExitStack
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Optional
@@ -288,55 +289,64 @@ def main() -> int:
     )
 
     args = parser.parse_args()
-    if args.wav_file:
-        if args.node_name or args.timestamp_str:
-            print(
-                "Error: provide either wav_file or --node-name/--timestamp-str, not both.",
-                file=sys.stderr,
-            )
-            return 1
-        wav_path = args.wav_file
-        if not Path(wav_path).exists():
-            print(f"Error: wav file not found: {wav_path}", file=sys.stderr)
-            return 1
-        temp_dir = None
-    else:
-        if not (args.node_name and args.timestamp_str):
-            print(
-                "Error: either provide wav_file, or provide both --node-name and --timestamp-str.",
-                file=sys.stderr,
-            )
-            return 1
-        temp_dir = TemporaryDirectory()
+    if (args.node_name is None) != (args.timestamp_str is None):
+        print(
+            "Error: --node-name and --timestamp-str must be provided together.",
+            file=sys.stderr,
+        )
+        return 1
+
+    with ExitStack() as stack:
+        if args.wav_file:
+            if args.node_name is not None:
+                print(
+                    "Error: provide either wav_file or --node-name/--timestamp-str, not both.",
+                    file=sys.stderr,
+                )
+                return 1
+            wav_path = args.wav_file
+            if not Path(wav_path).exists():
+                print(f"Error: wav file not found: {wav_path}", file=sys.stderr)
+                return 1
+        else:
+            if args.node_name is None:
+                print(
+                    "Error: either provide wav_file, or provide both --node-name and --timestamp-str.",
+                    file=sys.stderr,
+                )
+                return 1
+            try:
+                from extract_training_samples import download_60s_audio
+            except ImportError as e:
+                print(f"Failed to download wav: {e}", file=sys.stderr)
+                return 1
+            temp_dir = stack.enter_context(TemporaryDirectory())
+            try:
+                wav_path = download_60s_audio(args.node_name, args.timestamp_str, temp_dir)
+            except Exception as e:
+                print(f"Failed to download wav: {e}", file=sys.stderr)
+                return 1
+            if not wav_path:
+                print("Error: failed to download wav file.", file=sys.stderr)
+                return 1
+            if not Path(wav_path).exists():
+                print(f"Error: downloaded wav file not found: {wav_path}", file=sys.stderr)
+                return 1
+
         try:
-            from extract_training_samples import download_60s_audio
-
-            wav_path = download_60s_audio(args.node_name, args.timestamp_str, temp_dir.name)
+            results = run_inference(
+                wav_path,
+                model_type=args.model,
+                model_path=args.model_path,
+                model_revision=args.model_revision,
+                model_variant=args.type,
+            )
+        except ValueError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            return 1
         except Exception as e:
-            temp_dir.cleanup()
-            print(f"Failed to download wav: {e}", file=sys.stderr)
+            print(f"Inference failed: {e}", file=sys.stderr)
             return 1
-        if not wav_path:
-            temp_dir.cleanup()
-            print("Error: failed to download wav file.", file=sys.stderr)
-            return 1
-        if not Path(wav_path).exists():
-            temp_dir.cleanup()
-            print(f"Error: downloaded wav file not found: {wav_path}", file=sys.stderr)
-            return 1
-
-    try:
-        results = run_inference(wav_path, model_type=args.model, model_path=args.model_path,
-                                model_revision=args.model_revision, model_variant=args.type)
-    except ValueError as e:
-        print(f"Error: {e}", file=sys.stderr)
-        return 1
-    except Exception as e:
-        print(f"Inference failed: {e}", file=sys.stderr)
-        return 1
-    finally:
-        if temp_dir is not None:
-            temp_dir.cleanup()
 
     print_results(results, args.model)
     return 0
