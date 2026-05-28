@@ -85,6 +85,15 @@ def get_corrected_class(comments: str) -> Optional[str]:
     return "water"
 
 
+def _in_time_range(
+    ts: datetime,
+    start_time: Optional[datetime],
+    end_time: Optional[datetime],
+) -> bool:
+    """Return True if *ts* falls within [start_time, end_time] (inclusive, open bounds if None)."""
+    return (start_time is None or ts >= start_time) and (end_time is None or ts <= end_time)
+
+
 def process_false_positives(
     manual_samples_path: Path,
     output_dir: Path,
@@ -138,11 +147,7 @@ def process_false_positives(
             status = detection.status.lower()
             if status != "rejected":
                 # Count in-range non-rejected detections for diagnostic context.
-                in_time = (
-                    (start_time is None or detection.timestamp >= start_time)
-                    and (end_time is None or detection.timestamp <= end_time)
-                )
-                if in_time:
+                if _in_time_range(detection.timestamp, start_time, end_time):
                     if status == "confirmed":
                         summary["confirmed"] += 1
                     else:
