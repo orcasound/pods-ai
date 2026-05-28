@@ -8,6 +8,7 @@ Usage:
     python run_inference.py sample.wav
     python run_inference.py sample.wav --model podsai --model-path /path/to/podsai-model
     python run_inference.py sample.wav --model fastai --model-path ../model
+    python run_inference.py --node-name rpi_sunset_bay --timestamp-str 2025_01_15_12_30_00_PST
 """
 
 import argparse
@@ -15,6 +16,7 @@ import sys
 import time
 from collections import Counter
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import Optional
 
 from model_inference import get_model_inference
@@ -220,11 +222,29 @@ def main() -> int:
         Exit code: 0 on success, 1 on error.
     """
     parser = argparse.ArgumentParser(
-        description="Run model inference on a wav file and output per-class probabilities."
+        description=(
+            "Run model inference on a wav file and output per-class probabilities. "
+            "Provide either a local wav file path, or both --node-name and --timestamp-str "
+            "to download a 60-second sample first."
+        )
     )
     parser.add_argument(
         "wav_file",
+        nargs="?",
         help="Path to the wav file to score.",
+    )
+    parser.add_argument(
+        "--node-name",
+        default=None,
+        help="Feed node name (e.g., rpi_sunset_bay) used with --timestamp-str to download audio.",
+    )
+    parser.add_argument(
+        "--timestamp-str",
+        default=None,
+        help=(
+            "Timestamp string used with --node-name to download audio "
+            "(format: YYYY_MM_DD_HH_MM_SS_PST)."
+        ),
     )
     parser.add_argument(
         "--model",
@@ -268,10 +288,42 @@ def main() -> int:
     )
 
     args = parser.parse_args()
-    wav_path = args.wav_file
-    if not Path(wav_path).exists():
-        print(f"Error: wav file not found: {wav_path}", file=sys.stderr)
-        return 1
+    if args.wav_file:
+        if args.node_name or args.timestamp_str:
+            print(
+                "Error: provide either wav_file or --node-name/--timestamp-str, not both.",
+                file=sys.stderr,
+            )
+            return 1
+        wav_path = args.wav_file
+        if not Path(wav_path).exists():
+            print(f"Error: wav file not found: {wav_path}", file=sys.stderr)
+            return 1
+        temp_dir = None
+    else:
+        if not (args.node_name and args.timestamp_str):
+            print(
+                "Error: either provide wav_file, or provide both --node-name and --timestamp-str.",
+                file=sys.stderr,
+            )
+            return 1
+        temp_dir = TemporaryDirectory()
+        try:
+            from extract_training_samples import download_60s_audio
+
+            wav_path = download_60s_audio(args.node_name, args.timestamp_str, temp_dir.name)
+        except Exception as e:
+            temp_dir.cleanup()
+            print(f"Failed to download wav: {e}", file=sys.stderr)
+            return 1
+        if not wav_path:
+            temp_dir.cleanup()
+            print("Error: failed to download wav file.", file=sys.stderr)
+            return 1
+        if not Path(wav_path).exists():
+            temp_dir.cleanup()
+            print(f"Error: downloaded wav file not found: {wav_path}", file=sys.stderr)
+            return 1
 
     try:
         results = run_inference(wav_path, model_type=args.model, model_path=args.model_path,
@@ -282,6 +334,9 @@ def main() -> int:
     except Exception as e:
         print(f"Inference failed: {e}", file=sys.stderr)
         return 1
+    finally:
+        if temp_dir is not None:
+            temp_dir.cleanup()
 
     print_results(results, args.model)
     return 0
