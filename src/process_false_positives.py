@@ -95,8 +95,15 @@ def process_false_positives(
     start_time: Optional[datetime] = None,
     end_time: Optional[datetime] = None,
 ) -> dict[str, int]:
-    """Process rejected OrcaHello resident detections in the selected timeframe."""
+    """Process rejected OrcaHello detections in the selected timeframe.
+
+    The returned summary includes ``confirmed`` and ``unreviewed`` counters for
+    in-range detections that were not rejected, giving diagnostic context when
+    ``rejected`` is zero (e.g. because human review is still pending).
+    """
     summary = {
+        "confirmed": 0,
+        "unreviewed": 0,
         "rejected": 0,
         "download_failed": 0,
         "not_false_positive": 0,
@@ -126,7 +133,20 @@ def process_false_positives(
     for feed in feeds:
         print(f"Processing feed {feed.node_name}")
         for detection in get_orcahello_detections(feed):
-            if detection.status.lower() != "rejected" or detection.timestamp is None:
+            if detection.timestamp is None:
+                continue
+            status = detection.status.lower()
+            if status != "rejected":
+                # Count in-range non-rejected detections for diagnostic context.
+                in_time = (
+                    (start_time is None or detection.timestamp >= start_time)
+                    and (end_time is None or detection.timestamp <= end_time)
+                )
+                if in_time:
+                    if status == "confirmed":
+                        summary["confirmed"] += 1
+                    else:
+                        summary["unreviewed"] += 1
                 continue
             # OrcaHello detections are returned in descending timestamp order.
             # Once we are older than the requested start time, the remaining

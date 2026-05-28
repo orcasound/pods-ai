@@ -493,3 +493,46 @@ class TestProcessFalsePositives:
         assert mock_model.predict.call_count == 1
         assert mock_add_samples.call_count == 1
         assert mock_add_samples.call_args.kwargs["corrected_class"] == "vessel"
+
+    def test_counts_unreviewed_and_confirmed_in_range(self, tmp_path):
+        """Unreviewed and confirmed in-range detections should be counted for diagnostics."""
+        feed = _make_feed()
+        unreviewed = OrcaHelloDetection(
+            id="det_unreviewed",
+            feed=feed,
+            timestamp=datetime(2025, 1, 1, 10, 0, 0, tzinfo=timezone.utc),
+            status="unreviewed",
+            comments="",
+        )
+        confirmed = OrcaHelloDetection(
+            id="det_confirmed",
+            feed=feed,
+            timestamp=datetime(2025, 1, 1, 11, 0, 0, tzinfo=timezone.utc),
+            status="confirmed",
+            comments="",
+        )
+        out_of_range = OrcaHelloDetection(
+            id="det_old",
+            feed=feed,
+            timestamp=datetime(2024, 12, 31, 0, 0, 0, tzinfo=timezone.utc),
+            status="unreviewed",
+            comments="",
+        )
+        manual_samples_path = tmp_path / "manual_samples.csv"
+
+        with patch("process_false_positives.get_model_inference"), \
+             patch("process_false_positives.get_orcasite_feeds_with_retry", return_value=[feed]), \
+             patch(
+                 "process_false_positives.get_orcahello_detections",
+                 return_value=[confirmed, unreviewed, out_of_range],
+             ):
+            summary = process_false_positives(
+                manual_samples_path=manual_samples_path,
+                output_dir=tmp_path / "segments",
+                start_time=datetime(2025, 1, 1, 0, 0, 0, tzinfo=timezone.utc),
+                end_time=datetime(2025, 1, 2, 0, 0, 0, tzinfo=timezone.utc),
+            )
+
+        assert summary["rejected"] == 0
+        assert summary["confirmed"] == 1
+        assert summary["unreviewed"] == 1  # out_of_range not counted
