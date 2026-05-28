@@ -44,6 +44,39 @@ class TestGetCorrectedClass:
         """Ambiguous comments should be skipped."""
         assert get_corrected_class("Not sure what this is.") is None
 
+    def test_strips_ai_prefix_line_before_inferring_class(self):
+        """An 'AI: humpback' prefix line should be ignored so it does not produce 'humpback'."""
+        # Only the auto-generated line is present; nothing else to infer from → None.
+        assert get_corrected_class("AI: humpback") is None
+
+    def test_no_humpback_alone_is_ambiguous(self):
+        """'No humpback' alone gives no positive signal → None."""
+        assert get_corrected_class("No humpback") is None
+
+    def test_ai_prefix_plus_no_humpback_is_ambiguous(self):
+        """'AI: humpback\\nNo humpback' is a false humpback with no other signal → None."""
+        assert get_corrected_class("AI: humpback\nNo humpback") is None
+
+    def test_no_humpback_nor_vessel_returns_water(self):
+        """'No humpback nor vessel' with no other signal should resolve to water."""
+        assert get_corrected_class("No humpback nor vessel") == "water"
+
+    def test_ai_prefix_plus_no_humpback_nor_vessel_returns_water(self):
+        """Full 'AI: humpback\\nNo humpback nor vessel' comment should resolve to water."""
+        assert get_corrected_class("AI: humpback\nNo humpback nor vessel") == "water"
+
+    def test_no_humpback_with_vessel_positive_returns_vessel(self):
+        """'No humpback' with an unambiguous vessel keyword should still resolve to vessel."""
+        assert get_corrected_class("No humpback. Boat noise.") == "vessel"
+
+    def test_humpback_positive_without_negation_still_returns_humpback(self):
+        """A plain 'humpback' mention (no negation) should still map to humpback."""
+        assert get_corrected_class("Humpback whale song") == "humpback"
+
+    def test_no_vessel_prevents_vessel_match(self):
+        """'No vessel' should suppress the vessel keyword match."""
+        assert get_corrected_class("No vessel here") is None
+
 
 class TestAppendManualSamples:
     """Tests for append_manual_samples."""

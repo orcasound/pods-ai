@@ -37,27 +37,53 @@ TRANSIENT_TERMS = ("bigg", "transient")
 HUMAN_TERMS = ("human", "radio")
 VESSEL_TERMS = ("vessel", "ship", "boat", "train")
 WHALE_CLASSES = {"resident", "transient", "humpback"}
+# Phrases that negate "humpback" or "vessel" labels (e.g. human-written "No humpback nor vessel").
+NO_HUMPBACK_TERMS = ("no humpback", "not humpback")
+NO_VESSEL_TERMS = ("no vessel", "nor vessel", "no boat", "nor boat", "no ship", "nor ship", "no train", "nor train")
 
 
 def get_corrected_class(comments: str) -> Optional[str]:
-    """Infer the corrected class from OrcaHello moderation comments."""
-    text = (comments or "").lower()
-    if not text or any(term in text for term in SKIP_TERMS):
+    """Infer the corrected class from OrcaHello moderation comments.
+
+    Auto-generated "AI: …" prefix lines are stripped before parsing so that
+    phrases like "AI: humpback" do not influence the result.  Explicit negations
+    ("No humpback", "No humpback nor vessel") are recognised:
+
+    * "No humpback" alone – corrected class is not a whale; returns ``None``
+      when no other positive signal is present (ambiguous).
+    * "No humpback nor vessel" (and no other positive signal) – returns
+      ``"water"``.
+    """
+    # Drop auto-generated "AI: …" lines so they do not influence class inference.
+    human_lines = [
+        line for line in (comments or "").splitlines()
+        if not line.strip().lower().startswith("ai:")
+    ]
+    text = " ".join(human_lines).lower()
+
+    if not text.strip() or any(term in text for term in SKIP_TERMS):
         return None
+
+    # Detect explicit negations before checking for positive keywords.
+    no_humpback = any(term in text for term in NO_HUMPBACK_TERMS)
+    no_vessel = any(term in text for term in NO_VESSEL_TERMS)
 
     if any(term in text for term in RESIDENT_TERMS):
         return "resident"
     if any(term in text for term in TRANSIENT_TERMS):
         return "transient"
-    if "humpback" in text:
+    if "humpback" in text and not no_humpback:
         return "humpback"
     if any(term in text for term in HUMAN_TERMS):
         return "human"
-    if any(term in text for term in VESSEL_TERMS):
+    if any(term in text for term in VESSEL_TERMS) and not no_vessel:
         return "vessel"
     if "jingl" in text:
         return "jingle"
     if "water" in text:
+        return "water"
+    # "No humpback nor vessel" with no remaining positive signal → water.
+    if no_humpback and no_vessel:
         return "water"
 
     return None
