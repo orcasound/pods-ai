@@ -708,7 +708,7 @@ class TestMainCLI:
                 "run_inference.py",
                 "--node-name",
                 "rpi_sunset_bay",
-                "--timestamp-str",
+                "--end-timestamp-str",
                 "2025_01_15_12_30_00_PST",
                 "--start-timestamp-utc",
                 "2025-01-15T20:29:00Z",
@@ -732,7 +732,7 @@ class TestMainCLI:
                     wav_path,
                     "--node-name",
                     "rpi_sunset_bay",
-                    "--timestamp-str",
+                    "--end-timestamp-str",
                     "2025_01_15_12_30_00_PST",
                     "--model",
                     "fastai",
@@ -758,7 +758,7 @@ class TestMainCLI:
             Path(wav_path).unlink(missing_ok=True)
 
     def test_main_downloads_wav_from_node_name_and_timestamp(self):
-        """main() can download wav when --node-name and --timestamp-str are provided."""
+        """main() can download wav when --node-name and --end-timestamp-str are provided."""
         wav_path = _make_wav()
         try:
             mock_model = _make_fastai_model_mock()
@@ -768,7 +768,7 @@ class TestMainCLI:
                     "run_inference.py",
                     "--node-name",
                     "rpi_sunset_bay",
-                    "--timestamp-str",
+                    "--end-timestamp-str",
                     "2025_01_15_12_30_00_PST",
                     "--model",
                     "fastai",
@@ -827,7 +827,7 @@ class TestMainCLI:
                 "run_inference.py",
                 "--node-name",
                 "rpi_sunset_bay",
-                "--timestamp-str",
+                "--end-timestamp-str",
                 "2025_01_15_12_30_00_PST",
                 "--model",
                 "fastai",

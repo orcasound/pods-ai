@@ -8,7 +8,7 @@ Usage:
     python run_inference.py sample.wav
     python run_inference.py sample.wav --model podsai --model-path /path/to/podsai-model
     python run_inference.py sample.wav --model fastai --model-path ../model
-    python run_inference.py --node-name rpi_sunset_bay --timestamp-str 2025_01_15_12_30_00_PST
+    python run_inference.py --node-name rpi_sunset_bay --end-timestamp-str 2025_01_15_12_30_00_PST
 """
 
 import argparse
@@ -375,7 +375,7 @@ def main() -> int:
         description=(
             "Run model inference on a wav file and output per-class probabilities. "
             "Provide either a local wav file path, or --node-name plus exactly one of "
-            "--timestamp-str/--end-timestamp-str (PST end time) or --start-timestamp-utc."
+            "--end-timestamp-str (PST end time) or --start-timestamp-utc."
         )
     )
     parser.add_argument(
@@ -387,14 +387,6 @@ def main() -> int:
         "--node-name",
         default=None,
         help="Feed node name (e.g., rpi_sunset_bay) used with timestamp arguments to download audio.",
-    )
-    parser.add_argument(
-        "--timestamp-str",
-        default=None,
-        help=(
-            "PST end timestamp used with --node-name to download audio "
-            "(format: YYYY_MM_DD_HH_MM_SS_PST). Alias for --end-timestamp-str."
-        ),
     )
     parser.add_argument(
         "--end-timestamp-str",
@@ -454,11 +446,7 @@ def main() -> int:
     )
 
     args = parser.parse_args()
-    if args.timestamp_str is not None and args.end_timestamp_str is not None:
-        print("Error: provide only one of --timestamp-str or --end-timestamp-str.", file=sys.stderr)
-        return 1
-
-    end_timestamp_str = args.end_timestamp_str or args.timestamp_str
+    end_timestamp_str = args.end_timestamp_str
     timestamp_args_provided = sum(
         [
             end_timestamp_str is not None,
@@ -473,7 +461,7 @@ def main() -> int:
         return 1
     if args.node_name is not None and timestamp_args_provided != 1:
         print(
-            "Error: with --node-name, provide exactly one of --timestamp-str/--end-timestamp-str "
+            "Error: with --node-name, provide exactly one of --end-timestamp-str "
             "or --start-timestamp-utc.",
             file=sys.stderr,
         )
