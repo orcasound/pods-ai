@@ -37,6 +37,8 @@ PODSAI_MODEL_REVISION = PODSAI_AST_MODEL_REVISION
 PROPOSED_DESCRIPTION_EXTRA_CLASSES = {"vessel", "human", "jingle"}
 PACIFIC_TZ = pytz_tz("US/Pacific")
 UTC_TZ = timezone.utc
+MIN_SEGMENT_DURATION = 0.001
+FLOAT_TOLERANCE = 1e-9
 
 
 def parse_pst_end_timestamp(timestamp_str: str) -> datetime:
@@ -110,15 +112,18 @@ def download_60s_audio_from_start_utc(
         return None
 
     target_duration_exact = sum(item.duration for item in stream_obj.segments) / num_total_segments
-    target_duration = max(target_duration_exact, 0.001)
+    target_duration = max(target_duration_exact, MIN_SEGMENT_DURATION)
 
     time_since_folder_start_for_start = get_difference_between_times_in_seconds(start_unix_time, current_folder)
     time_since_folder_start_for_end = get_difference_between_times_in_seconds(end_unix_time, current_folder)
 
-    segment_start_index = max(0, math.floor((time_since_folder_start_for_start + 1e-9) / target_duration))
+    segment_start_index = max(
+        0,
+        math.floor((time_since_folder_start_for_start + FLOAT_TOLERANCE) / target_duration),
+    )
     segment_end_index = min(
         num_total_segments,
-        math.ceil((time_since_folder_start_for_end - 1e-9) / target_duration),
+        math.ceil((time_since_folder_start_for_end - FLOAT_TOLERANCE) / target_duration),
     )
     if segment_end_index <= segment_start_index:
         segment_end_index = min(num_total_segments, segment_start_index + 1)
@@ -388,7 +393,7 @@ def main() -> int:
         default=None,
         help=(
             "PST end timestamp used with --node-name to download audio "
-            "(format: YYYY_MM_DD_HH_MM_SS_PST). Backward-compatible alias."
+            "(format: YYYY_MM_DD_HH_MM_SS_PST). Alias for --end-timestamp-str."
         ),
     )
     parser.add_argument(
