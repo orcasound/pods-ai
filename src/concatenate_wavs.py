@@ -100,11 +100,9 @@ def concatenate_wavs_with_beeps(directory: Path, output_filename: str = "concate
                 # Convert stereo to mono
                 audio = np.mean(audio, axis=1)
             
-            concatenated.append(audio)
-            
-            # Add beep between files (but not after the last file)
-            if i < len(wav_files) - 1:
+            if concatenated:
                 concatenated.append(beep)
+            concatenated.append(audio)
         
         except Exception as e:
             print(f"  Error reading {wav_file.name}: {e}", file=sys.stderr)
