@@ -232,19 +232,35 @@ def is_resident_prediction(global_prediction_label: str, model_type: str) -> boo
 
 
 def is_exact_match_model(model_type: str) -> bool:
-    """Return True when a model should use exact-category accuracy."""
+    """Return True when a model uses exact-category matching for correctness."""
     return model_type in {"podsai", "oldpodsai"}
 
 
 def is_correct_prediction(actual_label: str, predicted_label: str, model_type: str) -> bool:
-    """Return whether a prediction should count toward the Correct column."""
+    """Return whether a prediction should count toward the Correct column.
+
+    Args:
+        actual_label: Ground-truth category for the sample.
+        predicted_label: Model-predicted category for the sample.
+        model_type: Model family used to interpret correctness.
+
+    Returns:
+        True when the prediction is correct under the model-specific summary rules.
+    """
     if is_exact_match_model(model_type):
         return predicted_label == actual_label
     return is_resident_prediction(predicted_label, model_type) == (actual_label == RESIDENT_LABEL)
 
 
 def _labels_seen_in_confusion_matrix(confusion_matrix: dict[str, dict[str, int]]) -> set[str]:
-    """Return all labels that appear as actual or predicted in a confusion matrix."""
+    """Return all labels that appear as actual or predicted in a confusion matrix.
+
+    Args:
+        confusion_matrix: Mapping of actual labels to per-predicted-label counts.
+
+    Returns:
+        Set of unique labels appearing either as actual labels or predicted labels.
+    """
     labels = set(confusion_matrix)
     for predicted_counts in confusion_matrix.values():
         labels.update(predicted_counts)
