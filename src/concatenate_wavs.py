@@ -4,8 +4,8 @@
 Concatenate all WAV files in a directory with beep sounds between them.
 
 Usage:
-    python concatenate_wavs_with_beeps.py <directory>
-    python concatenate_wavs_with_beeps.py output/wav/resident
+    python src/concatenate_wavs.py <directory>
+    python src/concatenate_wavs.py output/wav/resident
 """
 
 import argparse
