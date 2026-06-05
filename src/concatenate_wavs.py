@@ -52,8 +52,8 @@ def concatenate_wavs_with_beeps(directory: Path, output_filename: str = "concate
         output_filename: Name of the output concatenated file.
     """
     # Find all WAV files in the directory (excluding the output file)
-    wav_files = sorted([f for f in directory.glob("*.wav") if f.name != output_filename])
-    
+    output_path = (directory / output_filename).resolve()
+    wav_files = sorted([f for f in directory.glob("*.wav") if f.resolve() != output_path])
     if not wav_files:
         print(f"Error: No WAV files found in {directory}", file=sys.stderr)
         return
