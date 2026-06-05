@@ -10,7 +10,7 @@ Tests cover:
 - is_resident_prediction() label mapping
 - evaluate_model() with mocked run_inference
 - print_summary() output
-- ModelResult property calculations
+- ModelResult property calculations, including whale-class F1
 - main() CLI error handling
 """
 
@@ -379,6 +379,29 @@ class TestModelResultProperties:
         r = ModelResult(model_type="fastai", total=3, predict_times=[1.0, 2.0, 3.0])
         assert abs(r.avg_predict_time - 2.0) < 1e-9
 
+    def test_whale_f1_none_when_no_whale_labels_present(self):
+        """whale_f1 is None when the confusion matrix includes no whale classes."""
+        from compare_models import ModelResult
+        r = ModelResult(
+            model_type="fastai",
+            confusion_matrix={"human": {"other": 2}, "water": {"other": 1}},
+        )
+        assert r.whale_f1 is None
+
+    def test_whale_f1_macro_average_over_present_whale_classes(self):
+        """whale_f1 averages per-class F1 over present humpback/resident/transient labels."""
+        from compare_models import ModelResult
+        r = ModelResult(
+            model_type="podsai",
+            confusion_matrix={
+                "resident": {"resident": 2, "transient": 1},
+                "humpback": {"humpback": 1, "resident": 1},
+                "transient": {"transient": 1},
+                "human": {"resident": 1},
+            },
+        )
+        assert r.whale_f1 == pytest.approx((4 / 7 + 2 / 3 + 2 / 3) / 3)
+
 
 # ---------------------------------------------------------------------------
 # Tests for evaluate_model()
@@ -441,6 +464,28 @@ class TestEvaluateModel:
 
         assert result.correct == 0
         assert result.false_positives == 1
+        assert result.false_negatives == 0
+
+    def test_fastai_other_prediction_correct_for_non_resident(self, tmp_path):
+        """Binary models still count non-resident predicted as non-resident as correct."""
+        from compare_models import TestSample, evaluate_model
+
+        sample = TestSample(
+            category="human",
+            node_name="rpi_sunset_bay",
+            timestamp="2024_08_07_11_23_23_PST",
+            uri="",
+            description="",
+            notes="fp_machine_only",
+        )
+        wav_dir = self._make_wav_files(tmp_path, [sample])
+
+        mock_result = {"global_prediction_label": "other", "global_confidence": 0.7, "predict_time": 1.2}
+        with patch("compare_models.run_inference", return_value=mock_result):
+            result = evaluate_model("fastai", "./model", [sample], wav_dir)
+
+        assert result.correct == 1
+        assert result.false_positives == 0
         assert result.false_negatives == 0
 
     def test_false_negative_counted(self, tmp_path):
@@ -529,8 +574,8 @@ class TestEvaluateModel:
         assert result.false_positives == 0
         assert result.false_negatives == 0
 
-    def test_podsai_water_prediction_correct_for_non_resident(self, tmp_path):
-        """PODS-AI "water" prediction for a non-resident sample counts as correct."""
+    def test_podsai_non_matching_non_resident_prediction_not_correct(self, tmp_path):
+        """PODS-AI uses exact category matches for Correct, even within non-resident classes."""
         from compare_models import TestSample, evaluate_model
 
         sample = TestSample(
@@ -544,6 +589,28 @@ class TestEvaluateModel:
         wav_dir = self._make_wav_files(tmp_path, [sample])
 
         mock_result = {"global_prediction_label": "water", "global_confidence": 0.8, "predict_time": 1.8}
+        with patch("compare_models.run_inference", return_value=mock_result):
+            result = evaluate_model("podsai", "/path/to/model", [sample], wav_dir)
+
+        assert result.correct == 0
+        assert result.false_positives == 0
+        assert result.false_negatives == 0
+
+    def test_podsai_exact_matching_category_counts_as_correct(self, tmp_path):
+        """PODS-AI counts exact multiclass matches as correct."""
+        from compare_models import TestSample, evaluate_model
+
+        sample = TestSample(
+            category="humpback",
+            node_name="rpi_sunset_bay",
+            timestamp="2024_08_07_11_23_23_PST",
+            uri="",
+            description="",
+            notes="",
+        )
+        wav_dir = self._make_wav_files(tmp_path, [sample])
+
+        mock_result = {"global_prediction_label": "humpback", "global_confidence": 0.8, "predict_time": 1.8}
         with patch("compare_models.run_inference", return_value=mock_result):
             result = evaluate_model("podsai", "/path/to/model", [sample], wav_dir)
 
@@ -652,6 +719,26 @@ class TestPrintSummary:
         print_summary(results)
         captured = capsys.readouterr().out
         assert "Avg Time" in captured
+
+    def test_prints_whale_f1_column(self, capsys):
+        """print_summary includes the whale-class F1 column."""
+        from compare_models import ModelResult, print_summary
+        results = [
+            ModelResult(
+                model_type="podsai",
+                total=3,
+                correct=2,
+                confusion_matrix={
+                    "resident": {"resident": 1},
+                    "humpback": {"resident": 1},
+                    "transient": {"transient": 1},
+                },
+            )
+        ]
+        print_summary(results)
+        captured = capsys.readouterr().out
+        assert " F1 " in captured
+        assert "0.556" in captured
 
 
 # ---------------------------------------------------------------------------
