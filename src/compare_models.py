@@ -233,7 +233,7 @@ def is_resident_prediction(global_prediction_label: str, model_type: str) -> boo
 
 def is_exact_match_model(model_type: str) -> bool:
     """Return True when a model should use exact-category accuracy."""
-    return model_type == "podsai"
+    return model_type in {"podsai", "oldpodsai"}
 
 
 def is_correct_prediction(actual_label: str, predicted_label: str, model_type: str) -> bool:
