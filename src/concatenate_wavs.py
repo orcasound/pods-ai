@@ -85,7 +85,7 @@ def concatenate_wavs_with_beeps(directory: Path, output_filename: str = "concate
         print(f"Processing {i+1}/{len(wav_files)}: {wav_file.name}")
         
         try:
-            audio, sr = sf.read(wav_file)
+            audio, sr = sf.read(wav_file, dtype="float32")
             
             # Verify sample rate matches
             if sr != sample_rate:
