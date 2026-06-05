@@ -61,7 +61,11 @@ def concatenate_wavs_with_beeps(directory: Path, output_filename: str = "concate
     print(f"Found {len(wav_files)} WAV files in {directory}")
     
     # Read the first file to get sample rate and number of channels
-    first_audio, sample_rate = sf.read(wav_files[0])
+    try:
+        first_audio, sample_rate = sf.read(wav_files[0], dtype="float32")
+    except Exception as e:
+        print(f"Error reading {wav_files[0].name}: {e}", file=sys.stderr)
+        return
     num_channels = first_audio.shape[1] if first_audio.ndim > 1 else 1
     
     print(f"Sample rate: {sample_rate} Hz")
