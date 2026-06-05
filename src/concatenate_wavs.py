@@ -34,11 +34,11 @@ def generate_beep(volume: float = 0.25, duration_seconds: float = 0.1, frequency
     beep = np.sin(2 * np.pi * frequency_hz * t) * volume
     
     # Apply fade in/out to avoid clicks
-    fade_samples = int(0.01 * sample_rate)  # 10ms fade
-    fade_in = np.linspace(0, 1, fade_samples)
-    fade_out = np.linspace(1, 0, fade_samples)
-    beep[:fade_samples] *= fade_in
-    beep[-fade_samples:] *= fade_out
+    fade_samples = min(int(0.01 * sample_rate), num_samples // 2)  # 10ms fade (capped)
+    if fade_samples:
+        fade_in, fade_out = np.linspace(0, 1, fade_samples, endpoint=False), np.linspace(1, 0, fade_samples, endpoint=False)
+        beep[:fade_samples] *= fade_in
+        beep[-fade_samples:] *= fade_out
     
     return beep.astype(np.float32)
 
