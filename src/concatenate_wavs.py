@@ -138,18 +138,7 @@ def main() -> int:
         default="concatenated.wav",
         help="Name of the output file (default: concatenated.wav).",
     )
-    parser.add_argument(
-        "--beep-duration",
-        type=float,
-        default=0.5,
-        help="Duration of beep sound in seconds (default: 0.5).",
-    )
-    parser.add_argument(
-        "--beep-frequency",
-        type=int,
-        default=1000,
-        help="Frequency of beep sound in Hz (default: 1000).",
-    )
+    # Beep characteristics are currently fixed (see generate_beep()).
     
     args = parser.parse_args()
     
