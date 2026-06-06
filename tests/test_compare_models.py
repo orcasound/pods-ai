@@ -740,7 +740,8 @@ class TestPrintSummary:
         print_summary(results)
         captured = capsys.readouterr().out
         assert "Definitions:" in captured
-        assert "false+" in captured or "FP" in captured
+        assert "Accuracy     = Correct / Evaluated" in captured
+        assert "[R|T|H]FP%" in captured
 
     def test_prints_avg_time(self, capsys):
         """print_summary includes average time column."""
@@ -770,17 +771,19 @@ class TestPrintSummary:
         assert " F1 " in captured
         assert "0.556" in captured
 
-    def test_prints_per_whale_fp_fn_columns(self, capsys):
-        """print_summary includes resident, transient, and humpback FP/FN columns."""
+    def test_prints_per_whale_fp_fn_rate_columns(self, capsys):
+        """print_summary includes resident, transient, and humpback FP%/FN% columns without counts."""
         from compare_models import ModelResult, print_summary
         results = [ModelResult(model_type="fastai", total=1, correct=1, confusion_matrix={"resident": {"resident": 1}})]
         print_summary(results)
         captured = capsys.readouterr().out
-        for header in ("RFP", "RFN", "TFP", "TFN", "HFP", "HFN"):
+        for header in ("RFP%", "RFN%", "TFP%", "TFN%", "HFP%", "HFN%"):
             assert header in captured
+        for header in (" RFP ", " RFN ", " TFP ", " TFN ", " HFP ", " HFN "):
+            assert header not in captured
 
     def test_binary_model_non_resident_whale_rates_match_expected_summary(self, capsys):
-        """fastai/orcahello show 0% FP and 100% FN for transient/humpback when those classes are present."""
+        """fastai/orcahello show 0% FP and 100% FN rates for transient/humpback when present."""
         from compare_models import ModelResult, print_summary
         result = ModelResult(
             model_type="fastai",
@@ -797,8 +800,8 @@ class TestPrintSummary:
         captured = capsys.readouterr().out
         fastai_line = next(line for line in captured.splitlines() if line.strip().startswith("fastai"))
         columns = fastai_line.split()
-        assert columns[9:13] == ["0", "0.0%", "2", "100.0%"]
-        assert columns[13:17] == ["0", "0.0%", "1", "100.0%"]
+        assert columns[7:9] == ["0.0%", "100.0%"]
+        assert columns[9:11] == ["0.0%", "100.0%"]
 
 
 # ---------------------------------------------------------------------------
@@ -1204,6 +1207,28 @@ class TestConfusionMatrix:
         assert "2" in captured
         assert "1" in captured
         assert "9" in captured
+
+    def test_print_confusion_matrix_includes_total_column(self, capsys):
+        """print_confusion_matrix appends a total column with per-row totals."""
+        from compare_models import ModelResult, print_confusion_matrix
+
+        result = ModelResult(
+            model_type="fastai",
+            confusion_matrix={
+                "resident": {"resident": 7, "other": 2},
+                "other": {"resident": 1, "other": 9},
+            },
+        )
+        print_confusion_matrix(result)
+        captured = capsys.readouterr().out
+
+        lines = captured.splitlines()
+        header_line = next(line for line in lines if "other" in line and "resident" in line)
+        resident_line = next(line for line in lines if line.startswith("  resident"))
+        other_line = next(line for line in lines if line.startswith("     other"))
+        assert "total" in header_line
+        assert resident_line.split()[-1] == "9"
+        assert other_line.split()[-1] == "10"
 
     def test_print_confusion_matrix_zero_for_unseen_pairs(self, capsys):
         """print_confusion_matrix shows 0 for class pairs that never occurred."""

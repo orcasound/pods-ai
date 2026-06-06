@@ -10,7 +10,7 @@ Usage:
 Loads a test set from testing_samples.csv, then runs each enabled model
 (fastai, orcahello, oldpodsai (Wav2Vec2)), podsai (AST) on the corresponding
 60-second WAV files and reports correct identifications, whale-class F1, and
-per-whale-class false-positive/false-negative counts and rates per model.
+per-whale-class false-positive/false-negative rates per model.
 
 A "correct" identification means:
   - For fastai and orcahello, model predicted "resident" (SRKW) when the label is
@@ -430,14 +430,17 @@ def print_confusion_matrix(result: ModelResult) -> None:
     if not actual_labels or not predicted_labels:
         return
 
-    all_labels = sorted(set(actual_labels) | set(predicted_labels))
-    col_width = max(len(label) for label in all_labels) + MATRIX_CELL_PADDING
+    row_totals = {actual: sum(matrix.get(actual, {}).values()) for actual in actual_labels}
+    all_labels = sorted(set(actual_labels) | set(predicted_labels) | {"total"})
+    widest_count = max(len(str(total)) for total in row_totals.values())
+    col_width = max(max(len(label) for label in all_labels), widest_count) + MATRIX_CELL_PADDING
     row_label_width = max(len(label) for label in all_labels) + MATRIX_CELL_PADDING
 
     print(f"Confusion Matrix for {result.model_type} (rows=actual, cols=predicted):")
     print(f"{'':>{row_label_width}}", end="")
     for label in predicted_labels:
         print(f"{label:>{col_width}}", end="")
+    print(f"{'total':>{col_width}}", end="")
     print()
 
     for actual in actual_labels:
@@ -445,6 +448,7 @@ def print_confusion_matrix(result: ModelResult) -> None:
         for predicted in predicted_labels:
             count = matrix.get(actual, {}).get(predicted, 0)
             print(f"{count:>{col_width}}", end="")
+        print(f"{row_totals[actual]:>{col_width}}", end="")
         print()
 
 
@@ -455,12 +459,12 @@ def print_summary(results: list[ModelResult]) -> None:
     Args:
         results: List of ModelResult objects, one per model.
     """
-    class_column_format = " {:>4} {:>7} {:>4} {:>7}"
+    class_column_format = " {:>7} {:>7}"
     header = (
         f"{'Model':<15} {'Evaluated':>9} {'Correct':>9} {'Accuracy':>9} {'F1':>7}"
-        f"{class_column_format.format('RFP', 'RFP%', 'RFN', 'RFN%')}"
-        f"{class_column_format.format('TFP', 'TFP%', 'TFN', 'TFN%')}"
-        f"{class_column_format.format('HFP', 'HFP%', 'HFN', 'HFN%')}"
+        f"{class_column_format.format('RFP%', 'RFN%')}"
+        f"{class_column_format.format('TFP%', 'TFN%')}"
+        f"{class_column_format.format('HFP%', 'HFN%')}"
         f" {'Avg Time':>10}"
     )
     separator = "=" * len(header)
@@ -482,9 +486,7 @@ def print_summary(results: list[ModelResult]) -> None:
             false_negative_rate = r.false_negative_rate_for_label(label)
             class_stats.append(
                 class_column_format.format(
-                    r.false_positive_count_for_label(label),
                     f"{false_positive_rate:.1%}" if false_positive_rate is not None else "N/A",
-                    r.false_negative_count_for_label(label),
                     f"{false_negative_rate:.1%}" if false_negative_rate is not None else "N/A",
                 )
             )
@@ -499,11 +501,10 @@ def print_summary(results: list[ModelResult]) -> None:
     print(separator)
     print()
     print("Definitions:")
+    print("  Accuracy     = Correct / Evaluated")
     print("  Correct      = fastai/orcahello: resident vs other; oldpodsai/podsai: exact category match")
     print("  F1           = macro F1 over humpback, resident, and transient classes that are present")
-    print("  [R|T|H]FP    = false-positive count for resident/transient/humpback")
     print("  [R|T|H]FP%   = among non-[R|T|H] samples, fraction predicted as that class")
-    print("  [R|T|H]FN    = false-negative count for resident/transient/humpback")
     print("  [R|T|H]FN%   = among actual samples of that class, fraction predicted as another class")
     print("  Avg Time     = average time spent in model predict() per 60-second WAV file")
 
