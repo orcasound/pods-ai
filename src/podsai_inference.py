@@ -95,9 +95,22 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
                 model_path, **pretrained_kwargs
             )
         except Exception as e:
-            error_msg = f"Error loading feature extractor from {model_path}: {type(e).__name__}: {e}"
-            print(error_msg)
-            raise RuntimeError(error_msg) from e
+            if "revision" in pretrained_kwargs:
+                try:
+                    print(
+                        f"Warning: Failed to load feature extractor from {model_path} "
+                        f"at revision {pretrained_kwargs['revision']}; retrying without revision pin."
+                    )
+                    self.feature_extractor = AutoFeatureExtractor.from_pretrained(model_path)
+                    pretrained_kwargs.pop("revision", None)
+                except Exception:
+                    error_msg = f"Error loading feature extractor from {model_path}: {type(e).__name__}: {e}"
+                    print(error_msg)
+                    raise RuntimeError(error_msg) from e
+            else:
+                error_msg = f"Error loading feature extractor from {model_path}: {type(e).__name__}: {e}"
+                print(error_msg)
+                raise RuntimeError(error_msg) from e
 
         try:
             # Try SDPA (Scaled Dot-Product Attention) first for better memory efficiency.
