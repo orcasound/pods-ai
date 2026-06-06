@@ -97,16 +97,22 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
         except Exception as e:
             if "revision" in pretrained_kwargs:
                 try:
+                    failed_revision = pretrained_kwargs.pop("revision", None)
                     print(
                         f"Warning: Failed to load feature extractor from {model_path} "
-                        f"at revision {pretrained_kwargs['revision']}; retrying without revision pin."
+                        f"at revision {failed_revision}; retrying without revision pin."
                     )
-                    self.feature_extractor = AutoFeatureExtractor.from_pretrained(model_path)
-                    pretrained_kwargs.pop("revision", None)
-                except Exception:
-                    error_msg = f"Error loading feature extractor from {model_path}: {type(e).__name__}: {e}"
+                    self.feature_extractor = AutoFeatureExtractor.from_pretrained(
+                        model_path, **pretrained_kwargs
+                    )
+                except Exception as retry_error:
+                    error_msg = (
+                        f"Error loading feature extractor from {model_path}: "
+                        f"initial={type(e).__name__}: {e}; "
+                        f"retry_without_revision={type(retry_error).__name__}: {retry_error}"
+                    )
                     print(error_msg)
-                    raise RuntimeError(error_msg) from e
+                    raise RuntimeError(error_msg) from retry_error
             else:
                 error_msg = f"Error loading feature extractor from {model_path}: {type(e).__name__}: {e}"
                 print(error_msg)
