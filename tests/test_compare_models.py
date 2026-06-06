@@ -10,7 +10,7 @@ Tests cover:
 - is_resident_prediction() label mapping
 - evaluate_model() with mocked run_inference
 - print_summary() output
-- ModelResult property calculations, including whale-class F1
+- ModelResult property calculations, including whale-class F1 and per-whale-class FP/FN rates
 - main() CLI error handling
 """
 
@@ -402,6 +402,36 @@ class TestModelResultProperties:
         )
         assert r.whale_f1 == pytest.approx((4 / 7 + 2 / 3 + 2 / 3) / 3)
 
+    def test_false_negative_rate_for_label_uses_actual_label_denominator(self):
+        """Per-label FN% is normalized by the number of actual samples of that label."""
+        from compare_models import ModelResult
+        r = ModelResult(
+            model_type="fastai",
+            total=4,
+            confusion_matrix={
+                "transient": {"other": 2},
+                "resident": {"resident": 1},
+                "human": {"other": 1},
+            },
+        )
+        assert r.false_negative_count_for_label("transient") == 2
+        assert r.false_negative_rate_for_label("transient") == pytest.approx(1.0)
+
+    def test_false_positive_rate_for_label_uses_non_label_denominator(self):
+        """Per-label FP% is normalized by samples whose true label is not that label."""
+        from compare_models import ModelResult
+        r = ModelResult(
+            model_type="podsai",
+            total=5,
+            confusion_matrix={
+                "resident": {"resident": 1},
+                "human": {"resident": 1, "human": 1},
+                "transient": {"resident": 1, "transient": 1},
+            },
+        )
+        assert r.false_positive_count_for_label("resident") == 2
+        assert r.false_positive_rate_for_label("resident") == pytest.approx(0.5)
+
 
 # ---------------------------------------------------------------------------
 # Tests for evaluate_model()
@@ -739,6 +769,36 @@ class TestPrintSummary:
         captured = capsys.readouterr().out
         assert " F1 " in captured
         assert "0.556" in captured
+
+    def test_prints_per_whale_fp_fn_columns(self, capsys):
+        """print_summary includes resident, transient, and humpback FP/FN columns."""
+        from compare_models import ModelResult, print_summary
+        results = [ModelResult(model_type="fastai", total=1, correct=1, confusion_matrix={"resident": {"resident": 1}})]
+        print_summary(results)
+        captured = capsys.readouterr().out
+        for header in ("RFP", "RFN", "TFP", "TFN", "HFP", "HFN"):
+            assert header in captured
+
+    def test_binary_model_non_resident_whale_rates_match_expected_summary(self, capsys):
+        """fastai/orcahello show 0% FP and 100% FN for transient/humpback when those classes are present."""
+        from compare_models import ModelResult, print_summary
+        result = ModelResult(
+            model_type="fastai",
+            total=4,
+            correct=1,
+            confusion_matrix={
+                "resident": {"resident": 1},
+                "transient": {"other": 2},
+                "humpback": {"other": 1},
+            },
+            predict_times=[1.0, 1.1, 1.2, 1.3],
+        )
+        print_summary([result])
+        captured = capsys.readouterr().out
+        fastai_line = next(line for line in captured.splitlines() if line.strip().startswith("fastai"))
+        columns = fastai_line.split()
+        assert columns[9:13] == ["0", "0.0%", "2", "100.0%"]
+        assert columns[13:17] == ["0", "0.0%", "1", "100.0%"]
 
 
 # ---------------------------------------------------------------------------

@@ -10,15 +10,17 @@ Usage:
 Loads a test set from testing_samples.csv, then runs each enabled model
 (fastai, orcahello, oldpodsai (Wav2Vec2)), podsai (AST) on the corresponding
 60-second WAV files and
-reports correct identifications, whale-class F1, false positives, and false negatives per model.
+reports correct identifications, whale-class F1, and per-whale-class false positives and
+false negatives per model.
 
 A "correct" identification means:
   - For fastai and orcahello, model predicted "resident" (SRKW) when the label is
     "resident", or anything other than "resident" when the label is not "resident".
   - For podsai and oldpodsai, the predicted category exactly matches the label.
 
-A "false positive" means the model predicted "resident" when the correct label is not "resident".
-A "false negative" means the model predicted something other than "resident" when the label is "resident".
+For each whale class X (resident, transient, humpback):
+  - X false positives are samples predicted as X when the correct label was not X.
+  - X false negatives are samples whose correct label is X but the model predicted something else.
 """
 
 import argparse
@@ -32,6 +34,11 @@ from run_inference import run_inference
 
 RESIDENT_LABEL = "resident"
 WHALE_CLASS_NAMES = {"humpback", "resident", "transient"}
+SUMMARY_LABELS = [
+    ("resident", "R"),
+    ("transient", "T"),
+    ("humpback", "H"),
+]
 MATRIX_CELL_PADDING = 2
 PODSAI_MODEL_ID = "davethaler/whale-call-detector"
 # renovate: datasource=git-refs depName=https://huggingface.co/davethaler/whale-call-detector versioning=git.
@@ -147,6 +154,40 @@ class ModelResult:
                 f1_scores.append((2 * precision * recall) / (precision + recall))
 
         return sum(f1_scores) / len(f1_scores)
+
+    def actual_count_for_label(self, label: str) -> int:
+        """Return how many evaluated samples have the given ground-truth label."""
+        return sum(self.confusion_matrix.get(label, {}).values())
+
+    def false_positive_count_for_label(self, label: str) -> int:
+        """Return the number of evaluated samples incorrectly predicted as the given label."""
+        return sum(
+            predicted_counts.get(label, 0)
+            for actual_label, predicted_counts in self.confusion_matrix.items()
+            if actual_label != label
+        )
+
+    def false_negative_count_for_label(self, label: str) -> int:
+        """Return the number of evaluated samples with the given label predicted as something else."""
+        return sum(
+            count
+            for predicted_label, count in self.confusion_matrix.get(label, {}).items()
+            if predicted_label != label
+        )
+
+    def false_positive_rate_for_label(self, label: str) -> Optional[float]:
+        """Return the fraction of non-label samples incorrectly predicted as the given label."""
+        negative_count = self.evaluated - self.actual_count_for_label(label)
+        if negative_count == 0:
+            return None
+        return self.false_positive_count_for_label(label) / negative_count
+
+    def false_negative_rate_for_label(self, label: str) -> Optional[float]:
+        """Return the fraction of actual label samples predicted as something else."""
+        actual_count = self.actual_count_for_label(label)
+        if actual_count == 0:
+            return None
+        return self.false_negative_count_for_label(label) / actual_count
 
 
 def load_test_samples(testing_csv: Path, max_samples: Optional[int] = None,
@@ -407,39 +448,56 @@ def print_summary(results: list[ModelResult]) -> None:
     Args:
         results: List of ModelResult objects, one per model.
     """
-    print()
-    print("=" * 101)
-    print("Model Comparison Summary")
-    print("=" * 101)
+    class_column_format = " {:>4} {:>7} {:>4} {:>7}"
     header = (
         f"{'Model':<15} {'Evaluated':>9} {'Correct':>9} {'Accuracy':>9} {'F1':>7}"
-        f" {'FP':>6} {'FP%':>7} {'FN':>6} {'FN%':>7} {'Avg Time':>10}"
+        f"{class_column_format.format('RFP', 'RFP%', 'RFN', 'RFN%')}"
+        f"{class_column_format.format('TFP', 'TFP%', 'TFN', 'TFN%')}"
+        f"{class_column_format.format('HFP', 'HFP%', 'HFN', 'HFN%')}"
+        f" {'Avg Time':>10}"
     )
+    separator = "=" * len(header)
+    print()
+    print(separator)
+    print("Model Comparison Summary")
+    print(separator)
     print(header)
-    print("-" * 101)
+    print("-" * len(header))
 
     for r in results:
         evaluated = r.evaluated
         accuracy = f"{r.accuracy:.1%}" if r.accuracy is not None else "N/A"
         whale_f1 = f"{r.whale_f1:.3f}" if r.whale_f1 is not None else "N/A"
-        fp_rate = f"{r.false_positive_rate:.1%}" if r.false_positive_rate is not None else "N/A"
-        fn_rate = f"{r.false_negative_rate:.1%}" if r.false_negative_rate is not None else "N/A"
         avg_time = f"{r.avg_predict_time:.2f}s" if r.avg_predict_time is not None else "N/A"
+        class_stats = []
+        for label, _ in SUMMARY_LABELS:
+            false_positive_rate = r.false_positive_rate_for_label(label)
+            false_negative_rate = r.false_negative_rate_for_label(label)
+            class_stats.append(
+                class_column_format.format(
+                    r.false_positive_count_for_label(label),
+                    f"{false_positive_rate:.1%}" if false_positive_rate is not None else "N/A",
+                    r.false_negative_count_for_label(label),
+                    f"{false_negative_rate:.1%}" if false_negative_rate is not None else "N/A",
+                )
+            )
 
         print(
             f"{r.model_type:<15} {evaluated:>9} {r.correct:>9} {accuracy:>9} {whale_f1:>7}"
-            f" {r.false_positives:>6} {fp_rate:>7} {r.false_negatives:>6} {fn_rate:>7} {avg_time:>10}"
+            f"{''.join(class_stats)} {avg_time:>10}"
         )
         if r.skipped:
             print(f"  ({r.skipped} skipped due to missing WAV or inference error)")
 
-    print("=" * 101)
+    print(separator)
     print()
     print("Definitions:")
     print("  Correct      = fastai/orcahello: resident vs other; oldpodsai/podsai: exact category match")
     print("  F1           = macro F1 over humpback, resident, and transient classes that are present")
-    print("  FP (false+)  = predicted resident when correct class was non-resident")
-    print("  FN (false-)  = predicted non-resident when correct class was resident")
+    print("  [R|T|H]FP    = false-positive count for resident/transient/humpback")
+    print("  [R|T|H]FP%   = among non-[R|T|H] samples, fraction predicted as that class")
+    print("  [R|T|H]FN    = false-negative count for resident/transient/humpback")
+    print("  [R|T|H]FN%   = among actual samples of that class, fraction predicted as another class")
     print("  Avg Time     = average time spent in model predict() per 60-second WAV file")
 
     for r in results:
