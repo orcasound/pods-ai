@@ -431,9 +431,9 @@ def print_confusion_matrix(result: ModelResult) -> None:
         return
 
     row_totals = {actual: sum(matrix.get(actual, {}).values()) for actual in actual_labels}
-    all_labels = sorted(set(actual_labels) | set(predicted_labels) | {"total"})
-    widest_count = max(len(str(total)) for total in row_totals.values())
-    col_width = max(max(len(label) for label in all_labels), widest_count) + MATRIX_CELL_PADDING
+    all_labels = sorted(set(actual_labels) | set(predicted_labels))
+    widest_total = max(len("total"), max(len(str(total)) for total in row_totals.values()))
+    col_width = max(max(len(label) for label in predicted_labels), widest_total) + MATRIX_CELL_PADDING
     row_label_width = max(len(label) for label in all_labels) + MATRIX_CELL_PADDING
 
     print(f"Confusion Matrix for {result.model_type} (rows=actual, cols=predicted):")

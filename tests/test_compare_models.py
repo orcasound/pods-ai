@@ -741,7 +741,7 @@ class TestPrintSummary:
         captured = capsys.readouterr().out
         assert "Definitions:" in captured
         assert "Accuracy     = Correct / Evaluated" in captured
-        assert "[R|T|H]FP%" in captured
+        assert "[R|T|H]FP%   = among non-[R|T|H] samples, fraction predicted as that class" in captured
 
     def test_prints_avg_time(self, capsys):
         """print_summary includes average time column."""
