@@ -9,9 +9,8 @@ Usage:
 
 Loads a test set from testing_samples.csv, then runs each enabled model
 (fastai, orcahello, oldpodsai (Wav2Vec2)), podsai (AST) on the corresponding
-60-second WAV files and
-reports correct identifications, whale-class F1, and per-whale-class false positives and
-false negatives per model.
+60-second WAV files and reports correct identifications, whale-class F1, and
+per-whale-class false-positive/false-negative counts and rates per model.
 
 A "correct" identification means:
   - For fastai and orcahello, model predicted "resident" (SRKW) when the label is
@@ -176,14 +175,22 @@ class ModelResult:
         )
 
     def false_positive_rate_for_label(self, label: str) -> Optional[float]:
-        """Return the fraction of non-label samples incorrectly predicted as the given label."""
+        """Return the fraction of non-label samples incorrectly predicted as the given label.
+
+        Returns None when there are no evaluated samples whose actual label differs from
+        the given label.
+        """
         negative_count = self.evaluated - self.actual_count_for_label(label)
         if negative_count == 0:
             return None
         return self.false_positive_count_for_label(label) / negative_count
 
     def false_negative_rate_for_label(self, label: str) -> Optional[float]:
-        """Return the fraction of actual label samples predicted as something else."""
+        """Return the fraction of actual label samples predicted as something else.
+
+        Returns None when there are no evaluated samples whose actual label matches the
+        given label.
+        """
         actual_count = self.actual_count_for_label(label)
         if actual_count == 0:
             return None

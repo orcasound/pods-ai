@@ -494,7 +494,7 @@ python src/compare_models.py \
     --podsai-model-path /path/to/podsai-model
 ```
 
-Output with a Wav2Vec2 model:
+Example output layout (actual metric values vary with the evaluated dataset):
 ```
 Loaded 160 test samples from output\csv\testing_samples.csv
 WAV directory: output/testing-wav
