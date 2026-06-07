@@ -83,6 +83,7 @@ jobs:
       - name: Smoke test container (LiveHLS)
         run: |
           docker run --rm \
+            -e HF_TOKEN \
             -v $PWD/LiveInferenceSystem/tests/orch_configs/LiveHLS/LiveHLS_AndrewsBay.yml:/config/config.yml \
             pods-ai-inference:ci \
             --max_live_iterations 2 2>&1 | tee output.log
