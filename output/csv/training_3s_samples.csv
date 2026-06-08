@@ -91,8 +91,7 @@ humpback,rpi_orcasound_lab,2025_12_19_04_55_55_PST,https://live.orcasound.net/bo
 humpback,rpi_orcasound_lab,2025_12_19_04_57_13_PST,https://live.orcasound.net/bouts/new/orcasound-lab?time=2025-12-19T12%3A57%3A13.000Z,"Humpback whale song, moderate ship noise",fp_machine,75.4
 humpback,rpi_orcasound_lab,2025_12_19_04_57_25_PST,https://live.orcasound.net/bouts/new/orcasound-lab?time=2025-12-19T12%3A57%3A25.000Z,"Humpback whale song, moderate ship noise",fp_machine,75.4
 humpback,rpi_orcasound_lab,2025_12_19_04_57_33_PST,https://live.orcasound.net/bouts/new/orcasound-lab?time=2025-12-19T12%3A57%3A33.000Z,"Humpback whale song, moderate ship noise",fp_machine,75.4
-humpback,rpi_orcasound_lab,2025_12_19_04_57_39_PST,https://live.orcasound.net/bouts/new/orcasound-lab?time=2025-12-19T12%3A57%3A39.000Z,"Humpback whale song, moderate ship noise",fp_machine,75.5
-humpback,rpi_orcasound_lab,2025_12_19_04_57_38_PST,https://live.orcasound.net/bouts/new/orcasound-lab?time=2025-12-19T12%3A57%3A38.000Z,"Humpback whale song, moderate ship noise",tp_machine_only,55.3
+humpback,rpi_orcasound_lab,2025_12_19_04_57_37_PST,https://live.orcasound.net/bouts/new/orcasound-lab?time=2025-12-19T12%3A57%3A37.000Z,"Humpback whale song, moderate ship noise",fp_machine,75.5
 humpback,rpi_sunset_bay,2025_11_10_13_55_23_PST,https://live.orcasound.net/bouts/new/sunset-bay?time=2025-11-10T21%3A55%3A23.000Z,humpback sound,tp_human_only,3.2
 humpback,rpi_sunset_bay,2025_11_10_13_58_25_PST,https://live.orcasound.net/bouts/new/sunset-bay?time=2025-11-10T21%3A58%3A25.000Z,humpback whale sound,tp_human_only,100.0
 jingle,rpi_andrews_bay,2026_02_18_04_36_17_PST,https://live.orcasound.net/bouts/new/andrews-bay?time=2026-02-18T12%3A36%3A17.000Z,"Jingle, water slosh",fp_machine_only,71.5
@@ -126,7 +125,6 @@ jingle,rpi_orcasound_lab,2026_01_11_08_10_24_PST,https://live.orcasound.net/bout
 jingle,rpi_orcasound_lab,2026_01_11_08_15_56_PST,https://live.orcasound.net/bouts/new/orcasound-lab?time=2026-01-11T16%3A15%3A56.000Z,Jingle,fp_machine_only,55.3
 jingle,rpi_orcasound_lab,2026_01_11_08_17_34_PST,https://live.orcasound.net/bouts/new/orcasound-lab?time=2026-01-11T16%3A17%3A34.000Z,Jingle,fp_machine_only,58.3
 jingle,rpi_orcasound_lab,2026_01_11_08_23_07_PST,https://live.orcasound.net/bouts/new/orcasound-lab?time=2026-01-11T16%3A23%3A07.000Z,Jingle,fp_machine_only,55.5
-jingle,rpi_port_townsend,2025_12_10_10_18_36_PST,https://live.orcasound.net/bouts/new/port-townsend?time=2025-12-10T18%3A18%3A36.000Z,Jingle,fp_machine,71.0
 jingle,rpi_port_townsend,2025_12_10_10_18_35_PST,https://live.orcasound.net/bouts/new/port-townsend?time=2025-12-10T18%3A18%3A35.000Z,Jingle,fp_machine_only,79.4
 jingle,rpi_port_townsend,2025_12_10_10_18_56_PST,https://live.orcasound.net/bouts/new/port-townsend?time=2025-12-10T18%3A18%3A56.000Z,Jingle,fp_machine,73.7
 resident,rpi_andrews_bay,2026_02_16_22_52_59_PST,https://live.orcasound.net/bouts/new/andrews-bay?time=2026-02-17T06%3A52%3A59.000Z,"Good calls, clicks and a whistle",tp_machine_only,93.2
@@ -247,7 +245,6 @@ transient,rpi_andrews_bay,2026_01_02_16_13_08_PST,https://live.orcasound.net/bou
 transient,rpi_andrews_bay,2026_01_29_15_51_32_PST,https://live.orcasound.net/bouts/new/andrews-bay?time=2026-01-29T23%3A51%3A32.000Z,"Good transient calls, moderate ambient noise, also audible at Orcasound lab",tp_machine_only,82.1
 transient,rpi_andrews_bay,2026_01_29_15_51_40_PST,https://live.orcasound.net/bouts/new/andrews-bay?time=2026-01-29T23%3A51%3A40.000Z,"Fair transient calls, moderate ambient noise, also audible at orcasound lab",fp_machine,78.2
 transient,rpi_andrews_bay,2026_01_29_15_52_16_PST,https://live.orcasound.net/bouts/new/andrews-bay?time=2026-01-29T23%3A52%3A16.000Z,"Fair transient calls, moderate ambient noise, also audible at orcasound lab",fp_machine,79.5
-transient,rpi_andrews_bay,2026_01_29_15_52_32_PST,https://live.orcasound.net/bouts/new/andrews-bay?time=2026-01-29T23%3A52%3A32.000Z,"Fair transient calls, moderate ambient noise, also audible at orcasound lab",fp_machine,76.7
 transient,rpi_andrews_bay,2026_01_29_15_52_31_PST,https://live.orcasound.net/bouts/new/andrews-bay?time=2026-01-29T23%3A52%3A31.000Z,"Fair transient calls, moderate ambient noise, also audible at orcasound lab",tp_machine_only,77.6
 transient,rpi_andrews_bay,2026_01_29_16_12_54_PST,https://live.orcasound.net/bouts/new/andrews-bay?time=2026-01-30T00%3A12%3A54.000Z,"Faint to good transient calls, moderate ambient noise",fp_machine,71.8
 transient,rpi_andrews_bay,2026_01_29_16_13_10_PST,https://live.orcasound.net/bouts/new/andrews-bay?time=2026-01-30T00%3A13%3A10.000Z,"Faint to good transient calls, moderate ambient noise",fp_machine,79.1
