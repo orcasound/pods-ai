@@ -6,8 +6,8 @@ metadata:
   namespace: point-robinson
 data:
   config.yml: |
-    model_id: "davethaler/whale-call-detector"
-    model_hf_repo_id: "davethaler/whale-call-detector"
+    model_id: "/usr/src/hf_cache"
+    model_hf_repo_id: "/usr/src/hf_cache"
     hls_stream_type: "LiveHLS"
     hls_live_delay_buffer: 60
     inference_segment_size: 60
