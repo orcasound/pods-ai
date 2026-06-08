@@ -19,14 +19,17 @@ import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+# Ensure repository root is importable when this script is run directly.
+REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
 from extract_training_samples import (
-    REPO_ROOT,
     SEGMENT_DURATION_SECONDS,
     generate_uri,
     load_manual_corrections,
     process_sample,
 )
-from src.model_inference import get_model_inference
 
 
 def node_slug_to_name(node_slug: str) -> str:
@@ -182,6 +185,7 @@ def main():
         auto_download_default = "true" if model_type == "fastai" else "false"
         auto_download = os.environ.get("MODEL_AUTO_DOWNLOAD", auto_download_default).lower() == "true"
         try:
+            from src.model_inference import get_model_inference
             model_inference = get_model_inference(
                 model_path=model_path if model_type == "fastai" else None,
                 model_type=model_type,

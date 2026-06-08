@@ -25,12 +25,14 @@ from tempfile import TemporaryDirectory
 from urllib.parse import quote
 import glob
 
+# Ensure repository root is importable when this script is run directly.
+REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
 from src.audio_utils import (
     download_60s_audio,
 )
-
-# Get repository root.
-REPO_ROOT = Path(__file__).resolve().parents[2]
 
 # Offset, in seconds, between the detection end time and the start of the downloaded audio.
 AUDIO_OFFSET_SECONDS: int = 2
