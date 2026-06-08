@@ -541,7 +541,8 @@ class TestPodsAIInferenceErrorHandling:
             PodsAIInference("test-model-path", model_revision="deadbeef")
 
         assert mock_extractor_class.from_pretrained.call_count == 1
-        assert mock_extractor_class.from_pretrained.call_args_list[0].kwargs == {"revision": "deadbeef"}
+        assert mock_extractor_class.from_pretrained.call_args.args[0] == "test-model-path"
+        assert mock_extractor_class.from_pretrained.call_args.kwargs.get("revision") == "deadbeef"
     
     @patch('podsai_inference.AutoModelForAudioClassification')
     @patch('podsai_inference.AutoFeatureExtractor')
