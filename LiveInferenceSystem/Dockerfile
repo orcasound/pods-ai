@@ -27,7 +27,8 @@ RUN uv python install 3.11 && uv sync --no-dev
 # Bake HuggingFace model into image cache at build time
 ENV HF_HOME=/usr/src/hf_cache
 ENV TRANSFORMERS_CACHE=/usr/src/hf_cache
-RUN /usr/src/venv/bin/python - << 'EOF'
+RUN <<'EOF'
+/usr/src/venv/bin/python - <<'PYCODE'
 from huggingface_hub import snapshot_download
 snapshot_download(
     repo_id="davethaler/whale-call-detector",
@@ -36,6 +37,7 @@ snapshot_download(
     revision="main",
     allow_patterns="*"
 )
+PYCODE
 EOF
 
 # At runtime, never hit the network for the model
