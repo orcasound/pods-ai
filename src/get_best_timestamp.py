@@ -19,7 +19,7 @@ import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from extract_training_samples import (
+from bootstrap.src.extract_training_samples import (
     generate_uri,
     load_manual_corrections,
     process_sample,
@@ -170,7 +170,7 @@ def main():
     sample = build_sample(node_slug, timestamp_str)
 
     # Load manual timestamp corrections.
-    manual_corrections_path = REPO_ROOT / 'output' / 'csv' / 'manual_timestamps.csv'
+    manual_corrections_path = REPO_ROOT / 'bootstrap' / 'csv' / 'manual_timestamps.csv'
     manual_timestamps, manual_confidences = load_manual_corrections(manual_corrections_path)
 
     # Initialise model inference unless --no-model was requested.

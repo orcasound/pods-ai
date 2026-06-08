@@ -1024,7 +1024,7 @@ class TestIntegrationWithRealModels:
             return str(candidates[0])
 
         # Attempt to download one sample from the testing CSV.
-        testing_csv_path = Path("output/csv/testing_samples.csv")
+        testing_csv_path = Path("output/csv/testing_60s_samples.csv")
         if not testing_csv_path.exists():
             pytest.skip(f"No testing samples CSV found at {testing_csv_path}")
 

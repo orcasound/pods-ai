@@ -29,7 +29,7 @@ import glob
 
 import ffmpeg
 import m3u8
-from audio_utils import (
+from src.audio_utils import (
     get_cached_folders,
     get_folders_between_timestamp,
     get_difference_between_times_in_seconds,
@@ -38,7 +38,7 @@ from audio_utils import (
 )
 
 # Get repository root.
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 # Offset, in seconds, between the detection end time and the start of the downloaded audio.
 AUDIO_OFFSET_SECONDS: int = 2
@@ -1001,8 +1001,8 @@ def main():
     parser.add_argument(
         '--input',
         type=str,
-        default='output/csv/detections.csv',
-        help='Path to input detections CSV file (default: output/csv/detections.csv)'
+        default='bootstrap/csv/detections.csv',
+        help='Path to input detections CSV file (default: bootstrap/csv/detections.csv)'
     )
     parser.add_argument(
         '--duration',
@@ -1016,11 +1016,11 @@ def main():
     input_path = Path(args.input)
     if not input_path.is_absolute():
         input_path = REPO_ROOT / input_path
-    initial_training_output_path = REPO_ROOT / 'output' / 'csv' / 'initial_training_samples.csv'
-    testing_output_path = REPO_ROOT / 'output' / 'csv' / 'testing_samples.csv'
+    initial_training_output_path = REPO_ROOT / 'bootstrap' / 'csv' / 'initial_training_samples.csv'
+    testing_output_path = REPO_ROOT / 'bootstrap' / 'csv' / 'testing_samples.csv'
 
     # Load manual confidences for sorting.
-    manual_corrections_path = REPO_ROOT / 'output' / 'csv' / 'manual_timestamps.csv'
+    manual_corrections_path = REPO_ROOT / 'bootstrap' / 'csv' / 'manual_timestamps.csv'
     manual_timestamps, manual_confidences = load_manual_corrections(manual_corrections_path)
 
     print(f"Loading detections from {input_path}...")

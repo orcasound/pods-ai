@@ -71,7 +71,7 @@ def download_60s_audio_from_start_utc(
     tmp_dir: str,
 ) -> Optional[str]:
     """Download a 60-second clip beginning at start_time_utc."""
-    from extract_training_samples import (
+    from bootstrap.src.extract_training_samples import (
         download_from_url,
         get_cached_folders,
         get_difference_between_times_in_seconds,

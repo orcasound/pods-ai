@@ -20,7 +20,7 @@ from tempfile import TemporaryDirectory
 from typing import Optional
 
 from add_samples import DEFAULT_DETECTIONS_CSV, DEFAULT_MODEL_PATH, DEFAULT_OUTPUT_DIR, add_samples
-from extract_training_samples import download_60s_audio
+from bootstrap.src.extract_training_samples import download_60s_audio
 from manual_samples_utils import append_manual_samples, load_existing_uris
 from make_csv import (
     SKIP_TERMS,
