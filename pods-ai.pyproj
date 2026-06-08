@@ -35,6 +35,7 @@ MODEL_URL=https://trainedproductionmodels.blob.core.windows.net/dnnmodel/11-15-2
   <ItemGroup>
     <Compile Include="src\add_samples.py" />
     <Compile Include="src\audio_utils.py" />
+    <Compile Include="src\bootstrap_sample_utils.py" />
     <Compile Include="src\compare_models.py" />
     <Compile Include="src\download_wavs.py" />
     <Compile Include="bootstrap\src\extract_training_samples.py" />
@@ -72,6 +73,8 @@ MODEL_URL=https://trainedproductionmodels.blob.core.windows.net/dnnmodel/11-15-2
   <ItemGroup>
     <Folder Include="tests\" />
     <Folder Include="src\" />
+    <Folder Include="bootstrap\" />
+    <Folder Include="bootstrap\src\" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="README.md" />

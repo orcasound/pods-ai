@@ -19,12 +19,12 @@ import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from bootstrap.src.extract_training_samples import (
+from bootstrap_sample_utils import (
+    REPO_ROOT,
+    SEGMENT_DURATION_SECONDS,
     generate_uri,
     load_manual_corrections,
     process_sample,
-    REPO_ROOT,
-    SEGMENT_DURATION_SECONDS,
 )
 from model_inference import get_model_inference
 

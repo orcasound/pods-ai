@@ -15,7 +15,7 @@ import ffmpeg
 import m3u8
 from pytz import timezone
 
-from bootstrap.src.extract_training_samples import download_60s_audio
+from bootstrap_sample_utils import download_60s_audio
 from audio_utils import (
     get_cached_folders,
     get_folders_between_timestamp,

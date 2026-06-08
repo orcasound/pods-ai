@@ -63,7 +63,7 @@ from pytz import timezone
 
 from model_inference import get_model_inference
 from orcasite_feeds import get_orcasite_feeds, OrcasiteFeed
-from bootstrap.src.extract_training_samples import download_60s_audio
+from bootstrap_sample_utils import download_60s_audio
 
 SEGMENT_DURATION = 3  # Duration of each segment in seconds.
 HOP_DURATION = 2  # Hop size between segments in seconds.
