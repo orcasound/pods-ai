@@ -6,11 +6,11 @@ Given a combined node_timestamp string, compute and output the best corrected
 timestamp URI by running process_sample().
 
 Usage:
-    python get_best_timestamp.py <node_timestamp> [--no-model] [--duration N]
+    python bootstrap/src/get_best_timestamp.py <node_timestamp> [--no-model] [--duration N]
 
 Example:
-    python get_best_timestamp.py rpi-orcasound-lab_2023_08_18_00_59_53_PST
-    python get_best_timestamp.py orcasound-lab 2023_08_18_00_59_53_PST  # Legacy format still supported
+    python bootstrap/src/get_best_timestamp.py rpi-orcasound-lab_2023_08_18_00_59_53_PST
+    python bootstrap/src/get_best_timestamp.py orcasound-lab 2023_08_18_00_59_53_PST  # Legacy format still supported
 """
 
 import argparse
@@ -19,14 +19,14 @@ import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from bootstrap_sample_utils import (
+from extract_training_samples import (
     REPO_ROOT,
     SEGMENT_DURATION_SECONDS,
     generate_uri,
     load_manual_corrections,
     process_sample,
 )
-from model_inference import get_model_inference
+from src.model_inference import get_model_inference
 
 
 def node_slug_to_name(node_slug: str) -> str:

@@ -105,8 +105,6 @@ Key dependencies:
 - **compare_models.py**: Evaluates and compares fastai, orcahello, podsai (AST), and oldpodsai (Wav2Vec2) models
   on the test set loaded from `output/csv/testing_60s_samples.csv` and downloaded by `download_wavs.py`).
   Reports correct identifications, false positives, false negatives, and average prediction time for each model.
-- **get_best_timestamp.py**: Given a node slug and a detection timestamp, runs
-  `process_sample()` and prints the corrected URI with the best timestamp.
 
 ### add_samples.py
 
@@ -452,30 +450,6 @@ python src/compare_models.py --max-samples 10 --fastai-model-path model
 
 ```bash
 python src/compare_models.py --category resident --fastai-model-path model
-```
-
-### get_best_timestamp.py
-
-```
-usage: python get_best_timestamp.py <node_slug> <timestamp_str> [--no-model] [--duration N]
-```
-
-| Argument | Description |
-|---|---|
-| `node_slug` | Node URL slug, e.g. `orcasound-lab` |
-| `timestamp_str` | PST timestamp, e.g. `2023_08_18_00_59_53_PST` |
-| `--no-model` | Skip model inference; apply a fixed-offset correction instead |
-| `--duration N` | Segment duration in seconds (default: 3) |
-
-The script uses the same model-based timestamp correction logic archived in `bootstrap/src/extract_training_samples.py`.
-The same `MODEL_TYPE`, `MODEL_PATH`, `MODEL_AUTO_DOWNLOAD`, and `MODEL_URL` environment variables apply.
-
-**Example**
-
-```bash
-cd src
-python get_best_timestamp.py orcasound-lab 2023_08_18_00_59_53_PST
-# https://live.orcasound.net/bouts/new/orcasound-lab?time=2023-08-18T07%3A59%3A50.000Z
 ```
 
 ## LiveInferenceSystem Container
