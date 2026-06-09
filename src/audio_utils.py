@@ -23,7 +23,10 @@ from botocore import UNSIGNED
 from botocore.config import Config
 import ffmpeg
 import m3u8
-from orcasite_feeds import OrcasiteFeed
+try:
+    from orcasite_feeds import OrcasiteFeed
+except ImportError:  # pragma: no cover
+    from src.orcasite_feeds import OrcasiteFeed
 from pytz import timezone
 import requests
 
