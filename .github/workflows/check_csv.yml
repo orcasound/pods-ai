@@ -38,14 +38,14 @@ jobs:
       - id: detect
         name: Detect CSV workflow changes
         run: |
-if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
-  echo "should_run_base_csv=true" >> "$GITHUB_OUTPUT"
-  echo "should_run_make_csv=true" >> "$GITHUB_OUTPUT"
-  echo "should_run_merge=true" >> "$GITHUB_OUTPUT"
-  exit 0
-fi
-git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.sha }}" > changed_files.txt
-cat changed_files.txt
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            echo "should_run_base_csv=true" >> "$GITHUB_OUTPUT"
+            echo "should_run_make_csv=true" >> "$GITHUB_OUTPUT"
+            echo "should_run_merge=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.sha }}" > changed_files.txt
+          cat changed_files.txt
           base_csv_inputs=(
             '^bootstrap/src/make_csv.py$'
             '^bootstrap/src/extract_training_samples.py$'
