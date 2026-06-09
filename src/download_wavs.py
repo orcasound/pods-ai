@@ -115,12 +115,20 @@ def _training_window(row: CSVRow) -> tuple[datetime, datetime]:
 
 def _testing_window(row: CSVRow) -> tuple[datetime, datetime]:
     sample_time = parse_timestamp_pst(row.timestamp_pst)
-    if row.notes == "tp_human_only":
-        return sample_time, sample_time + timedelta(seconds=TESTING_WINDOW_SECONDS)
-    return (
-        sample_time - timedelta(seconds=TESTING_CENTER_OFFSET_SECONDS),
-        sample_time + timedelta(seconds=TESTING_CENTER_OFFSET_SECONDS),
+    download_time = (
+        sample_time
+        if row.notes == "tp_human_only"
+        else sample_time + timedelta(seconds=TESTING_CENTER_OFFSET_SECONDS)
     )
+
+    # Mirror audio_utils.download_60s_audio() behavior: snap end time to the next 10-second boundary.
+    snapped_sec = ((download_time.second + 9) // 10) * 10
+    if snapped_sec == 60:
+        download_time = download_time + timedelta(minutes=1)
+        snapped_sec = 0
+    end_time = download_time.replace(second=snapped_sec, microsecond=0)
+
+    return end_time - timedelta(seconds=TESTING_WINDOW_SECONDS), end_time
 
 
 def _find_overlaps(rows: list[CSVRow], window_fn, label: str) -> list[str]:
