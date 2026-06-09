@@ -39,13 +39,18 @@ jobs:
       - id: detect
         name: Detect sample CSV changes
         run: |
-          git diff --name-only "${{ github.event.pull_request.base.sha || github.sha }}" "${{ github.sha }}" > changed_files.txt
-          cat changed_files.txt
-          should_run=false
-          if grep -Eq '^output/csv/training_3s_samples\.csv$|^output/csv/testing_60s_samples\.csv$' changed_files.txt; then
-            should_run=true
-          fi
-          echo "should_run=$should_run" >> "$GITHUB_OUTPUT"
+if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+  echo "should_run=true" >> "$GITHUB_OUTPUT"
+  exit 0
+fi
+
+git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.sha }}" > changed_files.txt
+cat changed_files.txt
+should_run=false
+if grep -Eq '^output/csv/training_3s_samples\.csv$|^output/csv/testing_60s_samples\.csv$' changed_files.txt; then
+  should_run=true
+fi
+echo "should_run=$should_run" >> "$GITHUB_OUTPUT"
 
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
         if: steps.detect.outputs.should_run == 'true'
