@@ -7,6 +7,7 @@ This module contains shared functions used by both extract_training_samples.py
 and download_wavs.py to avoid code duplication.
 """
 
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import List, Optional
 import math
@@ -17,12 +18,14 @@ import time
 import urllib.error
 
 import boto3
+from azure.cosmos import CosmosClient
 from botocore import UNSIGNED
 from botocore.config import Config
 import ffmpeg
 import m3u8
 from pytz import timezone
 import requests
+from src.orcasite_feeds import OrcasiteFeed
 
 
 # Simple in-memory cache for S3 folder listings keyed by "bucket::prefix"
@@ -34,6 +37,24 @@ MAX_DOWNLOAD_RETRIES = 3
 # Seconds to wait between download retry attempts.
 DOWNLOAD_RETRY_DELAY_SECONDS = 2
 PACIFIC_TZ = timezone('US/Pacific')
+COSMOS_URL = os.environ.get("COSMOS_URL", "").strip() or "https://aifororcasmetadatastore.documents.azure.com:443/"
+COSMOS_KEY = os.environ.get("COSMOS_KEY", "<your-primary-key>")
+COSMOS_DB = os.environ.get("COSMOS_DB", "predictions")
+COSMOS_CONTAINER = os.environ.get("COSMOS_CONTAINER", "metadata")
+
+
+@dataclass
+class OrcaHelloDetection:
+    id: str
+    feed: OrcasiteFeed
+    timestamp: Optional[datetime]
+    status: str
+    confidence: Optional[float] = None
+    comments: str = ""
+
+
+# Terms in a detection description that indicate the label cannot be determined with confidence.
+SKIP_TERMS = {'?', 'not sure', 'unsure', 'possibl', 'sounds like', 'sounded like', 'ould be'}
 
 
 def get_all_folders(bucket: str, prefix: str) -> List[str]:
@@ -179,6 +200,90 @@ def load_m3u8_with_retry(stream_url: str) -> m3u8.M3U8:
 def _parse_timestamp_pst(timestamp_str: str) -> datetime:
     dt = datetime.strptime(timestamp_str, '%Y_%m_%d_%H_%M_%S_PST')
     return PACIFIC_TZ.localize(dt)
+
+
+def format_timestamp_pst(dt: datetime) -> str:
+    """
+    Format a datetime object as PST timestamp string in the format YYYY_MM_DD_HH_MM_SS_PST.
+    """
+    dt_pst = dt.astimezone(PACIFIC_TZ)
+    return dt_pst.strftime("%Y_%m_%d_%H_%M_%S_PST")
+
+
+def parse_pst_timestamp(ts_str: str) -> datetime:
+    """
+    Parse a PST timestamp string in the format YYYY_MM_DD_HH_MM_SS_PST into a timezone-aware datetime.
+    """
+    if not ts_str.endswith("_PST"):
+        raise ValueError(f"Timestamp '{ts_str}' must end with '_PST'")
+    body = ts_str[:-4]
+    dt_naive = datetime.strptime(body, "%Y_%m_%d_%H_%M_%S")
+    return PACIFIC_TZ.localize(dt_naive)
+
+
+def get_node_name_for_feed(feed: OrcasiteFeed) -> str:
+    """Retrieve the node name associated with an OrcasiteFeed."""
+    return feed.node_name
+
+
+def get_orcahello_detections(feed: OrcasiteFeed) -> List[OrcaHelloDetection]:
+    """
+    Retrieve OrcaHello detections and return those whose audio URI contains the given feed's node_name.
+    """
+    node_name = get_node_name_for_feed(feed)
+
+    cosmos_client = CosmosClient(COSMOS_URL, credential=COSMOS_KEY)
+    cosmos_database = cosmos_client.get_database_client(COSMOS_DB)
+    container = cosmos_database.get_container_client(COSMOS_CONTAINER)
+
+    query = """
+        SELECT * FROM c
+        WHERE CONTAINS(c.audioUri, @node_name)
+        ORDER BY c.timestamp DESC
+    """
+    params = [{"name": "@node_name", "value": node_name}]
+    items = container.query_items(
+        query=query,
+        parameters=params,
+        enable_cross_partition_query=True
+    )
+
+    results = []
+    for item in items:
+        found = item.get("SRKWFound", "").lower()
+        reviewed = item.get("reviewed", False)
+        if reviewed and found == "yes":
+            status = "confirmed"
+        elif reviewed and found == "no":
+            status = "rejected"
+        else:
+            status = "unreviewed"
+
+        ts_raw = item.get("timestamp")
+        try:
+            ts = datetime.fromisoformat(ts_raw.replace("Z", "+00:00"))
+        except Exception:
+            ts = None
+
+        confidence = item.get("whaleFoundConfidence")
+        if confidence is not None:
+            try:
+                confidence = float(confidence)
+            except (ValueError, TypeError):
+                confidence = None
+
+        results.append(
+            OrcaHelloDetection(
+                id=item.get("id"),
+                feed=feed,
+                timestamp=ts,
+                status=status,
+                confidence=confidence,
+                comments=(item.get("comments") or "").strip(),
+            )
+        )
+
+    return results
 
 
 def _get_aligned_end_time(timestamp_str: str) -> datetime:
