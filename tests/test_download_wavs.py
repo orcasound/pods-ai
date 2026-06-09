@@ -85,11 +85,12 @@ class TestTimestampHelpers:
 class TestOverlapValidation:
     def test_validate_no_overlaps_allows_non_overlapping_rows(self):
         training_rows = [
-            CSVRow("resident", "rpi_andrews_bay", "2025_01_01_00_00_00_PST", "", "", ""),
-            CSVRow("resident", "rpi_andrews_bay", "2025_01_01_00_00_03_PST", "", "", ""),
+            CSVRow("resident", "rpi_andrews_bay", "2025_01_01_01_00_00_PST", "", "", ""),
+            CSVRow("resident", "rpi_andrews_bay", "2025_01_01_01_00_03_PST", "", "", ""),
         ]
         testing_rows = [
-            CSVRow("resident", "rpi_andrews_bay", "2025_01_01_00_01_00_PST", "", "", "tp_human_only"),
+            CSVRow("resident", "rpi_andrews_bay", "2025_01_01_00_59_00_PST", "", "", "tp_human_only"),
+            CSVRow("resident", "rpi_andrews_bay", "2025_01_01_01_01_06_PST", "", "", "tp_human_only"),
         ]
         validate_no_overlaps(training_rows, testing_rows)
 
