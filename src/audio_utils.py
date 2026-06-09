@@ -23,9 +23,9 @@ from botocore import UNSIGNED
 from botocore.config import Config
 import ffmpeg
 import m3u8
+from orcasite_feeds import OrcasiteFeed
 from pytz import timezone
 import requests
-from src.orcasite_feeds import OrcasiteFeed
 
 
 # Simple in-memory cache for S3 folder listings keyed by "bucket::prefix"
@@ -38,7 +38,7 @@ MAX_DOWNLOAD_RETRIES = 3
 DOWNLOAD_RETRY_DELAY_SECONDS = 2
 PACIFIC_TZ = timezone('US/Pacific')
 COSMOS_URL = os.environ.get("COSMOS_URL", "").strip() or "https://aifororcasmetadatastore.documents.azure.com:443/"
-COSMOS_KEY = os.environ.get("COSMOS_KEY", "<your-primary-key>")
+COSMOS_KEY = os.environ.get("COSMOS_KEY", "").strip()
 COSMOS_DB = os.environ.get("COSMOS_DB", "predictions")
 COSMOS_CONTAINER = os.environ.get("COSMOS_CONTAINER", "metadata")
 
@@ -230,6 +230,9 @@ def get_orcahello_detections(feed: OrcasiteFeed) -> List[OrcaHelloDetection]:
     """
     Retrieve OrcaHello detections and return those whose audio URI contains the given feed's node_name.
     """
+    if not COSMOS_KEY:
+        raise ValueError("COSMOS_KEY environment variable must be set and non-empty to fetch OrcaHello detections")
+
     node_name = get_node_name_for_feed(feed)
 
     cosmos_client = CosmosClient(COSMOS_URL, credential=COSMOS_KEY)
