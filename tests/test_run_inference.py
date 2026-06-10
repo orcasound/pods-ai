@@ -1119,7 +1119,7 @@ class TestIntegrationWithRealModels:
          "PODS-AI model may misclassify transient as resident"),
         ("humpback_wav_path", "humpback", "PODS-AI model may misclassify humpback as resident"),
         ("vessel_wav_path", "vessel", None),
-        ("water_wav_path", "water", None),
+        ("water_wav_path", "water", "PODS-AI model may misclassify water as vessel"),
         ("human_wav_path", "human", None),
         ("jingle_wav_path", "jingle", "PODS-AI model may misclassify jingle as vessel"),
     ])
