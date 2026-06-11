@@ -81,6 +81,7 @@ pods-ai/
 ## Coding Conventions
 
 Follow the coding conventions documented in [CONTRIBUTING.md](../CONTRIBUTING.md).
+When reviewing code, ensure it follows those coding conventions.
 
 ## pods-ai Pipeline
 
