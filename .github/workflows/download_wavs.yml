@@ -10,6 +10,9 @@ on:
     paths:
       - output/csv/training_3s_samples.csv
       - output/csv/testing_60s_samples.csv
+      - .github/workflows/download_wavs.yml
+      - src/download_wavs.py
+      - audio_utils.py
   workflow_dispatch:
 
 concurrency:
