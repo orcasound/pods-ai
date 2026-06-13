@@ -502,7 +502,7 @@ def print_usage():
     """
     Display usage information for this script.
     """
-    print("Usage: python download_wavs.py")
+    print("Usage: python download_wavs.py [--validate-only]")
     print()
     print("This script downloads wav files for training and testing samples.")
     print("It reads from:")
@@ -513,17 +513,14 @@ def print_usage():
     print("  - output/wav/ (training samples)")
     print("  - output/testing-wav/ (testing samples)")
     print()
-    print("This script does not accept any command-line arguments.")
+    print("Optional argument:")
+    print("  --validate-only: validate CSV overlap rules without downloading WAV files")
     print("Optional environment variables:")
     print("  - WAV_WORKTREE_DIR: root directory containing output/ (default: current directory)")
     print("  - WAV_CACHE_DIR: root directory to copy existing wav files from before downloading")
 
 
-if __name__ == "__main__":
-    if len(sys.argv) > 1:
-        print_usage()
-        sys.exit(0)
-
+def run_download_wavs(validate_only: bool = False) -> None:
     training_csv_path = Path("output/csv/training_3s_samples.csv")
     testing_csv_path = Path("output/csv/testing_60s_samples.csv")
 
@@ -554,7 +551,19 @@ if __name__ == "__main__":
 
     validate_no_overlaps(training_rows, testing_rows)
 
+    if validate_only:
+        print("Overlap validation completed successfully.")
+        return
+
     process_csv(training_csv_path, training_output_root, cache_root=training_cache_root)
 
     if testing_rows:
         process_testing_csv(testing_csv_path, testing_output_root, cache_root=testing_cache_root)
+
+
+if __name__ == "__main__":
+    if len(sys.argv) > 2 or (len(sys.argv) == 2 and sys.argv[1] != "--validate-only"):
+        print_usage()
+        sys.exit(1)
+
+    run_download_wavs(validate_only=(len(sys.argv) == 2))

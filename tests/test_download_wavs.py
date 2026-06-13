@@ -5,6 +5,7 @@
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import ANY, patch
+import os
 
 import pytest
 
@@ -14,6 +15,7 @@ from download_wavs import (
     download_testing_sample,
     process_csv,
     process_testing_csv,
+    run_download_wavs,
     validate_no_overlaps,
 )
 
@@ -188,3 +190,31 @@ class TestCacheAndCleanup:
             assert expected.exists()
             assert expected.read_bytes() == b"cached"
             assert not stale.exists()
+
+
+class TestValidateOnly:
+    def test_run_download_wavs_validate_only_skips_download_processing(self):
+        with TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            csv_dir = tmp_path / "output" / "csv"
+            csv_dir.mkdir(parents=True, exist_ok=True)
+            (csv_dir / "training_3s_samples.csv").write_text(
+                "category,node_name,timestamp_pst,uri,description,notes\n"
+                "resident,rpi_andrews_bay,2025_01_01_01_00_00_PST,uri,desc,note\n",
+                encoding="utf-8",
+            )
+            (csv_dir / "testing_60s_samples.csv").write_text(
+                "category,node_name,timestamp_pst,uri,description,notes\n"
+                "resident,rpi_andrews_bay,2025_01_01_01_01_06_PST,uri,desc,tp_human_only\n",
+                encoding="utf-8",
+            )
+
+            original_cwd = Path.cwd()
+            try:
+                os.chdir(tmp_path)
+                with patch("download_wavs.process_csv") as mock_process_csv, patch("download_wavs.process_testing_csv") as mock_process_testing_csv:
+                    run_download_wavs(validate_only=True)
+                mock_process_csv.assert_not_called()
+                mock_process_testing_csv.assert_not_called()
+            finally:
+                os.chdir(original_cwd)
