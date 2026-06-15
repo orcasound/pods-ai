@@ -21,20 +21,15 @@ Because the tool names (like `get_recent_detections`) and their instructions are
 
 ---
 
-## Quick Start 
+## Quick Start
 
-We use `uv` because it's the fastest way to set everything up.
+<details>
+<summary><strong>For Unix</strong></summary>
 
 1. **Install uv**:
-   For Unix:
    ```bash
    curl -LsSf https://astral.sh/uv/install.sh | sh
    export PATH="$HOME/.local/bin:$PATH"
-   ```
-
-   For Windows:
-   ```powershell
-   powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
    ```
 
 2. **Set up the tools**:
@@ -51,7 +46,38 @@ We use `uv` because it's the fastest way to set everything up.
    export DANGEROUSLY_OMIT_AUTH=true
    npx -y @modelcontextprotocol/inspector .venv/bin/python src/mcp_server.py
    ```
+
    Open [http://localhost:6274](http://localhost:6274) and click **Connect**.
+
+</details>
+
+<details>
+<summary><strong>For Windows</strong></summary>
+
+1. **Install uv**:
+
+   ```powershell
+   powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+   ```
+
+2. **Set up the tools**:
+   ```powershell
+   uv venv .venv
+   .venv\Scripts\activate
+   uv pip install -r requirements-mcp.txt
+   ```
+
+3. **Test it (The "Inspector")**:
+   Run this to see a web page with all the tools:
+   ```powershell
+   $env:PYTHONPATH="src"
+   $env:DANGEROUSLY_OMIT_AUTH="true"
+   npx -y @modelcontextprotocol/inspector .venv\Scripts\python.exe src\mcp_server.py
+   ```
+
+   Open [http://localhost:6274](http://localhost:6274) and click **Connect**.
+
+</details>
 
 ---
 
