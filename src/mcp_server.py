@@ -432,10 +432,53 @@ def export_unlabeled_to_csv(
     return f"Successfully created dataset! Saved {len(unlabeled_items)} rows to {output_path}"
 
 
+import threading
+import time
+import json
+def run_dual_handshake(mcp):
+    """
+    Allow both Claude Desktop (client-initiated) and Visual Studio (server-initiated)
+    MCP handshakes.
+    """
+
+    # Flag set when a client sends the first message.
+    client_initialized = {"seen": False}
+
+    def watch_for_client_init():
+        try:
+            line = sys.stdin.readline()
+            if line.strip():
+                client_initialized["seen"] = True
+                mcp._handle_raw_json(line)
+        except Exception:
+            pass
+
+    # Start watcher thread.
+    t = threading.Thread(target=watch_for_client_init, daemon=True)
+    t.start()
+
+    # Give the client a moment to speak first (Claude Desktop).
+    time.sleep(0.2)
+
+    if not client_initialized["seen"]:
+        # Visual Studio case: server must initiate handshake.
+        init_msg = {
+            "jsonrpc": "2.0",
+            "id": 0,
+            "method": "initialize",
+            "params": {"protocolVersion": "2024-11-05"}
+        }
+        sys.stdout.write(json.dumps(init_msg) + "\n")
+        sys.stdout.flush()
+
+    # Hand control back to FastMCP.
+    mcp.run()
+
+
 # ---------------------------------------------------------------------------
 # Entry point.
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
     logger.info("mcp_server_starting", transport="stdio")
-    mcp.run()
+    run_dual_handshake(mcp)
