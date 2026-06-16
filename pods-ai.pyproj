@@ -79,6 +79,7 @@ MODEL_URL=https://trainedproductionmodels.blob.core.windows.net/dnnmodel/11-15-2
     <Folder Include="bootstrap\src\" />
   </ItemGroup>
   <ItemGroup>
+    <Content Include="MCP_USAGE.md" />
     <Content Include="README.md" />
     <Content Include="requirements.txt" />
   </ItemGroup>
