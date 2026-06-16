@@ -136,7 +136,7 @@ class TestMCPServer(unittest.TestCase):
         mock_s3 = MagicMock()
         mock_boto.return_value = mock_s3
         
-        # Mock paginator
+        # Mock paginator.
         mock_paginator = MagicMock()
         mock_s3.get_paginator.return_value = mock_paginator
         mock_paginator.paginate.return_value = [
@@ -214,7 +214,7 @@ class TestMCPServer(unittest.TestCase):
         mock_get_model.return_value = mock_model
         
         from mcp_server import compare_models_on_clip
-        # Need to mock the Path suffix as well
+        # Need to mock the Path suffix as well.
         with patch("mcp_server.Path.suffix", new_callable=unittest.mock.PropertyMock) as mock_suffix:
             mock_suffix.return_value = ".wav"
             result = compare_models_on_clip("/abs/path/test.wav")
@@ -273,33 +273,33 @@ class TestDualHandshake(unittest.TestCase):
     @patch("mcp_server.threading.Thread")
     def test_client_initiated_handshake(self, mock_thread, mock_stdout, mock_stdin, mock_sleep):
         """Test Claude Desktop scenario: client sends first message."""
-        # Mock MCP instance
+        # Mock MCP instance.
         mock_mcp = MagicMock()
         mock_mcp.run = MagicMock()
         mock_mcp._handle_raw_json = MagicMock()
         
-        # Simulate client sending initialize message
+        # Simulate client sending initialize message.
         client_message = '{"jsonrpc":"2.0","method":"initialize","id":1}\n'
         mock_stdin.readline.return_value = client_message
         
-        # Mock thread to execute immediately
+        # Mock thread to execute immediately.
         def run_thread_immediately(target=None, daemon=None):
             thread = MagicMock()
-            thread.start = lambda: target()  # Execute target immediately
+            thread.start = lambda: target()  # Execute target immediately.
             return thread
         
         mock_thread.side_effect = run_thread_immediately
         
-        # Run dual handshake
+        # Run dual handshake.
         run_dual_handshake(mock_mcp)
         
-        # Verify client message was handled
+        # Verify client message was handled.
         mock_mcp._handle_raw_json.assert_called_once_with(client_message)
         
-        # Verify server did NOT send its own initialize (client spoke first)
+        # Verify server did NOT send its own initialize (client spoke first).
         mock_stdout.write.assert_not_called()
         
-        # Verify FastMCP.run() was called
+        # Verify FastMCP.run() was called.
         mock_mcp.run.assert_called_once()
 
     @patch("mcp_server.time.sleep")
@@ -308,35 +308,35 @@ class TestDualHandshake(unittest.TestCase):
     @patch("mcp_server.threading.Thread")
     def test_server_initiated_handshake(self, mock_thread, mock_stdout, mock_stdin, mock_sleep):
         """Test Visual Studio scenario: server must initiate handshake."""
-        # Mock MCP instance
+        # Mock MCP instance.
         mock_mcp = MagicMock()
         mock_mcp.run = MagicMock()
         
-        # Simulate no client message (empty stdin)
+        # Simulate no client message (empty stdin).
         mock_stdin.readline.return_value = ""
         
-        # Create a real StringIO for stdout to capture writes
+        # Create a real StringIO for stdout to capture writes.
         stdout_buffer = io.StringIO()
         mock_stdout.write = stdout_buffer.write
         mock_stdout.flush = MagicMock()
         
-        # Mock thread
+        # Mock thread.
         mock_thread_instance = MagicMock()
         mock_thread.return_value = mock_thread_instance
         
-        # Run dual handshake
+        # Run dual handshake.
         run_dual_handshake(mock_mcp)
         
-        # Verify server sent initialize message
+        # Verify server sent initialize message.
         written_output = stdout_buffer.getvalue()
         self.assertIn('"method": "initialize"', written_output)
         self.assertIn('"jsonrpc": "2.0"', written_output)
         self.assertIn('"protocolVersion": "2024-11-05"', written_output)
         
-        # Verify flush was called
+        # Verify flush was called.
         mock_stdout.flush.assert_called()
         
-        # Verify FastMCP.run() was called
+        # Verify FastMCP.run() was called.
         mock_mcp.run.assert_called_once()
 
     @patch("mcp_server.time.sleep")
@@ -348,7 +348,7 @@ class TestDualHandshake(unittest.TestCase):
         mock_mcp = MagicMock()
         mock_stdin.readline.return_value = ""
         
-        # Capture stdout
+        # Capture stdout.
         stdout_buffer = io.StringIO()
         mock_stdout.write = stdout_buffer.write
         mock_stdout.flush = MagicMock()
@@ -358,11 +358,11 @@ class TestDualHandshake(unittest.TestCase):
         
         run_dual_handshake(mock_mcp)
         
-        # Parse the JSON output
+        # Parse the JSON output.
         written_output = stdout_buffer.getvalue().strip()
         message = json.loads(written_output)
         
-        # Verify message structure
+        # Verify message structure.
         self.assertEqual(message["jsonrpc"], "2.0")
         self.assertEqual(message["id"], 0)
         self.assertEqual(message["method"], "initialize")
@@ -377,7 +377,7 @@ class TestDualHandshake(unittest.TestCase):
         """Test that whitespace-only input is ignored (triggers server init)."""
         mock_mcp = MagicMock()
         
-        # Simulate whitespace input (no real message)
+        # Simulate whitespace input (no real message).
         mock_stdin.readline.return_value = "   \n"
         
         stdout_buffer = io.StringIO()
@@ -389,7 +389,7 @@ class TestDualHandshake(unittest.TestCase):
         
         run_dual_handshake(mock_mcp)
         
-        # Should trigger server-initiated handshake
+        # Should trigger server-initiated handshake.
         written_output = stdout_buffer.getvalue()
         self.assertIn('"method": "initialize"', written_output)
 
@@ -401,25 +401,25 @@ class TestDualHandshake(unittest.TestCase):
         """Test that exceptions in watcher thread are handled gracefully."""
         mock_mcp = MagicMock()
         
-        # Simulate stdin raising exception
+        # Simulate stdin raising exception.
         mock_stdin.readline.side_effect = IOError("stdin error")
         
         stdout_buffer = io.StringIO()
         mock_stdout.write = stdout_buffer.write
         mock_stdout.flush = MagicMock()
         
-        # Mock thread to execute immediately
+        # Mock thread to execute immediately.
         def run_thread_immediately(target=None, daemon=None):
             thread = MagicMock()
-            thread.start = lambda: target()  # Execute and let exception be caught
+            thread.start = lambda: target()  # Execute and let exception be caught.
             return thread
         
         mock_thread.side_effect = run_thread_immediately
         
-        # Should not raise exception - server should initiate handshake
+        # Should not raise exception - server should initiate handshake.
         run_dual_handshake(mock_mcp)
         
-        # Server should have initiated since thread caught exception
+        # Server should have initiated since thread caught exception.
         written_output = stdout_buffer.getvalue()
         self.assertIn('"method": "initialize"', written_output)
         mock_mcp.run.assert_called_once()
@@ -438,7 +438,7 @@ class TestDualHandshake(unittest.TestCase):
         
         run_dual_handshake(mock_mcp)
         
-        # Verify thread was created with daemon=True
+        # Verify thread was created with daemon=True.
         mock_thread.assert_called_once()
         call_kwargs = mock_thread.call_args[1]
         self.assertTrue(call_kwargs.get("daemon"))
@@ -457,7 +457,7 @@ class TestDualHandshake(unittest.TestCase):
         
         run_dual_handshake(mock_mcp)
         
-        # Verify sleep was called with 0.2 seconds
+        # Verify sleep was called with 0.2 seconds.
         mock_sleep.assert_called_once_with(0.2)
 
 
