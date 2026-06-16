@@ -13,7 +13,9 @@ Tools — all usable without AKS access:
 """
 
 import csv
+import json
 import sys
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -23,6 +25,12 @@ from botocore.config import Config
 from mcp.server.fastmcp import FastMCP
 import requests
 import structlog
+
+# Platform-specific imports for non-blocking stdin check.
+if sys.platform == "win32":
+    import msvcrt
+else:
+    import select
 
 structlog.configure(
     processors=[
@@ -431,12 +439,6 @@ def export_unlabeled_to_csv(
 
     return f"Successfully created dataset! Saved {len(unlabeled_items)} rows to {output_path}"
 
-
-import threading
-import time
-import json
-import io
-import select
 
 def run_dual_handshake(mcp):
     """
