@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 import sys
 import unittest
-from unittest.mock import MagicMock, patch, mock_open, call
+from unittest.mock import MagicMock, patch
 import json
 import io
 
