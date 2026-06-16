@@ -27,10 +27,18 @@ import requests
 import structlog
 
 # Platform-specific imports for non-blocking stdin check.
-if sys.platform == "win32":
-    import msvcrt
-else:
-    import select
+# Both are imported unconditionally so they are always patchable in tests.
+try:
+    import msvcrt  # Windows only
+except ImportError:
+    # Provide a stub on non-Windows so the name is always patchable in tests.
+    class _MsvcrtStub:  # noqa: N801
+        @staticmethod
+        def kbhit() -> bool:
+            return False  # pragma: no cover
+    msvcrt = _MsvcrtStub()  # type: ignore[assignment]
+
+import select  # Unix/Linux/macOS (and Windows with sockets)
 
 structlog.configure(
     processors=[
@@ -452,7 +460,6 @@ def run_dual_handshake(mcp):
     # Platform-specific non-blocking check for available stdin.
     if sys.platform == "win32":
         # Windows: Use msvcrt.kbhit() to check without blocking.
-        import msvcrt
         time.sleep(0.2)  # Give client a moment to send data.
 
         if msvcrt.kbhit():
