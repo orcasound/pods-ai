@@ -20,7 +20,7 @@ The active scripts in `src` include:
 2. **make_spectrograms.py**: Creates a png file for each wav file in a subdirectory of `output/png`.
 3. **train_podsai_model.py**: Trains a PODS-AI model on the generated training samples.
 4. **compare_models.py**: Evaluates models using `output/csv/testing_60s_samples.csv`.
-4. **generate_embeddings.py**: Generate UMAPs from `output/csv/testing_60s_samples.csv`.
+5. **generate_embeddings.py**: Generates `output/csv/embeddings.csv` from `output/csv/testing_60s_samples.csv`.
 
 ```mermaid
 flowchart TD;
