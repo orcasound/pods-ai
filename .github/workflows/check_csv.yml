@@ -31,7 +31,7 @@ jobs:
           allowed-endpoints: >
             github.com:443
 
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
         with:
           fetch-depth: 0
 
@@ -115,6 +115,7 @@ jobs:
           egress-policy: block
           allowed-endpoints: >
             *.archive.ubuntu.com:80
+            security.ubuntu.com:443
             *.microsoft.com:443
             aifororcasmetadatastore-westus2.documents.azure.com:443
             aifororcasmetadatastore.documents.azure.com:443
@@ -135,7 +136,7 @@ jobs:
         with:
           cancel_others: 'false'
 
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
         if: steps.skip_check.outputs.should_skip != 'true'
         with:
           submodules: 'recursive'
@@ -231,7 +232,7 @@ jobs:
         with:
           cancel_others: 'false'
 
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
         if: steps.skip_check.outputs.should_skip != 'true'
         with:
           submodules: 'recursive'
@@ -295,6 +296,7 @@ jobs:
           egress-policy: block
           allowed-endpoints: >
             *.archive.ubuntu.com:80
+            security.ubuntu.com:443
             *.microsoft.com:443
             api.github.com:443
             audio-orcasound-net.s3.amazonaws.com:443
@@ -311,7 +313,7 @@ jobs:
         with:
           cancel_others: 'false'
 
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
         if: steps.skip_check.outputs.should_skip != 'true'
         with:
           submodules: 'recursive'
@@ -385,7 +387,7 @@ jobs:
         with:
           cancel_others: 'false'
 
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
         if: steps.skip_check.outputs.should_skip != 'true'
         with:
           submodules: 'recursive'
