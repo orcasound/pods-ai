@@ -371,7 +371,7 @@ def main():
 
     parser.add_argument(
         "--testing-csv",
-        default="../output/csv/testing_60s_samples.csv",
+        default="output/csv/testing_60s_samples.csv",
         help="Path to testing_60s_samples.csv (default: output/csv/testing_60s_samples.csv).",
     )
 

@@ -566,7 +566,7 @@ def main() -> int:
         default=PODSAI_MODEL_ID,
         help=(
             "Path to PODS-AI model directory or HuggingFace Hub ID. "
-            "Used by both and oldpodsai (Wav2Vec2) and podsai (AST). "
+            "Used by both oldpodsai (Wav2Vec2) and podsai (AST). "
             f"Defaults to {PODSAI_MODEL_ID!r} when not specified."
         ),
     )

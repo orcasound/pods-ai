@@ -19,7 +19,8 @@ The active scripts in `src` include:
 1. **download_wavs.py**: Uses `output/csv/training_3s_samples.csv` and `output/csv/testing_60s_samples.csv` to download wav files.
 2. **make_spectrograms.py**: Creates a png file for each wav file in a subdirectory of `output/png`.
 3. **train_podsai_model.py**: Trains a PODS-AI model on the generated training samples.
-4. **compare_models.py**: Evaluates models on `output/csv/testing_60s_samples.csv`.
+4. **compare_models.py**: Evaluates models using `output/csv/testing_60s_samples.csv`.
+4. **generate_embeddings.py**: Generate UMAPs from `output/csv/testing_60s_samples.csv`.
 
 ```mermaid
 flowchart TD;
@@ -31,12 +32,14 @@ flowchart TD;
     testingWav@{ shape: docs, label: "testing-wav/*" };
     concatenated@{ shape: docs, label: "concatenated.wav" };
     png@{ shape: docs, label: "png/*" };
+    embeddings@{ shape: docs, label: "embeddings.csv" };
 
     downloadWavs@{ shape: rect, label: "download_wavs.py" };
     trainPodsaiModel@{ shape: rect, label: "train_podsai_model.py" };
     compareModels@{ shape: rect, label: "compare_models.py" };
     concatenateWavs@{ shape: rect, label: "concatenate_wavs.py" };
     makeSpectrograms@{ shape: rect, label: "make_spectrograms.py" };
+    generateEmbeddings@{ shape: rect, label: "generate_embeddings.py" };
 
     trainingSamples-->downloadWavs-->wav;
     testingSamples-->downloadWavs-->testingWav;
@@ -50,6 +53,9 @@ flowchart TD;
 
     wav-->concatenateWavs-->concatenated;
     wav-->makeSpectrograms-->png;
+    podsaiModel-->generateEmbeddings;
+    testingSamples-->generateEmbeddings;
+    testingWav-->generateEmbeddings-->embeddings;
 ```
 
 ## Requirements

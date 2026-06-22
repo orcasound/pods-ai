@@ -534,7 +534,6 @@ def main() -> int:
         default=None,
         help=(
             "Path to model directory or HuggingFace Hub model ID. "
-            "Required for --model podsai. "
             "Defaults to ./model for --model fastai. "
             "Defaults to orcasound/orcahello-srkw-detector-v1 for --model orcahello. "
             f"Defaults to {PODSAI_MODEL_ID!r} for --model podsai."
