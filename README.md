@@ -20,7 +20,7 @@ The active scripts in `src` include:
 2. **make_spectrograms.py**: Creates a png file for each wav file in a subdirectory of `output/png`.
 3. **train_podsai_model.py**: Trains a PODS-AI model on the generated training samples.
 4. **compare_models.py**: Evaluates models using `output/csv/testing_60s_samples.csv`.
-4. **generate_embeddings.py**: Generate UMAPs from `output/csv/testing_60s_samples.csv`.
+4. **generate_embeddings.py**: Generate embeddings from `output/csv/testing_60s_samples.csv`.
 
 ```mermaid
 flowchart TD;
@@ -505,6 +505,62 @@ python src/compare_models.py --max-samples 10 --fastai-model-path model
 
 ```bash
 python src/compare_models.py --category resident --fastai-model-path model
+```
+
+### generate_embeddings.py
+
+Extract intermediate embeddings from the Audio Spectrogram Transformer (AST) model's final
+hidden layer for each segment in the test set. These embeddings are 768-dimensional vectors
+that capture the model's learned audio features before the classification head.
+
+**Purpose:**
+- Enable dimensionality reduction visualization (e.g., UMAP, t-SNE) to understand how the model
+  clusters different whale call types and background sounds
+- Support similarity search to find acoustically similar segments
+- Enable transfer learning experiments using pre-trained representations
+- Facilitate analysis of model attention and feature learning
+
+**Requirements:**
+- Only works with **PODS-AI AST models** (e.g., `davethaler/whale-call-detector` with AST revision)
+- Does not support Wav2Vec2, FastAI, or OrcaHello models
+- Requires `output/csv/testing_60s_samples.csv` and corresponding WAV files in `output/testing-wav/`
+
+**Output Format:**
+Creates a CSV file where each row represents one segment (typically ~29 segments per 60s audio).
+Columns include:
+- Metadata: `category`, `node_name`, `timestamp`, `uri`, `wav_path`, `segment_index`, `start_time_seconds`
+- Predictions: `predicted_label`, `predicted_class_id`, `local_confidence`, `global_prediction_label`, `global_confidence`
+- Embeddings: `embedding_0` through `embedding_767` (768-dimensional vector from AST's final hidden layer)
+
+```
+usage: generate_embeddings.py [-h] [--testing-csv TESTING_CSV] [--wav-dir WAV_DIR] [--output-csv OUTPUT_CSV]
+                              [--model-path MODEL_PATH] [--model-revision MODEL_REVISION] [--category CATEGORY]
+                              [--max-samples MAX_SAMPLES]
+
+options:
+  -h, --help            show this help message and exit
+  --testing-csv TESTING_CSV
+                        Path to testing_60s_samples.csv (default: output/csv/testing_60s_samples.csv).
+  --wav-dir WAV_DIR     Root directory containing testing WAV files (default: output/testing-wav).
+  --output-csv OUTPUT_CSV
+                        Output file for embeddings (default: output/csv/embeddings.csv).
+  --model-path MODEL_PATH
+  --model-revision MODEL_REVISION
+  --category CATEGORY
+  --max-samples MAX_SAMPLES
+```
+
+**Example — generate embeddings for all test samples**
+
+```bash
+python src/generate_embeddings.py --category resident --max-samples 50
+```
+
+**Example — use a custom model revision**
+
+
+```bash
+python src/generate_embeddings.py --model-path davethaler/whale-call-detector --model-revision abc123def456
 ```
 
 ## LiveInferenceSystem Container
