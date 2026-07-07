@@ -4,5 +4,5 @@
 mcp==1.28.1
 structlog==26.1.0
 requests==2.34.2
-boto3==1.43.36
+boto3==1.43.42
 pytz==2026.2
