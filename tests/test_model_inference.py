@@ -26,9 +26,9 @@ def test_fastai_predict_uses_filtered_dataset_paths(tmp_path):
     kept_segment = tmp_path / "kept_0_3.wav"
     dropped_segment = tmp_path / "dropped_1_4.wav"
 
-    def fake_extract_segments(audio_path, sample_dict, destn_path, suffix):
-        Path(destn_path, kept_segment.name).write_bytes(b"segment")
-        Path(destn_path, dropped_segment.name).write_bytes(b"")
+    def fake_extract_segments(audioPath, sampleDict, destnPath, suffix):
+        Path(destnPath, kept_segment.name).write_bytes(b"segment")
+        Path(destnPath, dropped_segment.name).write_bytes(b"")
 
     dataset = SimpleNamespace(
         x=SimpleNamespace(items=[kept_segment]),
@@ -36,7 +36,7 @@ def test_fastai_predict_uses_filtered_dataset_paths(tmp_path):
     dataset.split_none = lambda: dataset
     dataset.label_empty = lambda: dataset
     dataset.transform = lambda _tfms: dataset
-    dataset.databunch = lambda bs: SimpleNamespace(x=["item0"])
+    dataset.databunch = lambda bs: SimpleNamespace(x=["kept_segment_batch"])
 
     with patch("model_inference.get_duration", return_value=4.0), \
             patch("model_inference.extract_segments", side_effect=fake_extract_segments), \
