@@ -45,5 +45,6 @@ def test_fastai_predict_uses_filtered_dataset_paths(tmp_path):
             patch("model_inference.torch.cuda.is_available", return_value=False):
         result = model.predict(str(wav_path))
 
+    assert len(result["local_confidences"]) == 1
     assert result["local_confidences"] == [0.9]
     assert result["local_predictions"] == [1]
