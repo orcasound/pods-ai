@@ -22,8 +22,16 @@ sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
 _OPTIONAL_DEPS = [
     'azure',
     'azure.cosmos',
+    'azure.storage',
+    'azure.storage.blob',
+    'dotenv',
     'numpy',
+    'opencensus',
+    'opencensus.ext',
+    'opencensus.ext.azure',
+    'opencensus.ext.azure.log_exporter',
     'pandas',
+    'pytz',
     'structlog',
     'torch',
     'torchvision',
@@ -40,6 +48,7 @@ _OPTIONAL_DEPS = [
     'scipy',
     'scipy.signal',
     'huggingface_hub',
+    'yaml',
 ]
 for _dep in _OPTIONAL_DEPS:
     if _dep not in sys.modules:
