@@ -26,7 +26,7 @@ def test_fastai_predict_uses_filtered_dataset_paths(tmp_path):
     kept_segment = tmp_path / "kept_0_3.wav"
     dropped_segment = tmp_path / "dropped_1_4.wav"
 
-    def fake_extract_segments(_audio_path, _sample_dict, destn_path, _suffix):
+    def fake_extract_segments(audio_path, sample_dict, destn_path, suffix):
         Path(destn_path, kept_segment.name).write_bytes(b"segment")
         Path(destn_path, dropped_segment.name).write_bytes(b"")
 
