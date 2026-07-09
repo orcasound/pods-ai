@@ -24,6 +24,7 @@ _OPTIONAL_DEPS = [
     'azure.cosmos',
     'numpy',
     'pandas',
+    'structlog',
     'torch',
     'torchvision',
     'torchaudio',
@@ -46,3 +47,33 @@ for _dep in _OPTIONAL_DEPS:
             __import__(_dep)
         except ImportError:
             sys.modules[_dep] = MagicMock()
+
+# Special handling for mcp modules: requires a proper FastMCP mock so that
+# @mcp.tool() decorators preserve the original functions rather than wrapping
+# them in MagicMocks.  These stubs are installed early so that pytest test
+# collection does not block on MCP initialisation.
+if 'mcp.server.fastmcp' not in sys.modules:
+    try:
+        import mcp.server.fastmcp  # noqa: F401
+    except ImportError:
+        class _MockFastMCP:
+            """Minimal FastMCP stub: tool() returns a pass-through decorator."""
+            def __init__(self, name):
+                self.name = name
+
+            def tool(self):
+                def decorator(func):
+                    return func
+                return decorator
+
+            def run(self):
+                pass
+
+            def _handle_raw_json(self, line):
+                pass
+
+        _mock_mcp_module = MagicMock()
+        _mock_mcp_module.server.fastmcp.FastMCP = _MockFastMCP
+        sys.modules.setdefault('mcp', _mock_mcp_module)
+        sys.modules.setdefault('mcp.server', _mock_mcp_module.server)
+        sys.modules['mcp.server.fastmcp'] = _mock_mcp_module.server.fastmcp
