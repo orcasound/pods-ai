@@ -61,7 +61,7 @@ if 'mcp.server.fastmcp' not in sys.modules:
             def __init__(self, name):
                 self.name = name
 
-            def tool(self):
+            def tool(self, *args, **kwargs):
                 def decorator(func):
                     return func
                 return decorator
