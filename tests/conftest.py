@@ -19,6 +19,10 @@ sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
 # this environment.  Each is stubbed out only when it cannot be genuinely
 # imported; CI (which runs pip install -r requirements.txt) will use the real
 # packages.
+#
+# NOTE: 'audio' and 'audio.data' are intentionally NOT in this list.
+# Unit tests that need to mock AudioList should use @patch() explicitly.
+# Integration tests need the real audio module to function.
 _OPTIONAL_DEPS = [
     'azure',
     'azure.cosmos',
@@ -43,8 +47,6 @@ _OPTIONAL_DEPS = [
     'pydub.audio_segment',
     'librosa',
     'soundfile',
-    'audio',
-    'audio.data',
     'scipy',
     'scipy.signal',
     'huggingface_hub',

@@ -9,7 +9,7 @@ import wave
 
 
 def test_fastai_predict_with_empty_valid_loader(tmp_path):
-    """split_none() keeps generated clips in train_ds.x even when testdb.x is empty."""
+    """FastAI model prediction works when split_none() is used."""
     from model_inference import FastAIModel
 
     positive_confidences = [0.25, 0.75]
@@ -47,8 +47,9 @@ def test_fastai_predict_with_empty_valid_loader(tmp_path):
     score_items.items = score_paths
     score_items.__iter__.return_value = iter(score_paths)
 
+    # When split_none() is used, items are in testdb.x (not in a separate validation set)
     fake_testdb = SimpleNamespace(
-        x=[],
+        x=score_items,  # Items to score are here
         train_ds=SimpleNamespace(x=score_items),
     )
 

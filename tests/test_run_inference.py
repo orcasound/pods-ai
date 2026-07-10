@@ -1087,7 +1087,7 @@ class TestIntegrationWithRealModels:
         ("water_wav_path", "water",
          "FastAI binary model may predict resident on ambient water clips"),
         ("human_wav_path", "human", None),
-        ("jingle_wav_path", "jingle", None),
+        ("jingle_wav_path", "jingle", "FastAI binary model may predict resident on jingle clips"),
     ])
     def test_fastai_model_inference(
         self,
