@@ -315,11 +315,11 @@ class FastAIModel(ModelInference):
             tfms = None
             test = AudioList.from_folder(
                 local_dir, config=config).split_none().label_empty()
+            path_list = [str(path) for path in test.x.items]
             testdb = test.transform(tfms).databunch(bs=self.batch_size)
 
             # Score each 3 second clip.
             predictions = []
-            path_list = [str(p) for p in local_dir.ls()]
             for item in testdb.x:
                 predictions.append(self.model.predict(item)[2][1])
 
