@@ -336,7 +336,7 @@ class FastAIModel(ModelInference):
             test = AudioList.from_folder(
                 local_dir, config=config).split_none().label_empty()
             path_items = getattr(test.x, 'items', None)
-            path_list = [str(path) for path in path_items] if path_items is not None else None
+            path_list = [str(path) for path in path_items] if path_items else None
             testdb = test.transform(tfms).databunch(bs=self.batch_size)
 
             # Score each 3 second clip.
@@ -344,13 +344,14 @@ class FastAIModel(ModelInference):
             for item in testdb.x:
                 predictions.append(self.model.predict(item)[2][1])
             if path_list is None or len(path_list) != len(predictions):
+                wav_files = [
+                    path for path in local_dir.iterdir()
+                    if path.is_file() and path.suffix.lower() == '.wav'
+                ]
                 path_list = [
                     str(path)
                     for path in sorted(
-                        (
-                            path for path in local_dir.iterdir()
-                            if path.is_file() and path.suffix.lower() == '.wav'
-                        ),
+                        wav_files,
                         key=lambda path: _segment_start_from_path(path, start_time_by_stem)
                     )
                 ]
