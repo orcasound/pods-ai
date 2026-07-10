@@ -131,6 +131,22 @@ def extract_segments(audioPath, sampleDict, destnPath, suffix):
                              end_time, str(output_file_path))
 
 
+def _segment_start_from_path(path_value, start_time_by_stem):
+    """Return a segment start time from a generated segment path."""
+    stem = Path(path_value).stem
+    if stem in start_time_by_stem:
+        return start_time_by_stem[stem]
+
+    parts = stem.split('_')
+    if len(parts) < 2:
+        raise ValueError(f"Unexpected segment filename: {Path(path_value).name}")
+
+    try:
+        return int(parts[-2])
+    except ValueError as exc:
+        raise ValueError(f"Unexpected segment filename: {Path(path_value).name}") from exc
+
+
 class ModelInference:
     """
     Base class for model inference.
@@ -315,7 +331,8 @@ class FastAIModel(ModelInference):
             tfms = None
             test = AudioList.from_folder(
                 local_dir, config=config).split_none().label_empty()
-            path_list = [str(path) for path in getattr(test.x, 'items', [])]
+            path_items = getattr(test.x, 'items', None)
+            path_list = [str(path) for path in path_items] if path_items is not None else []
             testdb = test.transform(tfms).databunch(bs=self.batch_size)
 
             # Score each 3 second clip.
@@ -327,10 +344,7 @@ class FastAIModel(ModelInference):
                     str(path)
                     for path in sorted(
                         local_dir.iterdir(),
-                        key=lambda path: start_time_by_stem.get(
-                            path.stem,
-                            int(path.stem.split('_')[-2])
-                        )
+                        key=lambda path: _segment_start_from_path(path, start_time_by_stem)
                     )
                 ]
             if len(path_list) != len(predictions):
@@ -357,7 +371,7 @@ class FastAIModel(ModelInference):
 
         # Extract starting time from the pre-built lookup; fall back to filename parsing if needed.
         prediction['start_time_s'] = prediction.FilePath.apply(
-            lambda x: start_time_by_stem.get(Path(x).stem, int(Path(x).stem.split('_')[-2]))
+            lambda x: _segment_start_from_path(x, start_time_by_stem)
         )
 
         # Sort the file based on start_time_s.
