@@ -323,7 +323,21 @@ class FastAIModel(ModelInference):
             for item in testdb.x:
                 predictions.append(self.model.predict(item)[2][1])
             if len(path_list) != len(predictions):
-                path_list = [str(path) for path in local_dir.ls()[:len(predictions)]]
+                path_list = [
+                    str(path)
+                    for path in sorted(
+                        local_dir.iterdir(),
+                        key=lambda path: start_time_by_stem.get(
+                            path.stem,
+                            int(path.stem.split('_')[-2])
+                        )
+                    )
+                ]
+            if len(path_list) != len(predictions):
+                raise ValueError(
+                    f"Prediction/path alignment mismatch for {wav_path.name}: "
+                    f"{len(predictions)} predictions for {len(path_list)} paths"
+                )
 
             # Explicitly release fastai objects to encourage immediate memory reclamation.
             del test
