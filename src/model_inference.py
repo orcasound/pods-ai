@@ -317,10 +317,13 @@ class FastAIModel(ModelInference):
                 local_dir, config=config).split_none().label_empty()
             testdb = test.transform(tfms).databunch(bs=self.batch_size)
 
-            # Score each 3 second clip.
+            # Score each 3 second clip from the train dataset. split_none() keeps
+            # all items in train_ds and leaves valid_ds empty, so testdb.x can be
+            # empty even when train_ds.x contains the generated segment items.
+            score_items = testdb.train_ds.x
             predictions = []
-            path_list = [str(p) for p in local_dir.ls()]
-            for item in testdb.x:
+            path_list = [str(path) for path in score_items.items]
+            for item in score_items:
                 predictions.append(self.model.predict(item)[2][1])
 
             # Explicitly release fastai objects to encourage immediate memory reclamation.
