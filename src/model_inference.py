@@ -131,41 +131,6 @@ def extract_segments(audioPath, sampleDict, destnPath, suffix):
                              end_time, str(output_file_path))
 
 
-def _segment_start_from_path(path_value, start_time_by_stem):
-    """Return a segment start time from a generated segment path."""
-    stem = Path(path_value).stem
-    if stem in start_time_by_stem:
-        return start_time_by_stem[stem]
-
-    parts = stem.split('_')
-    if len(parts) < 2:
-        raise ValueError(
-            f"Unexpected segment filename stem '{stem}': {Path(path_value).name}"
-        )
-
-    try:
-        return int(parts[-2])
-    except ValueError as exc:
-        raise ValueError(
-            f"Unexpected segment filename stem '{stem}': {Path(path_value).name}"
-        ) from exc
-
-
-def _ordered_segment_paths(local_dir, start_time_by_stem):
-    """Return generated segment paths in deterministic start-time order."""
-    wav_files = [
-        path for path in local_dir.iterdir()
-        if path.is_file() and path.suffix.lower() == '.wav'
-    ]
-    return [
-        str(path)
-        for path in sorted(
-            wav_files,
-            key=lambda path: _segment_start_from_path(path, start_time_by_stem)
-        )
-    ]
-
-
 class ModelInference:
     """
     Base class for model inference.
@@ -350,23 +315,13 @@ class FastAIModel(ModelInference):
             tfms = None
             test = AudioList.from_folder(
                 local_dir, config=config).split_none().label_empty()
-            path_items = getattr(test.x, 'items', None)
-            path_list = [str(path) for path in path_items] if path_items else None
             testdb = test.transform(tfms).databunch(bs=self.batch_size)
 
             # Score each 3 second clip.
             predictions = []
+            path_list = [str(p) for p in local_dir.ls()]
             for item in testdb.x:
                 predictions.append(self.model.predict(item)[2][1])
-            if path_list is None:
-                path_list = _ordered_segment_paths(local_dir, start_time_by_stem)
-            elif len(path_list) != len(predictions):
-                path_list = _ordered_segment_paths(local_dir, start_time_by_stem)
-            if len(path_list) != len(predictions):
-                raise ValueError(
-                    f"Prediction/path alignment mismatch for {wav_path.name}: "
-                    f"{len(predictions)} predictions for {len(path_list)} paths"
-                )
 
             # Explicitly release fastai objects to encourage immediate memory reclamation.
             del test
@@ -386,7 +341,7 @@ class FastAIModel(ModelInference):
 
         # Extract starting time from the pre-built lookup; fall back to filename parsing if needed.
         prediction['start_time_s'] = prediction.FilePath.apply(
-            lambda x: _segment_start_from_path(x, start_time_by_stem)
+            lambda x: start_time_by_stem.get(Path(x).stem, int(Path(x).stem.split('_')[-2]))
         )
 
         # Sort the file based on start_time_s.
@@ -404,14 +359,14 @@ class FastAIModel(ModelInference):
                 ).reset_index().rename(columns={'index': 'start_time_s'})
 
             # Update first row.
-            submission.loc[0, 'confidence'] = prediction.confidence.iloc[0]
+            submission.loc[0, 'confidence'] = prediction.confidence[0]
 
             # Add last row.
             lastLine = pd.DataFrame({
                 'wav_filename': wav_path.name,
                 'start_time_s': [submission.start_time_s.max()+1],
                 'duration_s': 1.0,
-                'confidence': [prediction.confidence.iloc[-1]]
+                'confidence': [prediction.confidence[prediction.shape[0]-1]]
                 })
             submission = pd.concat([submission, lastLine], ignore_index=True)
             submission = submission[['wav_filename', 'start_time_s', 'duration_s', 'confidence']]
