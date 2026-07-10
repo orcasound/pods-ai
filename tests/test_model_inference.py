@@ -21,11 +21,17 @@ def test_fastai_predict_uses_train_dataset_items_when_valid_loader_is_empty(tmp_
         wav_file.setframerate(16000)
         wav_file.writeframes(b"\x00\x00" * 16)
 
-    def fake_extract_segments(_audio_path, sample_dict, dest_dir, _suffix):
+    def fake_extract_segments(audio_path, sample_dict, dest_dir, _suffix):
+        assert Path(audio_path) == wav_path.parent
         for wav_name, segments in sample_dict.items():
             stem = Path(wav_name).stem.lower()
             for begin_time, end_time in segments:
-                (Path(dest_dir) / f"{stem}_{begin_time}_{end_time}.wav").write_bytes(b"")
+                segment_path = Path(dest_dir) / f"{stem}_{begin_time}_{end_time}.wav"
+                with wave.open(str(segment_path), "wb") as wav_file:
+                    wav_file.setnchannels(1)
+                    wav_file.setsampwidth(2)
+                    wav_file.setframerate(16000)
+                    wav_file.writeframes(b"\x00\x00" * 16)
 
     mock_loaded_model = MagicMock()
     mock_loaded_model.model = MagicMock()
@@ -34,12 +40,13 @@ def test_fastai_predict_uses_train_dataset_items_when_valid_loader_is_empty(tmp_
         (None, None, [0.0, positive_confidences[1]]),
     ]
 
-    score_items = MagicMock()
-    score_items.items = [
+    score_paths = [
         Path(tmp_path / "example_0_3.wav"),
         Path(tmp_path / "example_1_4.wav"),
     ]
-    score_items.__iter__.return_value = iter(["segment-a", "segment-b"])
+    score_items = MagicMock()
+    score_items.items = score_paths
+    score_items.__iter__.return_value = iter(score_paths)
 
     fake_testdb = SimpleNamespace(
         x=[],
@@ -69,6 +76,6 @@ def test_fastai_predict_uses_train_dataset_items_when_valid_loader_is_empty(tmp_
     assert result["global_prediction"] == 1
     assert result["submission"]["start_time_s"].tolist() == [0, 1]
     assert mock_loaded_model.predict.call_count == 2
-    mock_loaded_model.predict.assert_any_call("segment-a")
-    mock_loaded_model.predict.assert_any_call("segment-b")
+    mock_loaded_model.predict.assert_any_call(score_paths[0])
+    mock_loaded_model.predict.assert_any_call(score_paths[1])
     mock_extract_segments.assert_called_once()
