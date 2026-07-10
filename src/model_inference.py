@@ -317,11 +317,11 @@ class FastAIModel(ModelInference):
                 local_dir, config=config).split_none().label_empty()
             testdb = test.transform(tfms).databunch(bs=self.batch_size)
 
-            # Score each generated segment from the train dataset. split_none()
-            # keeps those items in the training side while leaving the
-            # validation side empty, so testdb.x can be empty even when
-            # train_ds.x contains the generated segment items.
-            score_items = testdb.train_ds.x
+            # Score each generated segment from whichever dataset view
+            # actually contains the generated items. In some environments
+            # split_none() leaves them on testdb.x, while in others they are
+            # exposed via train_ds.x with an empty validation side.
+            score_items = testdb.x if len(testdb.x) else testdb.train_ds.x
             predictions = []
             # Preserve segment paths so the prediction DataFrame can still be
             # assembled after the temporary directory is cleaned up.
@@ -365,14 +365,14 @@ class FastAIModel(ModelInference):
                 ).reset_index().rename(columns={'index': 'start_time_s'})
 
             # Update first row.
-            submission.loc[0, 'confidence'] = prediction.confidence[0]
+            submission.loc[0, 'confidence'] = prediction.confidence.iloc[0]
 
             # Add last row.
             lastLine = pd.DataFrame({
                 'wav_filename': wav_path.name,
                 'start_time_s': [submission.start_time_s.max()+1],
                 'duration_s': 1.0,
-                'confidence': [prediction.confidence[prediction.shape[0]-1]]
+                'confidence': [prediction.confidence.iloc[-1]]
                 })
             submission = pd.concat([submission, lastLine], ignore_index=True)
             submission = submission[['wav_filename', 'start_time_s', 'duration_s', 'confidence']]
