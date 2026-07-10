@@ -71,7 +71,9 @@ jobs:
 
       - name: Install Python dependencies
         if: steps.skip_check.outputs.should_skip != 'true'
-        run: pip install -r requirements.txt
+        run: |
+          pip install setuptools
+          pip install -r requirements.txt
 
       - name: Patch fastai_audio for Python 3.11+ compatibility
         if: steps.skip_check.outputs.should_skip != 'true'
@@ -154,7 +156,9 @@ jobs:
 
       - name: Install Python dependencies
         if: steps.skip_check.outputs.should_skip != 'true'
-        run: pip install -r requirements.txt
+        run: |
+          pip install setuptools
+          pip install -r requirements.txt
 
       - name: Patch fastai_audio for Python 3.11+ compatibility
         if: steps.skip_check.outputs.should_skip != 'true'
