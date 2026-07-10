@@ -51,7 +51,7 @@ def test_fastai_predict_uses_train_dataset_items_when_valid_loader_is_empty(tmp_
 
     with patch("model_inference.load_model", return_value=mock_loaded_model), \
          patch("model_inference.get_duration", return_value=4.0), \
-         patch("model_inference.extract_segments", side_effect=fake_extract_segments), \
+         patch("model_inference.extract_segments", side_effect=fake_extract_segments) as mock_extract_segments, \
          patch("model_inference.gc.collect"), \
          patch("model_inference.torch.cuda.is_available", return_value=False), \
          patch("audio.data.AudioList.from_folder") as mock_from_folder:
@@ -67,4 +67,8 @@ def test_fastai_predict_uses_train_dataset_items_when_valid_loader_is_empty(tmp_
     assert result["local_confidences"] == positive_confidences
     assert result["local_predictions"] == [0, 1]
     assert result["global_prediction"] == 1
+    assert result["submission"]["start_time_s"].tolist() == [0, 1]
     assert mock_loaded_model.predict.call_count == 2
+    mock_loaded_model.predict.assert_any_call("segment-a")
+    mock_loaded_model.predict.assert_any_call("segment-b")
+    mock_extract_segments.assert_called_once()

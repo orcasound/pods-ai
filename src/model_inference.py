@@ -317,8 +317,9 @@ class FastAIModel(ModelInference):
                 local_dir, config=config).split_none().label_empty()
             testdb = test.transform(tfms).databunch(bs=self.batch_size)
 
-            # Score each 3 second clip from the train dataset. split_none() keeps
-            # all items in train_ds and leaves valid_ds empty, so testdb.x can be
+            # Score each generated segment from the train dataset. FastAIModel
+            # always builds 3-second windows above, and split_none() keeps those
+            # items in train_ds while leaving valid_ds empty, so testdb.x can be
             # empty even when train_ds.x contains the generated segment items.
             score_items = testdb.train_ds.x
             predictions = []
