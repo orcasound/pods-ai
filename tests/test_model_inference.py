@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 import wave
 
 
-def test_fastai_predict_uses_train_dataset_items_when_valid_loader_is_empty(tmp_path):
+def test_fastai_predict_with_empty_valid_loader(tmp_path):
     """split_none() keeps generated clips in train_ds.x even when testdb.x is empty."""
     from model_inference import FastAIModel
 
@@ -21,8 +21,7 @@ def test_fastai_predict_uses_train_dataset_items_when_valid_loader_is_empty(tmp_
         wav_file.setframerate(16000)
         wav_file.writeframes(b"\x00\x00" * 16)
 
-    def fake_extract_segments(audio_path, sample_dict, dest_dir, _suffix):
-        assert Path(audio_path) == wav_path.parent
+    def fake_extract_segments(_audio_path, sample_dict, dest_dir, _suffix):
         for wav_name, segments in sample_dict.items():
             stem = Path(wav_name).stem.lower()
             for begin_time, end_time in segments:

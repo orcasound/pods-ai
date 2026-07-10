@@ -318,9 +318,9 @@ class FastAIModel(ModelInference):
             testdb = test.transform(tfms).databunch(bs=self.batch_size)
 
             # Score each generated segment from the train dataset. split_none()
-            # keeps those items in train_ds while leaving valid_ds empty, so
-            # testdb.x can be empty even when train_ds.x contains the generated
-            # segment items.
+            # keeps those items in the training side while leaving the
+            # validation side empty, so testdb.x can be empty even when
+            # train_ds.x contains the generated segment items.
             score_items = testdb.train_ds.x
             predictions = []
             # Preserve segment paths so the prediction DataFrame can still be
