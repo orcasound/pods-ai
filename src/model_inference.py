@@ -139,12 +139,16 @@ def _segment_start_from_path(path_value, start_time_by_stem):
 
     parts = stem.split('_')
     if len(parts) < 2:
-        raise ValueError(f"Unexpected segment filename: {Path(path_value).name}")
+        raise ValueError(
+            f"Unexpected segment filename stem '{stem}': {Path(path_value).name}"
+        )
 
     try:
         return int(parts[-2])
     except ValueError as exc:
-        raise ValueError(f"Unexpected segment filename: {Path(path_value).name}") from exc
+        raise ValueError(
+            f"Unexpected segment filename stem '{stem}': {Path(path_value).name}"
+        ) from exc
 
 
 class ModelInference:
@@ -332,18 +336,21 @@ class FastAIModel(ModelInference):
             test = AudioList.from_folder(
                 local_dir, config=config).split_none().label_empty()
             path_items = getattr(test.x, 'items', None)
-            path_list = [str(path) for path in path_items] if path_items is not None else []
+            path_list = [str(path) for path in path_items] if path_items is not None else None
             testdb = test.transform(tfms).databunch(bs=self.batch_size)
 
             # Score each 3 second clip.
             predictions = []
             for item in testdb.x:
                 predictions.append(self.model.predict(item)[2][1])
-            if len(path_list) != len(predictions):
+            if path_list is None or len(path_list) != len(predictions):
                 path_list = [
                     str(path)
                     for path in sorted(
-                        local_dir.iterdir(),
+                        (
+                            path for path in local_dir.iterdir()
+                            if path.is_file() and path.suffix.lower() == '.wav'
+                        ),
                         key=lambda path: _segment_start_from_path(path, start_time_by_stem)
                     )
                 ]
