@@ -315,13 +315,15 @@ class FastAIModel(ModelInference):
             tfms = None
             test = AudioList.from_folder(
                 local_dir, config=config).split_none().label_empty()
-            path_list = [str(path) for path in test.x.items]
+            path_list = [str(path) for path in getattr(test.x, 'items', [])]
             testdb = test.transform(tfms).databunch(bs=self.batch_size)
 
             # Score each 3 second clip.
             predictions = []
             for item in testdb.x:
                 predictions.append(self.model.predict(item)[2][1])
+            if len(path_list) != len(predictions):
+                path_list = [str(path) for path in local_dir.ls()[:len(predictions)]]
 
             # Explicitly release fastai objects to encourage immediate memory reclamation.
             del test
@@ -359,14 +361,14 @@ class FastAIModel(ModelInference):
                 ).reset_index().rename(columns={'index': 'start_time_s'})
 
             # Update first row.
-            submission.loc[0, 'confidence'] = prediction.confidence[0]
+            submission.loc[0, 'confidence'] = prediction.confidence.iloc[0]
 
             # Add last row.
             lastLine = pd.DataFrame({
                 'wav_filename': wav_path.name,
                 'start_time_s': [submission.start_time_s.max()+1],
                 'duration_s': 1.0,
-                'confidence': [prediction.confidence[prediction.shape[0]-1]]
+                'confidence': [prediction.confidence.iloc[-1]]
                 })
             submission = pd.concat([submission, lastLine], ignore_index=True)
             submission = submission[['wav_filename', 'start_time_s', 'duration_s', 'confidence']]
