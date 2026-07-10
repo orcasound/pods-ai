@@ -151,6 +151,21 @@ def _segment_start_from_path(path_value, start_time_by_stem):
         ) from exc
 
 
+def _ordered_segment_paths(local_dir, start_time_by_stem):
+    """Return generated segment paths in deterministic start-time order."""
+    wav_files = [
+        path for path in local_dir.iterdir()
+        if path.is_file() and path.suffix.lower() == '.wav'
+    ]
+    return [
+        str(path)
+        for path in sorted(
+            wav_files,
+            key=lambda path: _segment_start_from_path(path, start_time_by_stem)
+        )
+    ]
+
+
 class ModelInference:
     """
     Base class for model inference.
@@ -343,18 +358,10 @@ class FastAIModel(ModelInference):
             predictions = []
             for item in testdb.x:
                 predictions.append(self.model.predict(item)[2][1])
-            if path_list is None or len(path_list) != len(predictions):
-                wav_files = [
-                    path for path in local_dir.iterdir()
-                    if path.is_file() and path.suffix.lower() == '.wav'
-                ]
-                path_list = [
-                    str(path)
-                    for path in sorted(
-                        wav_files,
-                        key=lambda path: _segment_start_from_path(path, start_time_by_stem)
-                    )
-                ]
+            if path_list is None:
+                path_list = _ordered_segment_paths(local_dir, start_time_by_stem)
+            elif len(path_list) != len(predictions):
+                path_list = _ordered_segment_paths(local_dir, start_time_by_stem)
             if len(path_list) != len(predictions):
                 raise ValueError(
                     f"Prediction/path alignment mismatch for {wav_path.name}: "
