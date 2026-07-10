@@ -322,6 +322,8 @@ class FastAIModel(ModelInference):
             # empty even when train_ds.x contains the generated segment items.
             score_items = testdb.train_ds.x
             predictions = []
+            # Preserve segment paths so the prediction DataFrame can still be
+            # assembled after the temporary directory is cleaned up.
             path_list = [str(segment_path) for segment_path in score_items.items]
             for item in score_items:
                 predictions.append(self.model.predict(item)[2][1])

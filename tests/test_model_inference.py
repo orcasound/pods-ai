@@ -5,6 +5,7 @@
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
+import wave
 
 
 def test_fastai_predict_uses_train_dataset_items_when_valid_loader_is_empty(tmp_path):
@@ -14,7 +15,11 @@ def test_fastai_predict_uses_train_dataset_items_when_valid_loader_is_empty(tmp_
     positive_confidences = [0.25, 0.75]
 
     wav_path = tmp_path / "example.wav"
-    wav_path.write_bytes(b"")
+    with wave.open(str(wav_path), "wb") as wav_file:
+        wav_file.setnchannels(1)
+        wav_file.setsampwidth(2)
+        wav_file.setframerate(16000)
+        wav_file.writeframes(b"\x00\x00" * 16)
 
     def fake_extract_segments(_audio_path, sample_dict, dest_dir, _suffix):
         for wav_name, segments in sample_dict.items():
