@@ -75,6 +75,10 @@ jobs:
           pip install "setuptools<72"
           pip install -r requirements.txt
 
+      - name: Verify pkg_resources is available
+        if: steps.skip_check.outputs.should_skip != 'true'
+        run: python -c "import pkg_resources; print('pkg_resources available')"
+
       - name: Patch fastai_audio for Python 3.11+ compatibility
         if: steps.skip_check.outputs.should_skip != 'true'
         run: bash patch_fastai_audio.sh
@@ -159,6 +163,10 @@ jobs:
         run: |
           pip install "setuptools<72"
           pip install -r requirements.txt
+
+      - name: Verify pkg_resources is available
+        if: steps.skip_check.outputs.should_skip != 'true'
+        run: python -c "import pkg_resources; print('pkg_resources available')"
 
       - name: Patch fastai_audio for Python 3.11+ compatibility
         if: steps.skip_check.outputs.should_skip != 'true'
