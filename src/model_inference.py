@@ -311,24 +311,18 @@ class FastAIModel(ModelInference):
             config.downmix = True
             config.pad_mode = "zeros-after"  # Make deterministic: zeros at end only
 
-            # Create an Audio DataLoader.
+            # Get sorted file list.
+            path_list = sorted([str(p) for p in local_dir.ls()], key=lambda x: Path(x).name)
+
+            # Create AudioList from sorted paths.
             tfms = None
-            test = AudioList.from_folder(
-                local_dir, config=config).split_none().label_empty()
+            test = AudioList(path_list, path=local_dir, config=config).split_none().label_empty()
             testdb = test.transform(tfms).databunch(bs=self.batch_size)
 
             # Score each 3 second clip.
-            # Sort paths to ensure consistent ordering across filesystems (Windows vs Linux).
-            path_list = sorted([str(p) for p in local_dir.ls()])
-
-            # Build a mapping from filename to testdb item for consistent ordering.
-            items_by_name = {Path(str(item)).name: item for item in testdb.x}
-
             predictions = []
-            for path_str in path_list:
-                item_name = Path(path_str).name
-                if item_name in items_by_name:
-                    predictions.append(self.model.predict(items_by_name[item_name])[2][1])
+            for item in testdb.x:
+                predictions.append(self.model.predict(item)[2][1])
 
             # Explicitly release fastai objects to encourage immediate memory reclamation.
             del test
