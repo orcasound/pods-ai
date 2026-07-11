@@ -15,22 +15,24 @@ def test_fastai_predict_with_empty_valid_loader(tmp_path):
     positive_confidences = [0.25, 0.75]
 
     wav_path = tmp_path / "example.wav"
+    # Create a 4-second audio file at 16kHz (64000 samples).
     with wave.open(str(wav_path), "wb") as wav_file:
         wav_file.setnchannels(1)
         wav_file.setsampwidth(2)
         wav_file.setframerate(16000)
-        wav_file.writeframes(b"\x00\x00" * 16)
+        wav_file.writeframes(b"\x00\x00" * 64000)
 
     def fake_extract_segments(_audio_path, sample_dict, dest_dir, _suffix):
         for wav_name, segments in sample_dict.items():
             stem = Path(wav_name).stem.lower()
             for begin_time, end_time in segments:
                 segment_path = Path(dest_dir) / f"{stem}_{begin_time}_{end_time}.wav"
+                # Create 3-second segments at 16kHz (48000 samples).
                 with wave.open(str(segment_path), "wb") as wav_file:
                     wav_file.setnchannels(1)
                     wav_file.setsampwidth(2)
                     wav_file.setframerate(16000)
-                    wav_file.writeframes(b"\x00\x00" * 16)
+                    wav_file.writeframes(b"\x00\x00" * 48000)
 
     mock_loaded_model = MagicMock()
     mock_loaded_model.model = MagicMock()
@@ -47,9 +49,9 @@ def test_fastai_predict_with_empty_valid_loader(tmp_path):
     score_items.items = score_paths
     score_items.__iter__.return_value = iter(score_paths)
 
-    # When split_none() is used, items are in testdb.x (not in a separate validation set)
+    # When split_none() is used, items are in testdb.x (not in a separate validation set).
     fake_testdb = SimpleNamespace(
-        x=score_items,  # Items to score are here
+        x=score_items,  # Items to score are here.
         train_ds=SimpleNamespace(x=score_items),
     )
 
@@ -61,8 +63,9 @@ def test_fastai_predict_with_empty_valid_loader(tmp_path):
          patch("model_inference.extract_segments", side_effect=fake_extract_segments) as mock_extract_segments, \
          patch("model_inference.gc.collect"), \
          patch("model_inference.torch.cuda.is_available", return_value=False), \
-         patch("audio.data.AudioList.from_folder") as mock_from_folder:
-        mock_from_folder.return_value.split_none.return_value.label_empty.return_value = fake_test
+         patch("audio.data.AudioList") as mock_audio_list:
+        # Mock AudioList constructor to return a mock that chains to fake_test.
+        mock_audio_list.return_value.split_none.return_value.label_empty.return_value = fake_test
 
         model = FastAIModel(
             model_path="model",
@@ -88,22 +91,24 @@ def test_fastai_predict_prefers_populated_testdb_x(tmp_path):
     positive_confidences = [0.25, 0.75]
 
     wav_path = tmp_path / "example.wav"
+    # Create a 4-second audio file at 16kHz (64000 samples).
     with wave.open(str(wav_path), "wb") as wav_file:
         wav_file.setnchannels(1)
         wav_file.setsampwidth(2)
         wav_file.setframerate(16000)
-        wav_file.writeframes(b"\x00\x00" * 16)
+        wav_file.writeframes(b"\x00\x00" * 64000)
 
     def fake_extract_segments(_audio_path, sample_dict, dest_dir, _suffix):
         for wav_name, segments in sample_dict.items():
             stem = Path(wav_name).stem.lower()
             for begin_time, end_time in segments:
                 segment_path = Path(dest_dir) / f"{stem}_{begin_time}_{end_time}.wav"
+                # Create 3-second segments at 16kHz (48000 samples).
                 with wave.open(str(segment_path), "wb") as wav_file:
                     wav_file.setnchannels(1)
                     wav_file.setsampwidth(2)
                     wav_file.setframerate(16000)
-                    wav_file.writeframes(b"\x00\x00" * 16)
+                    wav_file.writeframes(b"\x00\x00" * 48000)
 
     mock_loaded_model = MagicMock()
     mock_loaded_model.model = MagicMock()
@@ -139,8 +144,9 @@ def test_fastai_predict_prefers_populated_testdb_x(tmp_path):
          patch("model_inference.extract_segments", side_effect=fake_extract_segments), \
          patch("model_inference.gc.collect"), \
          patch("model_inference.torch.cuda.is_available", return_value=False), \
-         patch("audio.data.AudioList.from_folder") as mock_from_folder:
-        mock_from_folder.return_value.split_none.return_value.label_empty.return_value = fake_test
+         patch("audio.data.AudioList") as mock_audio_list:
+        # Mock AudioList constructor to return a mock that chains to fake_test.
+        mock_audio_list.return_value.split_none.return_value.label_empty.return_value = fake_test
 
         model = FastAIModel(
             model_path="model",
