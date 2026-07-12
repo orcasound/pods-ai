@@ -311,15 +311,16 @@ class FastAIModel(ModelInference):
             config.downmix = True
             config.pad_mode = "zeros-after"  # Make deterministic: zeros at end only
 
-            # Create an Audio DataLoader.
+            # Get sorted file list.
+            path_list = sorted([str(p) for p in local_dir.ls()], key=lambda x: Path(x).name)
+
+            # Create AudioList from sorted paths.
             tfms = None
-            test = AudioList.from_folder(
-                local_dir, config=config).split_none().label_empty()
+            test = AudioList(path_list, path=local_dir, config=config).split_none().label_empty()
             testdb = test.transform(tfms).databunch(bs=self.batch_size)
 
             # Score each 3 second clip.
             predictions = []
-            path_list = [str(p) for p in local_dir.ls()]
             for item in testdb.x:
                 predictions.append(self.model.predict(item)[2][1])
 
@@ -359,14 +360,14 @@ class FastAIModel(ModelInference):
                 ).reset_index().rename(columns={'index': 'start_time_s'})
 
             # Update first row.
-            submission.loc[0, 'confidence'] = prediction.confidence[0]
+            submission.loc[0, 'confidence'] = prediction.confidence.iloc[0]
 
             # Add last row.
             lastLine = pd.DataFrame({
                 'wav_filename': wav_path.name,
                 'start_time_s': [submission.start_time_s.max()+1],
                 'duration_s': 1.0,
-                'confidence': [prediction.confidence[prediction.shape[0]-1]]
+                'confidence': [prediction.confidence.iloc[-1]]
                 })
             submission = pd.concat([submission, lastLine], ignore_index=True)
             submission = submission[['wav_filename', 'start_time_s', 'duration_s', 'confidence']]
