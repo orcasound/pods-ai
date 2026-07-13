@@ -35,15 +35,14 @@ except (ImportError, ModuleNotFoundError):
     sys.modules["mcp.server"] = mock_mcp_module.server
     sys.modules["mcp.server.fastmcp"] = mock_mcp_module.server.fastmcp
 
-# Mock other optional dependencies only if they cannot be genuinely imported.
-for dep in [
-    "boto3", "botocore", "botocore.config", "structlog", "pytz",
-    "torch", "pandas", "pydub", "librosa", "torchaudio", "numpy", "fastai",
-    "fastai.basic_train", "audio", "audio.data"
-]:
+# Mock only the dependencies needed to import mcp_server itself. Heavier ML/audio
+# modules are already handled centrally in tests/conftest.py and should not be
+# replaced here, otherwise later integration tests can end up importing mocked
+# inference modules from sys.modules.
+for dep in ["boto3", "botocore", "botocore.config", "structlog"]:
     try:
         __import__(dep)
-    except Exception:
+    except (ImportError, ModuleNotFoundError):
         sys.modules[dep] = MagicMock()
 
 # Now import the code to be tested.
