@@ -15,6 +15,7 @@ import argparse
 import math
 import random
 import shutil
+import statistics
 import sys
 import time
 from collections import Counter
@@ -23,7 +24,6 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any, Optional
-import statistics
 
 import ffmpeg
 from pytz import timezone as pytz_tz

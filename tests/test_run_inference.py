@@ -235,7 +235,7 @@ def _verify_podsai_prediction(result: dict, audio_type: str, allow_category_matc
         result: Inference result dictionary.
         audio_type: Expected audio type (resident, transient, humpback, water, vessel, human, jingle).
         allow_category_match: If True, accept category match (whale vs non-whale) instead of exact match.
-                               Defaults to False, requiring exact match for all classes.
+                              Defaults to False, requiring exact match for all classes.
 
     For all classes:
         - By default (allow_category_match=False), requires exact match.
@@ -706,7 +706,7 @@ class TestBuildTagsList:
         from run_inference import build_tags_list
         
         result = {
-            "global_prediction_label": "resident",
+            "global_prediction_label": "transient",
             "local_predictions": [1, 2, 1, 2, 2],
             "local_confidences": [0.7, 0.8, 0.75, 0.78, 0.9],
         }
@@ -716,16 +716,16 @@ class TestBuildTagsList:
         }
         
         tags = build_tags_list(result, id2label=id2label)
-        assert set(tags) == {"resident", "transient"}
+        assert set(tags) == {"transient", "resident"}
 
     def test_build_tags_list_no_most_common_local_tags(self):
         """Tags should include unique positive labels from local predictions."""
         from run_inference import build_tags_list
 
         result = {
-            "global_prediction_label": "resident",
-            "local_predictions": [3, 2, 3, 4, 2],
-            "local_confidences": [0.7, 0.8, 0.75, 0.85, 0.78],
+            "global_prediction_label": "transient",
+            "local_predictions": [3, 2, 3, 4, 2, 2],
+            "local_confidences": [0.7, 0.8, 0.75, 0.85, 0.78, 0.78],
         }
         id2label = {
             2: "transient",
@@ -734,7 +734,7 @@ class TestBuildTagsList:
         }
 
         tags = build_tags_list(result, id2label=id2label)
-        assert set(tags) == {"resident", "transient"} or set(tags) == {"resident", "humpback"}
+        assert set(tags) == {"transient", "humpback"}
 
     def test_build_tags_list_handles_empty_local_predictions(self):
         """Tags should work with empty local predictions."""
@@ -748,27 +748,6 @@ class TestBuildTagsList:
         
         tags = build_tags_list(result)
         assert tags == ["resident"]
-
-    # def test_build_tags_list_custom_negative_labels(self):
-    #     """Tags should respect custom negative_labels set."""
-    #     from run_inference import build_tags_list
-    #
-    #     result = {
-    #         "global_prediction_label": "resident",
-    #         "local_predictions": [1, 2],
-    #         "local_confidences": [0.7, 0.8],
-    #     }
-    #     id2label = {
-    #         1: "resident",
-    #         2: "transient",
-    #     }
-    #     # Custom: transient is negative
-    #     negative_labels = {"water", "vessel", "jingle", "human", "other", "transient"}
-    #
-    #     tags = build_tags_list(result, id2label=id2label, negative_labels=negative_labels)
-    #     assert tags == ["resident"]
-    #     assert "transient" not in tags
-
 
 # ---------------------------------------------------------------------------
 # Tests for main() CLI
