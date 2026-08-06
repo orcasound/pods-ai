@@ -1,4 +1,10 @@
 Category,NodeName,Timestamp,URI,Description,Notes,Confidence
+bird,rpi_andrews_bay,2026_07_09_07_13_36_PST,https://live.orcasound.net/bouts/new/andrews-bay?time=2026-07-09T14%3A13%3A36.000Z,"Bird, wake noise",fp_machine_only,66.7
+bird,rpi_andrews_bay,2026_07_11_12_41_51_PST,https://live.orcasound.net/bouts/new/andrews-bay?time=2026-07-11T19%3A41%3A51.000Z,Bird and moderate vessel noise,fp_machine_only,66.7
+bird,rpi_andrews_bay,2026_07_12_11_10_13_PST,https://live.orcasound.net/bouts/new/andrews-bay?time=2026-07-12T18%3A10%3A13.000Z,Bird and moderate ship noise,fp_machine_only,66.7
+bird,rpi_andrews_bay,2026_07_11_19_55_45_PST,https://live.orcasound.net/bouts/new/andrews-bay?time=2026-07-12T02%3A55%3A45.000Z,"Bird, moderate ship noise",fp_machine_only,66.7
+bird,rpi_andrews_bay,2026_08_05_07_50_58_PST,https://live.orcasound.net/bouts/new/andrews-bay?time=2026-08-05T14%3A50%3A58.000Z,Bird calls and moderate vessel noise,fp_machine_only,66.7
+bird,rpi_andrews_bay,2026_08_05_05_49_39_PST,https://live.orcasound.net/bouts/new/andrews-bay?time=2026-08-05T12%3A49%3A39.000Z,Bird and electrical noise,fp_machine_only,66.7
 human,rpi_sunset_bay,2024_07_12_16_58_08_PST,https://live.orcasound.net/bouts/new/sunset-bay?time=2024-07-12T23%3A58%3A08.000Z,Human voices,fp_machine_only,66.7
 human,rpi_sunset_bay,2024_07_12_16_58_13_PST,https://live.orcasound.net/bouts/new/sunset-bay?time=2024-07-12T23%3A58%3A13.000Z,Human voices,fp_machine_only,75.3
 human,rpi_sunset_bay,2024_07_12_16_58_19_PST,https://live.orcasound.net/bouts/new/sunset-bay?time=2024-07-12T23%3A58%3A19.000Z,Human voices,fp_machine_only,75.5
