@@ -47,7 +47,7 @@ def test_build_prediction_list_filters_negative_labels() -> None:
 
 
 def test_build_cosmosdb_metadata_includes_multiclass_fields() -> None:
-    """Metadata should include global prediction label, positive segment list, comments, and tags."""
+    """Metadata should include global prediction label, positive segment list, and tags."""
     result = {
         "local_predictions": [2, 0],
         "local_confidences": [0.90, 0.20],

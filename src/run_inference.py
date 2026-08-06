@@ -222,10 +222,10 @@ def build_tags_list(
     # If 2-way tie of most common local tags, then:
         # If first tied tag is same as global, return second tied tag.
         # If second tied tag is same as global, return first tied tag.
-        # If neither equal global, pick first tied tag
-    # If no tie, return most common local tag
+        # If neither equal global, pick first tied tag.
+    # If no tie, return most common local tag.
     most_common_counts = Counter(local_prediction_labels).most_common()
-    if(len(most_common_counts) > 1 and most_common_counts[0][1] == most_common_counts[1][1]):
+    if (len(most_common_counts) > 1 and most_common_counts[0][1] == most_common_counts[1][1]):
         if (most_common_counts[0][0] == global_prediction_label):
             tags.append(most_common_counts[1][0])
             return tags
@@ -236,7 +236,7 @@ def build_tags_list(
             tags.append(most_common_counts[0][0])
             return tags
     else:
-        if(most_common_counts[0][0] != global_prediction_label):
+        if (most_common_counts[0][0] != global_prediction_label):
             tags.append(most_common_counts[0][0])
             return tags
         else:
