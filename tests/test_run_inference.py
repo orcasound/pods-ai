@@ -60,10 +60,10 @@ def _make_fastai_model_mock(global_prediction: int = 1, global_confidence: float
 
 
 def _make_podsai_model_mock(num_local: int = 10) -> MagicMock:
-    """Return a mock PODS-AI model whose predict() returns a 7-class result."""
+    """Return a mock PODS-AI model whose predict() returns an 8-class result."""
     mock_model = MagicMock()
 
-    # 7-class label mapping matching the standard schema.
+    # 8-class label mapping matching the standard schema.
     mock_model.id2label = {
         0: "water",
         1: "resident",
@@ -72,6 +72,7 @@ def _make_podsai_model_mock(num_local: int = 10) -> MagicMock:
         4: "vessel",
         5: "jingle",
         6: "human",
+        7: "bird",
     }
     mock_model.label2id = {v: k for k, v in mock_model.id2label.items()}
     mock_model.threshold = 0.5
@@ -90,6 +91,7 @@ def _make_podsai_model_mock(num_local: int = 10) -> MagicMock:
         "vessel": 0.0,
         "jingle": 0.0,
         "human": 0.0,
+        "bird": 0.0,
     }
 
     mock_model.predict.return_value = {
@@ -175,14 +177,18 @@ def _verify_fastai_result_structure(result: dict) -> None:
 
 def _verify_podsai_result_structure(result: dict) -> None:
     """Verify PODS-AI result has expected structure and valid values."""
-    expected_classes = {"water", "resident", "transient", "humpback", "vessel", "jingle", "human"}
+
+    # Currently the published PODS-AI model only has 7 classes, so accept it too for now.
+    # TODO: clean this up once the 8-class model is published.
+    old_expected_classes = {"water", "resident", "transient", "humpback", "vessel", "jingle", "human"}
+    expected_classes = {"water", "resident", "transient", "humpback", "vessel", "jingle", "human", "bird"}
 
     assert "probabilities" in result
     assert "global_prediction_label" in result
     assert "global_confidence" in result
 
-    # Verify all 7 classes are present.
-    assert set(result["probabilities"].keys()) == expected_classes
+    # Verify all 8 classes are present.
+    assert set(result["probabilities"].keys()) == expected_classes or set(result["probabilities"].keys()) == old_expected_classes
 
     # Verify all values in valid range.
     for prob in result["probabilities"].values():
@@ -233,7 +239,7 @@ def _verify_podsai_prediction(result: dict, audio_type: str, allow_category_matc
 
     Args:
         result: Inference result dictionary.
-        audio_type: Expected audio type (resident, transient, humpback, water, vessel, human, jingle).
+        audio_type: Expected audio type (resident, transient, humpback, water, vessel, human, jingle, bird).
         allow_category_match: If True, accept category match (whale vs non-whale) instead of exact match.
                               Defaults to False, requiring exact match for all classes.
 
@@ -246,7 +252,7 @@ def _verify_podsai_prediction(result: dict, audio_type: str, allow_category_matc
     actual = result["global_prediction_label"]
 
     whale_classes = {"resident", "transient", "humpback"}
-    non_whale_classes = {"water", "vessel", "human", "jingle"}
+    non_whale_classes = {"water", "vessel", "human", "jingle", "bird"}
 
     if allow_category_match:
         # Category match mode.
@@ -314,6 +320,7 @@ class TestRunInferencePodsAI:
                     "vessel": 0.9,
                     "jingle": 0.0,
                     "human": 0.0,
+                    "bird": 0.0,
                 },
                 "hop_duration": 2.0,
                 "segment_duration": 3.0,
@@ -338,8 +345,8 @@ class TestRunInferencePodsAI:
             Path(wav_path).unlink(missing_ok=True)
 
     def test_probabilities_cover_all_seven_classes(self):
-        """All 7 PODS-AI class labels are present in the probabilities output."""
-        expected_labels = {"water", "resident", "transient", "humpback", "vessel", "jingle", "human"}
+        """All 8 PODS-AI class labels are present in the probabilities output."""
+        expected_labels = {"water", "resident", "transient", "humpback", "vessel", "jingle", "human", "bird"}
         wav_path = _make_wav()
         try:
             mock_model = _make_podsai_model_mock()
@@ -379,7 +386,7 @@ class TestRunInferencePodsAI:
             # "water" has low average probability (0.1) since most windows don't predict it.
             assert result["probabilities"]["water"] == 0.1
             # Classes never predicted should still be 0.0.
-            for label in ["transient", "humpback", "vessel", "jingle", "human"]:
+            for label in ["transient", "humpback", "vessel", "jingle", "human", "bird"]:
                 assert result["probabilities"][label] == 0.0
         finally:
             Path(wav_path).unlink(missing_ok=True)
@@ -403,6 +410,7 @@ class TestRunInferencePodsAI:
                     "vessel": 0.0,
                     "jingle": 0.0,
                     "human": 0.0,
+                    "bird": 0.0,
                 },
             }
             with patch("run_inference.get_model_inference", return_value=mock_model):
@@ -1066,6 +1074,11 @@ class TestIntegrationWithRealModels:
         """Path to a real 60-second jingle/signal wav file for testing."""
         return self._get_testing_wav_path("jingle")
 
+    @pytest.fixture
+    def bird_wav_path(self) -> str:
+        """Path to a real 60-second bird/signal wav file for testing."""
+        return self._get_testing_wav_path("bird")
+
     # Parametrized tests for FastAI model on different audio types.
     @pytest.mark.parametrize("wav_fixture,label,xfail_reason", [
         ("resident_wav_path", "resident", None),
@@ -1077,6 +1090,7 @@ class TestIntegrationWithRealModels:
          "FastAI binary model may predict resident on ambient water clips"),
         ("human_wav_path", "human", None),
         ("jingle_wav_path", "jingle", "FastAI binary model may predict resident on jingle clips"),
+        ("bird_wav_path", "bird", "FastAI binary model may predict resident on bird clips"),
     ])
     def test_fastai_model_inference(
         self,
@@ -1111,6 +1125,7 @@ class TestIntegrationWithRealModels:
         ("water_wav_path", "water", "PODS-AI model may misclassify water as vessel"),
         ("human_wav_path", "human", None),
         ("jingle_wav_path", "jingle", "PODS-AI model may misclassify jingle as vessel"),
+        ("bird_wav_path", "bird", "PODS-AI model may misclassify bird as jingle"),
     ])
     def test_podsai_model_inference(
         self,
@@ -1152,6 +1167,8 @@ class TestIntegrationWithRealModels:
         ("human_wav_path", "podsai", "podsai_model_path"),
         ("jingle_wav_path", "fastai", "fastai_model_path"),
         ("jingle_wav_path", "podsai", "podsai_model_path"),
+        ("bird_wav_path", "fastai", "fastai_model_path"),
+        ("bird_wav_path", "podsai", "podsai_model_path"),
     ])
     def test_cli_integration(
         self,
@@ -1205,6 +1222,8 @@ class TestIntegrationWithRealModels:
          "OrcaHello SRKW detector may predict resident on human voice clips"),
         ("jingle_wav_path", "jingle",
          "OrcaHello SRKW detector may predict resident on jingle clips"),
+        ("bird_wav_path", "bird",
+         "OrcaHello SRKW detector may predict resident on bird clips"),
     ])
     def test_orcahello_model_inference(
         self,

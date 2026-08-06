@@ -552,6 +552,16 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
         segment_class_ids = [int(c) for c in predicted_classes]
         segment_probs = [all_probs[i].numpy() for i in range(num_positions)]
 
+        # Add any missing classes, with probability 0.
+        num_model_classes = len(segment_probs[0])
+        num_label_classes = max(self.id2label.keys()) + 1
+        if num_label_classes > num_model_classes:
+            pad_width = num_label_classes - num_model_classes
+            segment_probs = [
+                np.pad(probs, (0, pad_width), mode="constant", constant_values=0.0)
+                for probs in segment_probs
+            ]
+
         # Guard against empty predictions list.
         # This can happen if the audio is too short or if there was an error during processing.
         if not segment_class_ids:

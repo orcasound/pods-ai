@@ -18,6 +18,7 @@ def test_is_positive_label_uses_multiclass_negative_set() -> None:
     assert not orchestrator.is_positive_label("vessel")
     assert not orchestrator.is_positive_label("jingle")
     assert not orchestrator.is_positive_label("human")
+    assert not orchestrator.is_positive_label("bird")
 
 
 def test_build_prediction_list_filters_negative_labels() -> None:
@@ -78,7 +79,7 @@ def test_build_cosmosdb_metadata_includes_multiclass_fields() -> None:
 
 
 def test_build_cosmosdb_metadata_comments_appends_dominant_extra_class() -> None:
-    """comments field should append the most common vessel/human/jingle label when it differs from the global prediction."""
+    """comments field should append the most common vessel/human/jingle/bird label when it differs from the global prediction."""
     result = {
         "local_predictions": ["resident", "vessel", "vessel"],
         "local_confidences": [0.80, 0.70, 0.65],
