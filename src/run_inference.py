@@ -43,8 +43,8 @@ PODSAI_AST_MODEL_REVISION = "db51f75da131de0e53e8080a1f2c5f4b534810aa"
 PODSAI_WAV2VEC2_MODEL_REVISION = "cef82c6e9ee661646ea0c583aeb68f4f7ec6d9d8"
 # Preserve the existing exported constant name for compatibility.
 PODSAI_MODEL_REVISION = PODSAI_AST_MODEL_REVISION
-PROPOSED_DESCRIPTION_EXTRA_CLASSES = {"vessel", "human", "jingle"}
-NEGATIVE_LABELS = {"other", "water", "vessel", "jingle", "human"}
+PROPOSED_DESCRIPTION_EXTRA_CLASSES = {"vessel", "human", "jingle", "bird"}
+NEGATIVE_LABELS = {"other", "water", "vessel", "jingle", "human", "bird"}
 PACIFIC_TZ = pytz_tz("US/Pacific")
 UTC_TZ = timezone.utc
 MIN_SEGMENT_DURATION = 0.001
@@ -538,7 +538,7 @@ def main() -> int:
         default="podsai",
         help=(
             "Model type to use (default: podsai). "
-            "podsai: 7-class model (water, resident, transient, humpback, vessel, jingle, human). "
+            "podsai: 7-class model (water, resident, transient, humpback, vessel, jingle, human, bird). "
             "fastai: 2-class model (other, resident). "
             "orcahello: 2-class SRKW detector (other, resident) using the OrcaHello ResNet50 model."
         ),

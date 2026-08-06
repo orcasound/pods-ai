@@ -14,6 +14,11 @@ import requests
 from azure.cosmos import CosmosClient
 import os
 
+# Add the project root (pods-ai) to sys.path
+import sys
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+sys.path.append(project_root)
+
 from src.orcasite_feeds import OrcasiteFeed, get_orcasite_feeds  # noqa: F401 – re-exported for callers
 
 COSMOS_URL = os.environ.get("COSMOS_URL", "").strip() or "https://aifororcasmetadatastore.documents.azure.com:443/"
@@ -55,7 +60,7 @@ def get_label(
         orcahello_det (Optional[OrcaHelloDetection]): An optional id-matched OrcaHello detection used to upgrade some whale labels.
 
     Returns:
-        str | None: `'resident'`, `'transient'`, `'humpback'`, `'water'`, `'vessel'`, `'jingle'`, or `'human'` when a label can be determined; `None` when the label is unknown.
+        str | None: `'resident'`, `'transient'`, `'humpback'`, `'water'`, `'vessel'`, `'jingle'`, `'human'`, or `'bird'` when a label can be determined; `None` when the label is unknown.
     """
     desc = (orcasite_det.description or "").lower()
     cat = (orcasite_det.category or "").lower()
@@ -92,6 +97,8 @@ def get_label(
             return "vessel"
         if "jingl" in desc:
             return "jingle"
+        if "bird" in desc or "pigu" in desc or "kier" in desc or "PIGU" in desc or "KIER" in desc:
+            return "bird"
         if "water" in desc:
             return "water"
 
@@ -182,8 +189,8 @@ def classify_detection(
     if label is None:
         return Classification(kind="skip", include=False)
 
-    # False positive, machine-only (label 'human', 'vessel', 'jingle', or 'water').
-    if (label == "human" or label == "vessel" or label == "jingle" or label == "water") and src == "machine":
+    # False positive, machine-only (label 'human', 'vessel', 'jingle', 'bird', or 'water').
+    if (label == "human" or label == "vessel" or label == "jingle" or label == "water" or label == "bird") and src == "machine":
         return Classification(kind="fp_machine_only", include=True)
 
     # True positive, human-only (include).
