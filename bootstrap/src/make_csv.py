@@ -14,12 +14,13 @@ import requests
 from azure.cosmos import CosmosClient
 import os
 
-# Add the project root (pods-ai) to sys.path
-import sys
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
-sys.path.append(project_root)
-
-from src.orcasite_feeds import OrcasiteFeed, get_orcasite_feeds  # noqa: F401 – re-exported for callers
+import importlib.util
+module_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'src', 'orcasite_feeds.py'))
+spec = importlib.util.spec_from_file_location("orcasite_feeds", module_path)
+orcasite_feeds = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(orcasite_feeds)
+OrcasiteFeed = orcasite_feeds.OrcasiteFeed
+get_orcasite_feeds = orcasite_feeds.get_orcasite_feeds
 
 COSMOS_URL = os.environ.get("COSMOS_URL", "").strip() or "https://aifororcasmetadatastore.documents.azure.com:443/"
 COSMOS_KEY = os.environ.get("COSMOS_KEY", "<your-primary-key>")
