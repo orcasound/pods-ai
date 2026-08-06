@@ -687,7 +687,7 @@ class TestBuildTagsList:
             1: "resident",
         }
         
-        tags = build_tags_list(result)
+        tags = build_tags_list(result, id2label)
         assert set(tags) == {"resident"}
 
     def test_tags_append_context_class_when_most_common_segment(self):
@@ -704,7 +704,7 @@ class TestBuildTagsList:
             4: "vessel",
         }
         
-        tags = build_tags_list(result)
+        tags = build_tags_list(result, id2label)
         assert set(tags) == {"resident", "vessel"}
 
 # ---------------------------------------------------------------------------
