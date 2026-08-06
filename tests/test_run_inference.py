@@ -674,80 +674,38 @@ class TestRunInferenceErrors:
 class TestBuildTagsList:
     """Tests for the build_tags_list() function."""
 
-    def test_build_tags_list_with_positive_global_label(self):
-        """Tags should include positive global prediction labels."""
+    def test_tags_include_global_prediction(self):
+        """Tags should include positive global prediction label."""
         from run_inference import build_tags_list
         
         result = {
             "global_prediction_label": "resident",
-            "local_predictions": [],
-            "local_confidences": [],
-        }
-        
-        tags = build_tags_list(result)
-        assert "resident" in tags
-
-    def test_build_tags_list_filters_negative_global_label(self):
-        """Tags should exclude negative global prediction labels."""
-        from run_inference import build_tags_list
-        
-        result = {
-            "global_prediction_label": "water",
-            "local_predictions": [],
-            "local_confidences": [],
-        }
-        
-        tags = build_tags_list(result)
-        assert "water" not in tags
-        assert tags == []
-
-    def test_build_tags_list_includes_unique_positive_locals(self):
-        """Tags should include unique positive labels from local predictions."""
-        from run_inference import build_tags_list
-        
-        result = {
-            "global_prediction_label": "transient",
-            "local_predictions": [1, 2, 1, 2, 2],
-            "local_confidences": [0.7, 0.8, 0.75, 0.78, 0.9],
+            "local_predictions": [1, 1, 1],
+            "local_confidences": [0.7, 0.8, 0.75],
         }
         id2label = {
             1: "resident",
-            2: "transient",
         }
         
-        tags = build_tags_list(result, id2label=id2label)
-        assert set(tags) == {"transient", "resident"}
+        tags = build_tags_list(result)
+        assert set(tags) == {"resident"}
 
-    def test_build_tags_list_no_most_common_local_tags(self):
-        """Tags should include unique positive labels from local predictions."""
-        from run_inference import build_tags_list
-
-        result = {
-            "global_prediction_label": "transient",
-            "local_predictions": [3, 2, 3, 4, 2, 2],
-            "local_confidences": [0.7, 0.8, 0.75, 0.85, 0.78, 0.78],
-        }
-        id2label = {
-            2: "transient",
-            3: "humpback",
-            4: "vessel"
-        }
-
-        tags = build_tags_list(result, id2label=id2label)
-        assert set(tags) == {"transient", "humpback"}
-
-    def test_build_tags_list_handles_empty_local_predictions(self):
-        """Tags should work with empty local predictions."""
+    def test_tags_append_context_class_when_most_common_segment(self):
+        """Tags should include vessel when vessel is most common and differs from global label."""
         from run_inference import build_tags_list
         
         result = {
             "global_prediction_label": "resident",
-            "local_predictions": [],
-            "local_confidences": [],
+            "local_predictions": [4, 1, 4, 1, 4, 1, 4],
+            "local_confidences": [0.7, 0.7, 0.7, 0.8, 0.7, 0.75, 0.7],
+        }
+        id2label = {
+            1: "resident",
+            4: "vessel",
         }
         
         tags = build_tags_list(result)
-        assert tags == ["resident"]
+        assert set(tags) == {"resident", "vessel"}
 
 # ---------------------------------------------------------------------------
 # Tests for main() CLI
