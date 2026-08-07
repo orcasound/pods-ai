@@ -98,7 +98,7 @@ def get_label(
             return "vessel"
         if "jingl" in desc:
             return "jingle"
-        if "bird" in desc or "pigu" in desc or "kier" in desc or "PIGU" in desc or "KIER" in desc:
+        if "bird" in desc or "pigu" in desc or "keir" in desc:
             return "bird"
         if "water" in desc:
             return "water"
