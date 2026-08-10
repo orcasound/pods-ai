@@ -188,7 +188,7 @@ def build_cosmosdb_metadata(
         "location": location,
         "source_guid": source_guid,
         "predictions": prediction_list,
-        "tags": tags,
+        "tags": ";".join(tags),
     }
 
 

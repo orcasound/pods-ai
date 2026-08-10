@@ -74,7 +74,7 @@ def test_build_cosmosdb_metadata_includes_multiclass_fields() -> None:
     assert metadata["location"]["id"] == "unknown_feed"
     assert len(metadata["predictions"]) == 1
     assert metadata["predictions"][0]["label"] == "transient"
-    assert metadata["tags"] == ["transient", "water"]
+    assert metadata["tags"] == "transient;water"
 
 
 def test_build_cosmosdb_metadata_comments_appends_dominant_extra_class() -> None:
@@ -98,7 +98,7 @@ def test_build_cosmosdb_metadata_comments_appends_dominant_extra_class() -> None
     )
 
     # Tags should only include resident (positive label) and negative local (vessel)
-    assert metadata["tags"] == ["resident", "vessel"]
+    assert metadata["tags"] == "resident;vessel"
 
 
 def test_build_cosmosdb_metadata_tags_include_all_positive_predictions() -> None:
@@ -121,7 +121,7 @@ def test_build_cosmosdb_metadata_tags_include_all_positive_predictions() -> None
         model_id="podsai-model",
     )
 
-    assert metadata["tags"] == ["resident"]
+    assert metadata["tags"] == "resident"
 
 
 def test_upload_detection_to_azure_skips_existing_blobs(tmp_path) -> None:
