@@ -538,7 +538,7 @@ def main() -> int:
         default="podsai",
         help=(
             "Model type to use (default: podsai). "
-            "podsai: 7-class model (water, resident, transient, humpback, vessel, jingle, human, bird). "
+            "podsai: 8-class model (water, resident, transient, humpback, vessel, jingle, human, bird). "
             "fastai: 2-class model (other, resident). "
             "orcahello: 2-class SRKW detector (other, resident) using the OrcaHello ResNet50 model."
         ),

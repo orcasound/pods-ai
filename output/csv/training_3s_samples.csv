@@ -367,12 +367,12 @@ vessel,rpi_andrews_bay,2026_03_19_18_29_29_PST,https://live.orcasound.net/bouts/
 vessel,rpi_andrews_bay,2026_03_19_18_29_41_PST,https://live.orcasound.net/bouts/new/andrews-bay?time=2026-03-20T01%3A29%3A41.000Z,,manual,68.1
 vessel,rpi_andrews_bay,2026_03_19_18_29_49_PST,https://live.orcasound.net/bouts/new/andrews-bay?time=2026-03-20T01%3A29%3A49.000Z,,manual,55.8
 vessel,rpi_andrews_bay,2026_05_22_16_15_42_PST,https://live.orcasound.net/bouts/new/andrews-bay?time=2026-05-22T23%3A15%3A42.000Z,Moderate ship noise and water slosh,fp_machine,67.8
-vessel,rpi_andrews_bay,2026_08_10_12_12_08_PST,https://live.orcasound.net/bouts/new/bush-point?time=2026-08-10T19%3A12%3A08.000Z,Vessel noise,fp_machine,100
 vessel,rpi_bush_point,2024_07_02_12_00_01_PST,https://live.orcasound.net/bouts/new/bush-point?time=2024-07-02T19%3A00%3A01.000Z,Squeaky ship,fp_machine_only,66.9
 vessel,rpi_bush_point,2024_07_13_16_00_58_PST,https://live.orcasound.net/bouts/new/bush-point?time=2024-07-13T23%3A00%3A58.000Z,Tonal boat noise with some swishing and lots of contact noise.,fp_machine_only,56.9
 vessel,rpi_bush_point,2025_06_07_02_09_13_PST,https://live.orcasound.net/bouts/new/bush-point?time=2025-06-07T09%3A09%3A13.000Z,Water slosh and ship noise,fp_machine_only,54.2
 vessel,rpi_bush_point,2025_07_04_11_03_24_PST,https://live.orcasound.net/bouts/new/bush-point?time=2025-07-04T18%3A03%3A24.000Z,Ship noise,fp_machine_only,71.1
 vessel,rpi_bush_point,2025_07_04_11_18_14_PST,https://live.orcasound.net/bouts/new/bush-point?time=2025-07-04T18%3A18%3A14.000Z,Ship noise,fp_machine_only,73.1
+vessel,rpi_bush_point,2026_08_10_12_12_08_PST,https://live.orcasound.net/bouts/new/bush-point?time=2026-08-10T19%3A12%3A08.000Z,Vessel noise,fp_machine,100
 vessel,rpi_mast_center,2026_01_26_18_32_02_PST,https://live.orcasound.net/bouts/new/mast-center?time=2026-01-27T02%3A32%3A02.000Z,Squeaky ship,fp_machine_only,58.4
 vessel,rpi_mast_center,2026_01_26_19_01_25_PST,https://live.orcasound.net/bouts/new/mast-center?time=2026-01-27T03%3A01%3A25.000Z,Squeaky ship,fp_machine_only,50.6
 vessel,rpi_mast_center,2026_02_23_01_17_53_PST,https://live.orcasound.net/bouts/new/mast-center?time=2026-02-23T09%3A17%3A53.000Z,Ship noise,fp_machine_only,55.7
