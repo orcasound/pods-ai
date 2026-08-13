@@ -15,8 +15,11 @@ from azure.cosmos import CosmosClient
 import os
 
 import importlib.util
+
 module_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'src', 'orcasite_feeds.py'))
 spec = importlib.util.spec_from_file_location("orcasite_feeds", module_path)
+if spec is None or spec.loader is None:
+    raise ImportError(f"Unable to load orcasite_feeds from {module_path}")
 orcasite_feeds = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(orcasite_feeds)
 OrcasiteFeed = orcasite_feeds.OrcasiteFeed
