@@ -1,4 +1,13 @@
 Category,NodeName,Timestamp,URI,Description,Notes,Confidence
+bird,rpi_port_townsend,2026_08_06_07_23_49_PST,https://live.orcasound.net/bouts/new/port-townsend?time=2026-08-06T14%3A23%3A49.000Z,Pigu,fp_machine_only,100
+bird,rpi_port_townsend,2026_08_07_09_58_49_PST,https://live.orcasound.net/bouts/new/port-townsend?time=2026-08-07T16%3A58%3A49.000Z,Pigu,fp_machine_only,100
+bird,rpi_port_townsend,2026_08_07_10_05_49_PST,https://live.orcasound.net/bouts/new/port-townsend?time=2026-08-07T17%3A05%3A49.000Z,Pigu,fp_machine_only,100
+bird,rpi_port_townsend,2026_08_07_10_08_49_PST,https://live.orcasound.net/bouts/new/port-townsend?time=2026-08-07T17%3A08%3A49.000Z,Pigu,fp_machine_only,100
+bird,rpi_port_townsend,2026_08_07_10_21_49_PST,https://live.orcasound.net/bouts/new/port-townsend?time=2026-08-07T17%3A21%3A49.000Z,Pigu,fp_machine_only,100
+bird,rpi_port_townsend,2026_08_07_16_18_49_PST,https://live.orcasound.net/bouts/new/port-townsend?time=2026-08-07T23%3A18%3A49.000Z,Keir,fp_machine_only,100
+bird,rpi_port_townsend,2026_08_07_16_19_49_PST,https://live.orcasound.net/bouts/new/port-townsend?time=2026-08-07T23%3A19%3A49.000Z,Keir,fp_machine_only,100
+bird,rpi_port_townsend,2026_08_07_16_41_49_PST,https://live.orcasound.net/bouts/new/port-townsend?time=2026-08-07T23%3A41%3A49.000Z,Keir,fp_machine_only,100
+bird,rpi_port_townsend,2026_08_07_16_42_49_PST,https://live.orcasound.net/bouts/new/port-townsend?time=2026-08-07T23%3A42%3A49.000Z,Keir,fp_machine_only,100
 bird,rpi_port_townsend,2026_08_13_20_55_50_PST,https://live.orcasound.net/bouts/new/port-townsend?time=2026-08-14T03%3A55%3A50.000Z,Keir,fp_machine_only,100
 human,rpi_sunset_bay,2024_07_19_12_51_09_PST,https://live.orcasound.net/bouts/new/sunset-bay?time=2024-07-19T19%3A51%3A09.000Z,Human voices causing false positives despite significant noise from something contacting ladder and/or hydrophone.,fp_machine_only,54.4156
 human,rpi_sunset_bay,2024_07_21_09_13_24_PST,https://live.orcasound.net/bouts/new/sunset-bay?time=2024-07-21T16%3A13%3A24.067Z,Human voices via am radio noise,fp_machine_only,62.5619
