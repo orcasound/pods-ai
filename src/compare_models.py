@@ -594,7 +594,7 @@ def main() -> int:
         help=(
             "Only test samples from this category. "
             "If not specified, all categories are tested. "
-            "Categories: water, resident, transient, humpback, vessel, jingle, human."
+            "Categories: water, resident, transient, humpback, vessel, jingle, human, bird."
         ),
     )
 

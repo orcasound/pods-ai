@@ -32,6 +32,7 @@ from model_inference import get_model_inference
 from orcasite_feeds import get_orcasite_feeds_with_retry
 
 DEFAULT_MANUAL_SAMPLES_CSV = "output/csv/new_manual_samples.csv"
+BIRD_TERMS = ("bird", "pigu", "keir")
 RESIDENT_TERMS = ("resident", "pod")
 TRANSIENT_TERMS = ("bigg", "transient")
 HUMAN_TERMS = ("human", "radio")
@@ -73,6 +74,8 @@ def get_corrected_class(comments: str) -> Optional[str]:
         return "transient"
     if "humpback" in text and not no_humpback:
         return "humpback"
+    if any(term in text for term in BIRD_TERMS):
+        return "bird"
     if any(term in text for term in HUMAN_TERMS):
         return "human"
     if any(term in text for term in VESSEL_TERMS) and not no_vessel:

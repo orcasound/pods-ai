@@ -14,7 +14,16 @@ import requests
 from azure.cosmos import CosmosClient
 import os
 
-from src.orcasite_feeds import OrcasiteFeed, get_orcasite_feeds  # noqa: F401 – re-exported for callers
+import importlib.util
+
+module_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'src', 'orcasite_feeds.py'))
+spec = importlib.util.spec_from_file_location("orcasite_feeds", module_path)
+if spec is None or spec.loader is None:
+    raise ImportError(f"Unable to load orcasite_feeds from {module_path}")
+orcasite_feeds = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(orcasite_feeds)
+OrcasiteFeed = orcasite_feeds.OrcasiteFeed
+get_orcasite_feeds = orcasite_feeds.get_orcasite_feeds
 
 COSMOS_URL = os.environ.get("COSMOS_URL", "").strip() or "https://aifororcasmetadatastore.documents.azure.com:443/"
 COSMOS_KEY = os.environ.get("COSMOS_KEY", "<your-primary-key>")
@@ -55,7 +64,7 @@ def get_label(
         orcahello_det (Optional[OrcaHelloDetection]): An optional id-matched OrcaHello detection used to upgrade some whale labels.
 
     Returns:
-        str | None: `'resident'`, `'transient'`, `'humpback'`, `'water'`, `'vessel'`, `'jingle'`, or `'human'` when a label can be determined; `None` when the label is unknown.
+        str | None: `'resident'`, `'transient'`, `'humpback'`, `'water'`, `'vessel'`, `'jingle'`, `'human'`, or `'bird'` when a label can be determined; `None` when the label is unknown.
     """
     desc = (orcasite_det.description or "").lower()
     cat = (orcasite_det.category or "").lower()
@@ -92,6 +101,8 @@ def get_label(
             return "vessel"
         if "jingl" in desc:
             return "jingle"
+        if "bird" in desc or "pigu" in desc or "keir" in desc:
+            return "bird"
         if "water" in desc:
             return "water"
 
@@ -182,8 +193,8 @@ def classify_detection(
     if label is None:
         return Classification(kind="skip", include=False)
 
-    # False positive, machine-only (label 'human', 'vessel', 'jingle', or 'water').
-    if (label == "human" or label == "vessel" or label == "jingle" or label == "water") and src == "machine":
+    # False positive, machine-only (label 'human', 'vessel', 'jingle', 'bird', or 'water').
+    if (label == "human" or label == "vessel" or label == "jingle" or label == "water" or label == "bird") and src == "machine":
         return Classification(kind="fp_machine_only", include=True)
 
     # True positive, human-only (include).

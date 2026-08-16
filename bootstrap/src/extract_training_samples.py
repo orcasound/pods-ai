@@ -49,7 +49,7 @@ MIN_TESTING_SAMPLES_PER_CATEGORY = 10
 # Maximum number of testing samples selected per category.
 MAX_TESTING_SAMPLES_PER_CATEGORY = 30
 # Categories where tp_human_only detections are excluded from testing samples.
-NEGATIVE_CATEGORIES = {'water', 'human', 'vessel', 'jingle'}
+NEGATIVE_CATEGORIES = {'water', 'human', 'vessel', 'jingle', 'bird'}
 
 # Count existing humpback signal files.
 OTHER_HUMPBACK_SAMPLES = len(glob.glob(str(REPO_ROOT / 'output' / 'wav' / 'humpback' / 'signals-humpback_*.wav')))
@@ -242,7 +242,7 @@ def select_training_samples(
 
     Returns:
         List[Dict]: Selected training sample dictionaries, each containing:
-            - Category: Detection category (resident, transient, humpback, water, vessel, jingle, human)
+            - Category: Detection category (resident, transient, humpback, water, vessel, jingle, human, bird)
             - NodeName: Hydrophone node name
             - Timestamp: Detection timestamp (PST format)
             - URI: Orcasound bouts interface URI

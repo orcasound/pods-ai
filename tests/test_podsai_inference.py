@@ -63,7 +63,7 @@ def mock_podsai_model():
 
     # Define label mapping for multi-class model.
     # Current schema matches train_podsai_model.py:
-    # ["water", "resident", "transient", "humpback", "vessel", "jingle", "human"]
+    # ["water", "resident", "transient", "humpback", "vessel", "jingle", "human", "bird"]
     mock_config.id2label = {
         0: "water",
         1: "resident",
@@ -71,7 +71,8 @@ def mock_podsai_model():
         3: "humpback",
         4: "vessel",
         5: "jingle",
-        6: "human"
+        6: "human",
+        7: "bird",
     }
     mock_config.label2id = {
         "water": 0,
@@ -80,7 +81,8 @@ def mock_podsai_model():
         "humpback": 3,
         "vessel": 4,
         "jingle": 5,
-        "human": 6
+        "human": 6,
+        "bird": 7,
     }
 
     # Set metadata attributes that _print_model_metadata expects.
@@ -386,8 +388,8 @@ class TestPodsAIInferenceIndexing:
             assert result["local_predictions"] == []
             assert result["local_confidences"] == []
             assert result["local_probs"] == []
-            # global_prediction should be one of the negative classes (water=0, vessel=4, jingle=5, human=6).
-            assert result["global_prediction"] in [0, 4, 5, 6]
+            # global_prediction should be one of the negative classes (water=0, vessel=4, jingle=5, human=6, bird=7).
+            assert result["global_prediction"] in [0, 4, 5, 6, 7]
             assert result["global_confidence"] == 0.0
             # Error returns must always include hop_duration and segment_duration (matching orcahello behavior).
             assert result["hop_duration"] == 2.0
@@ -405,14 +407,14 @@ class TestPodsAIInferenceIndexing:
         # Create mock model that returns known probabilities.
         mock_model = Mock()
         mock_config = Mock()
-        # Schema: water=0, resident=1, transient=2, humpback=3, vessel=4, jingle=5, human=6
+        # Schema: water=0, resident=1, transient=2, humpback=3, vessel=4, jingle=5, human=6, bird=7
         mock_config.id2label = {
             0: "water", 1: "resident", 2: "transient", 3: "humpback",
-            4: "vessel", 5: "jingle", 6: "human"
+            4: "vessel", 5: "jingle", 6: "human", 7: "bird",
         }
         mock_config.label2id = {
             "water": 0, "resident": 1, "transient": 2, "humpback": 3,
-            "vessel": 4, "jingle": 5, "human": 6
+            "vessel": 4, "jingle": 5, "human": 6, "bird": 7,
         }
         mock_model.config = mock_config
         mock_model.to = Mock(return_value=mock_model)
@@ -424,12 +426,12 @@ class TestPodsAIInferenceIndexing:
         mock_config._commit_hash = None  # Optional, can be None
         
         # Return known probabilities. Handles batched input.
-        # water=0.1, resident=0.4, transient=0.1, humpback=0.1, vessel=0.1, jingle=0.1, human=0.1
-        # Total negative (water+vessel+jingle+human) = 0.4, so call-likelihood should be 0.6.
+        # water=0.1, resident=0.4, transient=0.1, humpback=0.1, vessel=0.1, jingle=0.1, human=0.1, bird=0.1
+        # Total negative (water+vessel+jingle+human+bird) = 0.5, so call-likelihood should be 0.5.
         def mock_forward(**kwargs):
             # Logits that represent the desired distribution.
             batch_size = kwargs["input_values"].shape[0]
-            logits = torch.tensor([[0.1, 0.4, 0.1, 0.1, 0.1, 0.1, 0.1]]).repeat(batch_size, 1)
+            logits = torch.tensor([[0.1, 0.5, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]]).repeat(batch_size, 1)
             mock_output = Mock()
             mock_output.logits = logits
             return mock_output
@@ -461,11 +463,11 @@ class TestPodsAIInferenceIndexing:
         mock_config = Mock()
         mock_config.id2label = {
             0: "water", 1: "resident", 2: "transient", 3: "humpback",
-            4: "vessel", 5: "jingle", 6: "human"
+            4: "vessel", 5: "jingle", 6: "human", 7: "bird",
         }
         mock_config.label2id = {
             "water": 0, "resident": 1, "transient": 2, "humpback": 3,
-            "vessel": 4, "jingle": 5, "human": 6
+            "vessel": 4, "jingle": 5, "human": 6, "bird": 7,
         }
         mock_config._name_or_path = "test-model"
         mock_config.architectures = ["ASTForAudioClassification"]
@@ -564,8 +566,8 @@ class TestPodsAIInferenceErrorHandling:
         assert result["local_predictions"] == []
         assert result["local_confidences"] == []
         assert result["local_probs"] == []
-        # Should be one of the negative classes (water=0, vessel=4, jingle=5, human=6).
-        assert result["global_prediction"] in [0, 4, 5, 6]
+        # Should be one of the negative classes (water=0, vessel=4, jingle=5, human=6, bird=7).
+        assert result["global_prediction"] in [0, 4, 5, 6, 7]
         assert result["global_confidence"] == 0.0
         # Error returns must always include hop_duration and segment_duration (matching orcahello behavior).
         assert result["hop_duration"] == 2.0
@@ -580,7 +582,7 @@ class TestPodsAIInferenceErrorHandling:
         mock_extractor = Mock()
         mock_extractor_class.from_pretrained = Mock(return_value=mock_extractor)
         
-        # Create model with only positive classes (no water, vessel, jingle, human, or other).
+        # Create model with only positive classes (no water, vessel, jingle, human, or bird).
         mock_model = Mock()
         mock_config = Mock()
         mock_config.id2label = {0: "resident", 1: "transient", 2: "humpback"}

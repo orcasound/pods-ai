@@ -18,6 +18,7 @@ def test_is_positive_label_uses_multiclass_negative_set() -> None:
     assert not orchestrator.is_positive_label("vessel")
     assert not orchestrator.is_positive_label("jingle")
     assert not orchestrator.is_positive_label("human")
+    assert not orchestrator.is_positive_label("bird")
 
 
 def test_build_prediction_list_filters_negative_labels() -> None:
@@ -74,11 +75,11 @@ def test_build_cosmosdb_metadata_includes_multiclass_fields() -> None:
     assert metadata["location"]["id"] == "unknown_feed"
     assert len(metadata["predictions"]) == 1
     assert metadata["predictions"][0]["label"] == "transient"
-    assert metadata["tags"] == ["transient", "water"]
+    assert metadata["tags"] == "transient;water"
 
 
 def test_build_cosmosdb_metadata_comments_appends_dominant_extra_class() -> None:
-    """comments field should append the most common vessel/human/jingle label when it differs from the global prediction."""
+    """comments field should append the most common vessel/human/jingle/bird label when it differs from the global prediction."""
     result = {
         "local_predictions": ["resident", "vessel", "vessel"],
         "local_confidences": [0.80, 0.70, 0.65],
@@ -98,7 +99,7 @@ def test_build_cosmosdb_metadata_comments_appends_dominant_extra_class() -> None
     )
 
     # Tags should only include resident (positive label) and negative local (vessel)
-    assert metadata["tags"] == ["resident", "vessel"]
+    assert metadata["tags"] == "resident;vessel"
 
 
 def test_build_cosmosdb_metadata_tags_include_all_positive_predictions() -> None:
@@ -121,7 +122,7 @@ def test_build_cosmosdb_metadata_tags_include_all_positive_predictions() -> None
         model_id="podsai-model",
     )
 
-    assert metadata["tags"] == ["resident"]
+    assert metadata["tags"] == "resident"
 
 
 def test_upload_detection_to_azure_skips_existing_blobs(tmp_path) -> None:

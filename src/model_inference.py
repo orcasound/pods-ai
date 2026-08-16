@@ -334,6 +334,12 @@ class FastAIModel(ModelInference):
 
         # Aggregate predictions.
 
+        if not path_list:
+            raise RuntimeError(
+                f"No audio segments could be extracted from '{wav_path}'. "
+                "The file may be corrupt, too short, or pydub/ffmpeg failed to process it."
+            )
+
         # Create a DataFrame.
         prediction = pd.DataFrame({'FilePath': path_list, 'confidence': predictions})
 

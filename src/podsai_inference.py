@@ -145,7 +145,7 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
 
         # Validate that model has at least one negative/background class.
         # Accept either explicit "other" or treat specific classes as negative.
-        negative_classes = {"other", "water", "vessel", "jingle", "human"}
+        negative_classes = {"other", "water", "vessel", "jingle", "human", "bird"}
         positive_classes = {"resident", "transient", "humpback"}
 
         found_negative = negative_classes & set(self.label2id.keys())
@@ -153,7 +153,7 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
 
         if not found_negative:
             raise ValueError(
-                f"Model must include at least one negative/background class (other, water, vessel, jingle, or human). "
+                f"Model must include at least one negative/background class (other, water, vessel, jingle, human, or bird). "
                 f"Found labels: {list(self.label2id.keys())}. "
                 f"Please train the model with at least one negative class to distinguish from whale calls."
             )
@@ -551,6 +551,16 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
         predicted_classes = torch.argmax(all_probs, dim=-1).tolist()
         segment_class_ids = [int(c) for c in predicted_classes]
         segment_probs = [all_probs[i].numpy() for i in range(num_positions)]
+
+        # Add any missing classes, with probability 0.
+        num_model_classes = len(segment_probs[0])
+        num_label_classes = max(self.id2label.keys()) + 1
+        if num_label_classes > num_model_classes:
+            pad_width = num_label_classes - num_model_classes
+            segment_probs = [
+                np.pad(probs, (0, pad_width), mode="constant", constant_values=0.0)
+                for probs in segment_probs
+            ]
 
         # Guard against empty predictions list.
         # This can happen if the audio is too short or if there was an error during processing.

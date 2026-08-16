@@ -323,6 +323,11 @@ class TestIsResidentPrediction:
         from compare_models import is_resident_prediction
         assert is_resident_prediction("vessel", "podsai") is False
 
+    def test_podsai_bird_is_not_resident(self):
+        """PODS-AI "bird" prediction maps to non-resident."""
+        from compare_models import is_resident_prediction
+        assert is_resident_prediction("bird", "podsai") is False
+
 
 # ---------------------------------------------------------------------------
 # Tests for ModelResult properties

@@ -493,11 +493,12 @@ def test_whale_f1_computed_from_whale_classes_only(monkeypatch):
         4: "vessel",
         5: "jingle",
         6: "human",
+        7: "bird",
     }
 
-    labels = np.array([1, 2, 3, 0, 4, 5, 6])
-    predictions = np.array([1, 2, 3, 4, 5, 6, 0])
-    logits = np.eye(7)[predictions]
+    labels = np.array([1, 2, 3, 0, 4, 5, 6, 7])
+    predictions = np.array([1, 2, 3, 4, 5, 6, 0, 7])
+    logits = np.eye(8)[predictions]
 
     eval_pred = module.EvalPrediction(predictions=logits, label_ids=labels)
     metrics = module.compute_metrics(eval_pred)
@@ -506,6 +507,7 @@ def test_whale_f1_computed_from_whale_classes_only(monkeypatch):
     assert metrics["f1_resident"] == 1.0
     assert metrics["f1_transient"] == 1.0
     assert metrics["f1_humpback"] == 1.0
+    assert metrics["f1_bird"] == 1.0
     assert metrics["f1_water"] == 0.0
     assert metrics["f1_vessel"] == 0.0
 
@@ -522,11 +524,12 @@ def test_compute_metrics_prints_dataset_context(monkeypatch, capsys):
         4: "vessel",
         5: "jingle",
         6: "human",
+        7: "bird",
     }
 
-    labels = np.array([1, 2, 3, 0, 4, 5, 6])
-    predictions = np.array([1, 2, 3, 0, 4, 5, 6])
-    logits = np.eye(7)[predictions]
+    labels = np.array([1, 2, 3, 0, 4, 5, 6, 7])
+    predictions = np.array([1, 2, 3, 0, 4, 5, 6, 7])
+    logits = np.eye(8)[predictions]
 
     eval_pred = module.EvalPrediction(predictions=logits, label_ids=labels)
     module.compute_metrics(eval_pred)
@@ -547,11 +550,12 @@ def test_whale_f1_reflects_mixed_whale_predictions(monkeypatch):
         4: "vessel",
         5: "jingle",
         6: "human",
+        7: "bird",
     }
 
-    labels = np.array([1, 2, 3, 0, 4, 5, 6])
-    predictions = np.array([1, 1, 2, 4, 5, 6, 0])
-    logits = np.eye(7)[predictions]
+    labels = np.array([1, 2, 3, 0, 4, 5, 6, 7])
+    predictions = np.array([1, 1, 2, 4, 5, 6, 0, 7])
+    logits = np.eye(8)[predictions]
 
     eval_pred = module.EvalPrediction(predictions=logits, label_ids=labels)
     metrics = module.compute_metrics(eval_pred)
@@ -582,11 +586,11 @@ def test_f1_fallback_supports_multiclass_non_whale_labels(monkeypatch):
     """Fallback weighted F1 should work with non-whale multiclass mappings."""
     module = _import_stubbed_train_module(monkeypatch)
     _patch_metrics(module)
-    module.ID2LABEL = {0: "water", 1: "vessel", 2: "human", 3: "jingle"}
+    module.ID2LABEL = {0: "water", 1: "vessel", 2: "human", 3: "jingle", 4: "bird"}
 
-    labels = np.array([0, 0, 1, 1, 2, 2, 3, 3])
-    predictions = np.array([0, 1, 1, 2, 2, 3, 3, 0])
-    logits = np.eye(4)[predictions]
+    labels = np.array([0, 0, 1, 1, 2, 2, 3, 3, 4, 4])
+    predictions = np.array([0, 1, 1, 2, 2, 3, 3, 4, 4, 0])
+    logits = np.eye(5)[predictions]
 
     eval_pred = module.EvalPrediction(predictions=logits, label_ids=labels)
     metrics = module.compute_metrics(eval_pred)

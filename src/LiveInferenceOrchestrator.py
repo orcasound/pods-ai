@@ -28,7 +28,7 @@ COSMOSDB_CONTAINER_NAME = "metadata"
 
 ORCASOUND_S3_BUCKET = "audio-orcasound-net"
 
-NEGATIVE_LABELS = {"other", "water", "vessel", "jingle", "human"}
+NEGATIVE_LABELS = {"other", "water", "vessel", "jingle", "human", "bird"}
 
 PODSAI_MODEL_ID = "davethaler/whale-call-detector"
 # renovate: datasource=git-refs depName=https://huggingface.co/davethaler/whale-call-detector versioning=git.
@@ -188,7 +188,7 @@ def build_cosmosdb_metadata(
         "location": location,
         "source_guid": source_guid,
         "predictions": prediction_list,
-        "tags": tags,
+        "tags": ";".join(tags),
     }
 
 
