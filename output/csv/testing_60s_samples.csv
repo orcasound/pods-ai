@@ -6,7 +6,9 @@ bird,rpi_port_townsend,2026_08_07_16_18_49_PST,https://live.orcasound.net/bouts/
 bird,rpi_port_townsend,2026_08_07_16_19_49_PST,https://live.orcasound.net/bouts/new/port-townsend?time=2026-08-07T23%3A19%3A49.000Z,Keir,fp_machine_only,100
 bird,rpi_port_townsend,2026_08_07_16_41_49_PST,https://live.orcasound.net/bouts/new/port-townsend?time=2026-08-07T23%3A41%3A49.000Z,Keir,fp_machine_only,100
 bird,rpi_port_townsend,2026_08_07_16_42_49_PST,https://live.orcasound.net/bouts/new/port-townsend?time=2026-08-07T23%3A42%3A49.000Z,Keir,fp_machine_only,100
+bird,rpi_port_townsend,2026_08_11_09_50_51_PST,https://live.orcasound.net/bouts/new/port-townsend?time=2026-08-11T16%3A50%3A51.000Z,Pigu,fp_machine_only,100
 bird,rpi_port_townsend,2026_08_13_20_55_50_PST,https://live.orcasound.net/bouts/new/port-townsend?time=2026-08-14T03%3A55%3A50.000Z,Keir,fp_machine_only,100
+bird,rpi_port_townsend,2026_08_15_10_19_57_PST,https://live.orcasound.net/bouts/new/port-townsend?time=2026-08-15T17%3A19%3A57.000Z,Pigu,fp_machine_only,100
 human,rpi_sunset_bay,2024_07_19_12_51_09_PST,https://live.orcasound.net/bouts/new/sunset-bay?time=2024-07-19T19%3A51%3A09.000Z,Human voices causing false positives despite significant noise from something contacting ladder and/or hydrophone.,fp_machine_only,54.4156
 human,rpi_sunset_bay,2024_07_21_09_13_24_PST,https://live.orcasound.net/bouts/new/sunset-bay?time=2024-07-21T16%3A13%3A24.067Z,Human voices via am radio noise,fp_machine_only,62.5619
 human,rpi_sunset_bay,2024_07_23_11_32_51_PST,https://live.orcasound.net/bouts/new/sunset-bay?time=2024-07-23T18%3A32%3A51.186Z,Human voices causing false positives in contact and AM radio noise.,fp_machine_only,54.653
