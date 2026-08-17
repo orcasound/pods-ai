@@ -20,6 +20,7 @@ fastai==1.0.61
 torch>=2.1.0
 torchvision>=0.16.0
 torchaudio>=2.1.0
+torchcodec
 git+https://github.com/fastaudio/fastai_audio@0.1
 transformers>=5.0.0
 datasets==5.0.1
