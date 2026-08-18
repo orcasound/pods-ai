@@ -20,6 +20,7 @@ Usage:
 import argparse
 from collections import Counter
 from functools import partial
+import math
 import os
 from pathlib import Path
 from typing import Protocol
@@ -569,6 +570,9 @@ def main() -> None:
     )
 
     # Training arguments.
+    # Compute warmup steps equivalent to warmup_ratio=0.1 (warmup_ratio was removed in transformers 5.15.0).
+    steps_per_epoch = math.ceil(len(dataset["train"]) / args.batch_size)
+    warmup_steps = int(steps_per_epoch * args.epochs * 0.1)
     training_args = TrainingArguments(
         output_dir=str(output_dir),
         eval_strategy="epoch",
@@ -578,7 +582,7 @@ def main() -> None:
         per_device_train_batch_size=args.batch_size,
         per_device_eval_batch_size=args.batch_size,
         num_train_epochs=args.epochs,
-        warmup_ratio=0.1,
+        warmup_steps=warmup_steps,
         logging_steps=10,
         fp16=torch.cuda.is_available(),
         load_best_model_at_end=True,

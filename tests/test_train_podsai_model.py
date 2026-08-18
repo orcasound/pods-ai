@@ -599,6 +599,107 @@ def test_f1_fallback_supports_multiclass_non_whale_labels(monkeypatch):
     assert metrics["f1"] == pytest.approx(0.5)
 
 
+def test_warmup_steps_not_warmup_ratio_passed_to_training_arguments(monkeypatch, tmp_path):
+    """TrainingArguments must receive warmup_steps, not warmup_ratio (removed in transformers 5.15.0).
+
+    The computed value should equal ~10% of total training steps, where total
+    steps = math.ceil(train_size / batch_size) * epochs.
+    """
+    import math
+
+    module = _import_stubbed_train_module(monkeypatch)
+
+    captured_training_args = {}
+
+    class _FakeFeatureExtractor:
+        @classmethod
+        def from_pretrained(cls, _model_name):
+            return cls()
+
+        def save_pretrained(self, _output_dir):
+            return None
+
+        def push_to_hub(self, _hub_model_id):
+            return None
+
+        def __call__(self, processed_audio, **_kwargs):
+            return {"input_values": processed_audio}
+
+    class _FakeModel:
+        @classmethod
+        def from_pretrained(cls, *_args, **_kwargs):
+            return cls()
+
+    class _FakeTrainingArgumentsStrict:
+        """Mimics transformers>=5.15.0: raises TypeError on warmup_ratio."""
+
+        def __init__(self, **kwargs):
+            if "warmup_ratio" in kwargs:
+                raise TypeError(
+                    "TrainingArguments.__init__() got an unexpected keyword argument 'warmup_ratio'"
+                )
+            captured_training_args.update(kwargs)
+
+    class _FakeTrainer:
+        def __init__(self, model, args, train_dataset, eval_dataset, compute_metrics):
+            self.args = args
+
+        def train(self, resume_from_checkpoint=None):
+            return None
+
+        def evaluate(self):
+            return {"f1": 1.0}
+
+        def save_model(self, _output_dir):
+            return None
+
+    # Use a dataset size and batch size that exercises the math.ceil path.
+    train_size = 25
+    batch_size = 8
+    epochs = 5
+
+    class _FakeDatasetDict(dict):
+        def map(self, _func, batched, remove_columns):
+            return self
+
+    fake_dataset = _FakeDatasetDict(
+        train=[{"label": 0}] * train_size,
+        test=[{"label": 0}],
+    )
+
+    monkeypatch.setattr(module, "setup_label_mappings", lambda _num_classes: None)
+    monkeypatch.setattr(module, "load_audio_dataset", lambda _data_dir, _num_classes: fake_dataset)
+    monkeypatch.setattr(module, "analyze_dataset", lambda _dataset: None)
+    monkeypatch.setattr(module, "AutoFeatureExtractor", _FakeFeatureExtractor)
+    monkeypatch.setattr(module, "AutoModelForAudioClassification", _FakeModel)
+    monkeypatch.setattr(module, "TrainingArguments", _FakeTrainingArgumentsStrict)
+    monkeypatch.setattr(module, "Trainer", _FakeTrainer)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "train_podsai_model.py",
+            "--output_dir",
+            str(tmp_path / "model"),
+            "--epochs",
+            str(epochs),
+            "--batch_size",
+            str(batch_size),
+        ],
+    )
+
+    # This call must not raise TypeError about warmup_ratio.
+    module.main()
+
+    assert "warmup_ratio" not in captured_training_args, (
+        "warmup_ratio was passed to TrainingArguments; it was removed in transformers 5.15.0"
+    )
+    assert "warmup_steps" in captured_training_args
+
+    expected_steps = int(math.ceil(train_size / batch_size) * epochs * 0.1)
+    assert captured_training_args["warmup_steps"] == expected_steps
+
+
 def test_metric_loader_falls_back_to_sklearn_when_evaluate_metric_missing(monkeypatch):
     """Metric loading should gracefully fall back when evaluate modules are unavailable."""
     module = _import_stubbed_train_module(monkeypatch)
