@@ -70,7 +70,7 @@ HOP_DURATION = 2  # Hop size between segments in seconds.
 DEFAULT_OUTPUT_DIR = "new"  # Default output directory for segments.
 DEFAULT_MODEL_PATH = "davethaler/whale-call-detector"  # Default HuggingFace model ID.
 # renovate: datasource=git-refs depName=https://huggingface.co/davethaler/whale-call-detector versioning=git.
-DEFAULT_MODEL_REVISION = "db51f75da131de0e53e8080a1f2c5f4b534810aa"  # Pinned Hub model revision.
+DEFAULT_MODEL_REVISION = "36620370fd59c8a70f9b7be6060d4f40717e796d"  # Pinned Hub model revision.
 DEFAULT_DETECTIONS_CSV = "bootstrap/csv/detections.csv"  # Default path to detections.csv
 PACIFIC_TZ = timezone("US/Pacific")  # Pacific timezone for timestamp formatting.
 UTC_TZ = timezone("UTC")  # UTC timezone for URI generation.
