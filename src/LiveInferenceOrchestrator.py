@@ -12,6 +12,7 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
+import requests
 
 from model_inference import get_model_inference
 from pytz import timezone as pytz_tz
@@ -36,57 +37,29 @@ PODSAI_MODEL_REVISION = "db51f75da131de0e53e8080a1f2c5f4b534810aa"
 
 
 # TODO: get this data from https://live.orcasound.net/api/json/feeds.
-source_guid_to_location = {
-    "rpi_andrews_bay": {
-        "id": "rpi_andrews_bay",
-        "name": "Andrews Bay",
-        "longitude": -123.1666492,
-        "latitude": 48.5500299,
-    },
-    "rpi_bush_point": {
-        "id": "rpi_bush_point",
-        "name": "Bush Point",
-        "longitude": -122.6040035,
-        "latitude": 48.0336664,
-    },
-    "rpi_mast_center": {
-        "id": "rpi_mast_center",
-        "name": "Mast Center",
-        "longitude": -122.32512,
-        "latitude": 47.34922,
-    },
-    "rpi_north_sjc": {
-        "id": "rpi_north_sjc",
-        "name": "North San Juan Channel",
-        "longitude": -123.058779,
-        "latitude": 48.591294,
-    },
-    "rpi_orcasound_lab": {
-        "id": "rpi_orcasound_lab",
-        "name": "Orcasound Lab",
-        "longitude": -123.1735774,
-        "latitude": 48.5583362,
-    },
-    "rpi_point_robinson": {
-        "id": "rpi_point_robinson",
-        "name": "Point Robinson",
-        "longitude": -122.37267,
-        "latitude": 47.388383,
-    },
-    "rpi_port_townsend": {
-        "id": "rpi_port_townsend",
-        "name": "Port Townsend",
-        "longitude": -122.760614,
-        "latitude": 48.135743,
-    },
-    "rpi_sunset_bay": {
-        "id": "rpi_sunset_bay",
-        "name": "Sunset Bay",
-        "longitude": -122.33393605795372,
-        "latitude": 47.86497296593844,
-    },
-}
 
+def get_api_data_json(location_name: str) -> dict:
+    response = requests.get("https://live.orcasound.net/api/json/feeds")
+    data = response.json().get("data")
+    index = next((i for i, item in enumerate(data) if item.get("attributes").get("node_name") == location_name), None)
+    output_data = {
+        "id": data[index].get("attributes").get("node_name"),
+        "name": data[index].get("attributes").get("name"),
+        "longitude": float(data[index].get("attributes").get("location_point").get("coordinates")[0]),
+        "latitude": float(data[index].get("attributes").get("location_point").get("coordinates")[1])
+    }
+    return output_data
+
+source_guid_to_location = {
+    "rpi_andrews_bay": get_api_data_json("rpi_andrews_bay"),
+    "rpi_bush_point": get_api_data_json("rpi_bush_point"),
+    "rpi_mast_center": get_api_data_json("rpi_mast_center"),
+    "rpi_north_sjc": get_api_data_json("rpi_north_sjc"),
+    "rpi_orcasound_lab": get_api_data_json("rpi_orcasound_lab"),
+    "rpi_point_robinson": get_api_data_json("rpi_point_robinson"),
+    "rpi_port_townsend": get_api_data_json("rpi_port_townsend"),
+    "rpi_sunset_bay": get_api_data_json("rpi_sunset_bay")
+}
 
 def assemble_blob_uri(container_name: str, item_name: str) -> str:
     """Assemble a blob URI from account/container/item."""
