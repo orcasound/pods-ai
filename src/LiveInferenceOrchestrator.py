@@ -40,6 +40,7 @@ PODSAI_MODEL_REVISION = "db51f75da131de0e53e8080a1f2c5f4b534810aa"
 
 def get_api_data_json(location_name: str) -> dict:
     response = requests.get("https://live.orcasound.net/api/json/feeds")
+    response.raise_for_status()
     data = response.json().get("data")
     index = next((i for i, item in enumerate(data) if item.get("attributes").get("node_name") == location_name), None)
     output_data = {
