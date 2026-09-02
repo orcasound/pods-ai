@@ -39,7 +39,7 @@ from model_inference import get_model_inference
 
 PODSAI_MODEL_ID = "davethaler/whale-call-detector"
 # renovate: datasource=git-refs depName=https://huggingface.co/davethaler/whale-call-detector versioning=git.
-PODSAI_AST_MODEL_REVISION = "db51f75da131de0e53e8080a1f2c5f4b534810aa"
+PODSAI_AST_MODEL_REVISION = "36620370fd59c8a70f9b7be6060d4f40717e796d"
 PODSAI_WAV2VEC2_MODEL_REVISION = "cef82c6e9ee661646ea0c583aeb68f4f7ec6d9d8"
 # Preserve the existing exported constant name for compatibility.
 PODSAI_MODEL_REVISION = PODSAI_AST_MODEL_REVISION
@@ -451,6 +451,7 @@ def run_inference(wav_path: str, model_type: str = "podsai",
         "predict_time": predict_time,
         "local_predictions": local_predictions,
         "local_confidences": local_confidences,
+        "local_prediction_labels": local_prediction_labels,
         "hop_duration": hop_duration,
         "segment_duration": segment_duration,
         "positive_segments_count": positive_segments_count,
@@ -473,21 +474,33 @@ def print_results(results: dict, model_type: str) -> None:
     print(f"Model type: {model_type}")
     print(f"Global prediction: {label} (confidence: {confidence:.4f})")
     print(f"Prediction time: {predict_time:.2f}s")
-    if model_type == "podsai":
-        local_predictions = results.get("local_predictions", [])
-        positive_segments = results.get("positive_segments", [])
-        positive_segments_count = results.get("positive_segments_count", 0)
-        print(f"Positive segments: {positive_segments_count}/{len(local_predictions)}")
-        if positive_segments:
-            print("Positive segment timestamps:")
-            for segment in positive_segments:
-                timestamp = segment.get("start_time_pacific")
-                if timestamp is None:
-                    timestamp = f"+{float(segment.get('start_time_seconds', 0.0)):.1f}s"
-                print(
-                    f"  {timestamp}: {segment.get('label', '')} "
-                    f"(confidence: {float(segment.get('confidence', 0.0)):.3f})"
-                )
+
+    local_predictions = results.get("local_predictions", [])
+    local_confidences = results.get("local_confidences", [])
+    local_prediction_labels = results.get("local_prediction_labels", [])
+    hop_duration = results.get("hop_duration", 1.0)
+
+    if local_predictions and local_confidences:
+        print(f"\nSegments: {len(local_predictions)} total")
+
+        if model_type == "podsai":
+            positive_segments_count = results.get("positive_segments_count", 0)
+            print(f"Positive segments: {positive_segments_count}/{len(local_predictions)}")
+
+        print("\nAll segment predictions:")
+
+        # Use local_prediction_labels if available, otherwise convert predictions.
+        if local_prediction_labels:
+            for idx, (pred_label, conf) in enumerate(zip(local_prediction_labels, local_confidences)):
+                start_seconds = idx * hop_duration
+                print(f"  +{start_seconds:.1f}s: {pred_label} (confidence: {conf:.3f})")
+        else:
+            # FastAI and OrcaHello use binary predictions (0=other, 1=resident).
+            for idx, (pred, conf) in enumerate(zip(local_predictions, local_confidences)):
+                start_seconds = idx * hop_duration
+                pred_label = "resident" if int(pred) == 1 else "other"
+                print(f"  +{start_seconds:.1f}s: {pred_label} (confidence: {conf:.3f})")
+
     print()
     print("Per-class probabilities:")
     for class_name, prob in sorted(probabilities.items()):

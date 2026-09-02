@@ -577,30 +577,13 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
                 "segment_duration": float(segment_duration),
             }
 
-        # Apply rolling average to smooth predictions (matching FastAI behavior).
-        # For multi-class, we average the probability distributions.
-        n = len(segment_probs)
-        smoothed_probs: list[np.ndarray] = []
-
-        for i in range(n):
-            if i == 0:
-                # First position: use first segment probabilities directly.
-                smoothed_probs.append(segment_probs[0])
-            elif i == n - 1:
-                # Last position: use last segment probabilities directly.
-                smoothed_probs.append(segment_probs[-1])
-            else:
-                # Middle positions: average previous and current segment.
-                avg_probs = (segment_probs[i - 1] + segment_probs[i]) / 2.0
-                smoothed_probs.append(avg_probs)
-
         # Get local predictions (class IDs) and call-likelihood confidences.
         # For timestamp correction, we need the likelihood of a whale call being present,
         # not the confidence in the predicted class (which could be a background class).
         local_predictions: list[int] = []
         local_confidences: list[float] = []
 
-        for probs in smoothed_probs:
+        for probs in segment_probs:
             predicted_class = int(np.argmax(probs))
 
             # Compute call-likelihood as 1 - P(negative classes).
@@ -657,9 +640,7 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
                 global_prediction_id = class_counts.most_common(1)[0][0]
 
                 # Compute confidence as the mean probability of the predicted class across all segments.
-                global_confidence = float(np.mean([
-                    probs[global_prediction_id] for probs in smoothed_probs
-                ]))
+                global_confidence = float(np.mean([probs[global_prediction_id] for probs in segment_probs]))
             else:
                 # No background predictions found (all predictions were positive but below threshold).
                 # Fall back to a safe background default.
@@ -677,13 +658,13 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
         # These represent the mean probability for each class across all windows.
         per_class_probabilities = {}
         for class_id, label in self.id2label.items():
-            class_probs = [float(probs[class_id]) for probs in smoothed_probs]
+            class_probs = [float(probs[class_id]) for probs in segment_probs]
             per_class_probabilities[label] = float(np.mean(class_probs))
 
         return {
             "local_predictions": local_predictions,
             "local_confidences": local_confidences,
-            "local_probs": smoothed_probs,
+            "local_probs": segment_probs,
             "global_prediction": global_prediction_id,
             "global_prediction_label": global_prediction_label,
             "global_confidence": global_confidence,
@@ -691,7 +672,6 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
             "hop_duration": float(hop_duration),
             "segment_duration": float(segment_duration),
         }
-
 
 def get_podsai_inference(model_path: str, **kwargs) -> PodsAIInference:
     """
