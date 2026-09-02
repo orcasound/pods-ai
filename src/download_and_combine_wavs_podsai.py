@@ -19,7 +19,7 @@ from typing import Optional
 DEFAULT_PRIMARY_MANIFEST = "/content/pods-ai/output/csv/testing_60s_samples.csv"
 DEFAULT_SECONDARY_MANIFEST = (
     "/content/pods-ai/output/csv/"
-    "orcasound_60s_validation_manifest_no_mixed_extracted.csv"
+    "dclde_60s_samples.csv"
 )
 DEFAULT_WAV_ROOT = "/content/pods-ai/output/testing-wav"
 DEFAULT_OUTPUT_MANIFEST = "/content/pods-ai/output/csv/testing_60s_samples_combined_dclde.csv"
