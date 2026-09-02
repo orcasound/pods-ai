@@ -21,6 +21,7 @@ The active scripts in `src` include:
 3. **train_podsai_model.py**: Trains a PODS-AI model on the generated training samples.
 4. **compare_models.py**: Evaluates models using `output/csv/testing_60s_samples.csv`.
 5. **generate_embeddings.py**: Generates `output/csv/embeddings.csv` from `output/csv/testing_60s_samples.csv`.
+6. **download_and_combine_wavs_podsai.py**: Downloads the existing Orcasound test collection and DCLDE validation clips, then creates a combined manifest compatible with the legacy PODS-AI evaluation scripts.
 
 ```mermaid
 flowchart TD;
@@ -120,6 +121,10 @@ Key dependencies:
 - **compare_models.py**: Evaluates and compares fastai, orcahello, podsai (AST), and oldpodsai (Wav2Vec2) models
   on the test set loaded from `output/csv/testing_60s_samples.csv` and downloaded by `download_wavs.py`).
   Reports correct identifications, false positives, false negatives, and average prediction time for each model.
+- **download_and_combine_wavs_podsai.py**: Builds a combined Orcasound and DCLDE
+  60-second evaluation collection using the schema and WAV layout expected by
+  `compare_models.py`. See
+  [download_and_combine_wavs_podsai.py](#download_and_combine_wavs_podsaipy) below.
 
 ### add_samples.py
 
@@ -419,6 +424,69 @@ python generate_umaps.py \
     --label_type ground_truth_label \
     --output_file ground_truth_umap.png
 ```
+
+### download_and_combine_wavs_podsai.py
+
+Download and combine two 60-second evaluation collections in Google Colab:
+
+- The primary `testing_60s_samples.csv` Orcasound collection is downloaded using
+  the same timestamp and filename logic as `download_wavs.py`.
+- The secondary DCLDE no-mixed-label manifest is processed one row at a time. Each
+  source recording is downloaded from Google Cloud Storage (or copied from a local
+  path), its requested window is extracted with `ffmpeg`, and the temporary source
+  file is discarded before the next row is processed.
+- Every WAV is stored as
+  `<wav-root>/<Category>/<NodeName-with-dashes>_<Timestamp>.wav`, exactly as
+  expected by `compare_models.py`.
+- The output CSV uses the same seven columns as `testing_60s_samples.csv`:
+  `Category`, `NodeName`, `Timestamp`, `URI`, `Description`, `Notes`, and
+  `Confidence`.
+
+DCLDE SRKW, TKW, and HW labels map to `resident`, `transient`, and `humpback`.
+Generic DCLDE `BKG` clips map to `water` by default because the legacy model does
+not predict an `other/background` class. That mapping can be changed with
+`--secondary-background-category`.
+
+```
+usage: python download_and_combine_wavs_podsai.py
+       [--primary-manifest PATH]
+       [--secondary-manifest PATH]
+       [--wav-root DIR]
+       [--output-manifest PATH]
+       [--primary-cache-root DIR]
+       [--skip-primary-download]
+       [--no-skip-existing]
+       [--max-secondary-clips N]
+       [--secondary-background-category LABEL]
+```
+
+| Argument | Description |
+|---|---|
+| `--primary-manifest` | Existing Orcasound `testing_60s_samples.csv` (default: `/content/pods-ai/output/csv/testing_60s_samples.csv`) |
+| `--secondary-manifest` | DCLDE no-mixed-label manifest included at `output/csv/dclde_60s_samples.csv` |
+| `--wav-root` | Root directory for all downloaded and extracted evaluation WAVs (default: `/content/pods-ai/output/testing-wav`) |
+| `--output-manifest` | Combined legacy manifest destination (default: `/content/pods-ai/output/csv/testing_60s_samples_combined_dclde.csv`) |
+| `--primary-cache-root` | Optional existing WAV directory used as a cache before downloading primary clips |
+| `--skip-primary-download` | Use already-downloaded primary WAVs without running the primary download process |
+| `--no-skip-existing` | Re-download and overwrite secondary WAVs that already exist |
+| `--max-secondary-clips` | Process only the first N secondary rows, useful for a Colab smoke test |
+| `--secondary-background-category` | Legacy model label assigned to generic DCLDE backgrounds (default: `water`) |
+
+**Example — download both collections and create the combined manifest**
+
+```bash
+cd /content/pods-ai/src
+python download_and_combine_wavs_podsai.py \
+    --primary-manifest /content/pods-ai/output/csv/testing_60s_samples.csv \
+    --secondary-manifest /content/pods-ai/output/csv/dclde_60s_samples.csv \
+    --wav-root /content/pods-ai/output/testing-wav \
+    --output-manifest /content/pods-ai/output/csv/testing_60s_samples_combined_dclde.csv \
+    --secondary-background-category water
+```
+
+For a quick five-clip secondary smoke test, add `--max-secondary-clips 5`.
+Existing secondary WAVs are reused by default. Missing primary files and failed
+secondary rows are reported and omitted from the combined manifest.
 
 ### compare_models.py
 
