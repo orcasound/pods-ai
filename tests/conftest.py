@@ -8,6 +8,7 @@ be imported directly, and mocks heavy dependencies (ML, audio) that are not
 needed for unit tests so the suite can run without a full GPU/fastai environment.
 """
 import sys
+from importlib.machinery import ModuleSpec
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -20,9 +21,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
 # imported; CI (which runs pip install -r requirements.txt) will use the real
 # packages.
 #
-# NOTE: 'audio' and 'audio.data' are intentionally NOT in this list.
-# Unit tests that need to mock AudioList should use @patch() explicitly.
-# Integration tests need the real audio module to function.
+# NOTE: Unit tests that need to mock AudioList use @patch() explicitly. When the
+# legacy fastai_audio package is unavailable, its import target is stubbed below.
 _OPTIONAL_DEPS = [
     'azure',
     'azure.cosmos',
@@ -41,6 +41,8 @@ _OPTIONAL_DEPS = [
     'torchvision',
     'torchaudio',
     'torchaudio.transforms',
+    'audio',
+    'audio.data',
     'fastai',
     'fastai.basic_train',
     'pydub',
@@ -52,12 +54,45 @@ _OPTIONAL_DEPS = [
     'huggingface_hub',
     'yaml',
 ]
+# Mark a stub as a package when another optional dependency imports one of its
+# submodules. This keeps imports such as ``audio.data`` valid when the optional
+# package is not installed.
+_PACKAGE_DEPS = {
+    _candidate
+    for _candidate in _OPTIONAL_DEPS
+    if any(_other.startswith(f"{_candidate}.") for _other in _OPTIONAL_DEPS)
+}
 for _dep in _OPTIONAL_DEPS:
     if _dep not in sys.modules:
         try:
             __import__(_dep)
         except ImportError:
-            sys.modules[_dep] = MagicMock()
+            # Transformers probes optional packages with importlib.util.find_spec().
+            # A MagicMock without __spec__ makes that probe raise ValueError during
+            # collection, so provide the minimal metadata for an importable stub.
+            stub = MagicMock()
+            is_package = _dep in _PACKAGE_DEPS
+            stub.__spec__ = ModuleSpec(_dep, loader=None, is_package=is_package)
+            if is_package:
+                stub.__path__ = []
+                stub.__spec__.submodule_search_locations = []
+            if _dep == 'torchaudio':
+                def _stub_fbank(waveform, sample_frequency, frame_shift, num_mel_bins,
+                                **_kwargs):
+                    import torch
+
+                    frame_count = max(
+                        1,
+                        int(waveform.shape[-1] / sample_frequency * 1000 / frame_shift),
+                    )
+                    return torch.zeros((frame_count, num_mel_bins), dtype=torch.float32)
+
+                stub.compliance.kaldi.fbank = _stub_fbank
+            elif _dep == 'audio.data':
+                stub.AudioList = MagicMock()
+                stub.AudioConfig = MagicMock()
+                stub.SpectrogramConfig = MagicMock()
+            sys.modules[_dep] = stub
 
 # Special handling for mcp modules: requires a proper FastMCP mock so that
 # @mcp.tool() decorators preserve the original functions rather than wrapping
