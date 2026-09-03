@@ -276,6 +276,19 @@ Per-class probabilities:
   water: 0.0000
 ```
 
+For multi-class PODS-AI inference, `global_prediction_labels` also reports every
+positive whale class that independently meets the evidence threshold. The legacy
+`global_prediction_label` remains the primary label for compatibility.
+
+### Compatibility / Migration
+
+- Use `global_prediction_labels` for new consumers; it is an ordered list and may
+  contain multiple positive whale classes.
+- `global_prediction_label` is retained for single-label compatibility and selects
+  the first positive class ordered by vote count, mean confidence, then label name.
+- Empty or error responses always return `global_prediction_labels: []`, which
+  clients should interpret as no positive classes.
+
 **Example — FastAI model**
 
 ```bash
@@ -432,7 +445,9 @@ and average prediction time.
 Evaluation uses model-specific correctness plus per-whale-class error counts:
 - **Correct** – for `fastai` and `orcahello`, model predicted "resident" (SRKW) when the label is
   `resident`, or anything other than `resident` when the label is not `resident`; for
-  `oldpodsai` and `podsai`, the predicted category exactly matches the label.
+  `oldpodsai` and `podsai`, a whale category is correct when it is included in
+  `global_prediction_labels`; non-whale categories use the primary
+  `global_prediction_label`. Older model results use that primary-label fallback.
 - **F1** – macro F1 over the whale classes `humpback`, `resident`, and `transient` that are
   present in the evaluated samples.
 - **R/T/H false positive** – model predicted `resident`, `transient`, or `humpback`
@@ -441,6 +456,9 @@ Evaluation uses model-specific correctness plus per-whale-class error counts:
   but the model predicted a different class. Because `fastai` and `orcahello` are binary
   resident-vs-other models, their transient/humpback FP% values stay at `0.0%` and their
   transient/humpback FN% values are `100.0%` whenever those classes are present.
+- For multi-label PODS-AI output, per-class F1 and FP/FN counts use every emitted global
+  label; the displayed confusion matrix keeps the primary label for backwards-compatible
+  tabular output.
 - `compare_models.py` evaluates end-to-end 60-second WAV inference from `output/testing-wav`, so
   its results will differ from the training workflow's held-out evaluation metrics, which score the
   model directly on the trainer's test split.
@@ -495,7 +513,7 @@ podsai                144        68     47.2%   0.507   16.3%   42.3%    4.4%   
 
 Definitions:
   Accuracy     = Correct / Evaluated
-  Correct      = fastai/orcahello: resident vs other; oldpodsai/podsai: exact category match
+  Correct      = fastai/orcahello: resident vs other; oldpodsai/podsai: category in prediction set
   F1           = macro F1 over humpback, resident, and transient classes that are present
   [R|T|H]FP%   = among non-[R|T|H] samples, fraction predicted as that class
   [R|T|H]FN%   = among actual samples of that class, fraction predicted as another class

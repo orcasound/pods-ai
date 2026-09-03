@@ -190,6 +190,10 @@ class ModelInference:
                                     For multi-class models: class ID
                 - global_prediction_label: (Optional) Human-readable label for global prediction.
                                           Only provided by multi-class models.
+                - global_prediction_labels: (Optional) Ordered labels for all positive
+                                           classes that independently meet the global
+                                           evidence threshold. Older callers can use
+                                           global_prediction_label as the primary label.
                 - global_confidence: Overall confidence score (0.0-1.0) for the entire audio.
                                     Typically mean of positive local confidences (0.0-1.0).
                 - hop_duration: Actual hop duration in seconds used by the model.
@@ -312,7 +316,10 @@ class FastAIModel(ModelInference):
             config.pad_mode = "zeros-after"  # Make deterministic: zeros at end only
 
             # Get sorted file list.
-            path_list = sorted([str(p) for p in local_dir.ls()], key=lambda x: Path(x).name)
+            path_list = sorted(
+                [str(path) for path in local_dir.iterdir()],
+                key=lambda path: Path(path).name,
+            )
 
             # Create AudioList from sorted paths.
             tfms = None
