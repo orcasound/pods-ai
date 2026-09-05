@@ -65,26 +65,6 @@ def get_api_from_feed() -> dict:
         print(response.text)
     return hydrophone_location_data
 
-
-def get_api_data_json(location_name: str) -> dict:
-    try:
-        response = requests.get("https://live.orcasound.net/api/json/feeds")
-        response.raise_for_status()
-        data = response.json().get("data")
-        index = next((i for i, loc in enumerate(data) if loc.get("attributes").get("node_name") == location_name), None)
-        output_data = {
-            "id": data[index].get("attributes").get("node_name"),
-            "name": data[index].get("attributes").get("name"),
-            "longitude": float(data[index].get("attributes").get("location_point").get("coordinates")[0]),
-            "latitude": float(data[index].get("attributes").get("location_point").get("coordinates")[1])
-        }
-    except requests.exceptions.HTTPError as err:
-        print(f"HTTP Error occurred: {err}")
-        # Print the raw text/JSON from the server which often contains the real error logs
-        print("Server Response context:")
-        print(response.text)
-    return output_data
-
 source_guid_to_location = get_api_from_feed()
 
 def assemble_blob_uri(container_name: str, item_name: str) -> str:
