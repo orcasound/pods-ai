@@ -65,7 +65,7 @@ def get_hydro_attributes_from_feed() -> dict:
         print(response.text)
     return hydrophone_location_data
 
-source_guid_to_location = get_api_from_feed()
+source_guid_to_location = get_hydro_attributes_from_feed()
 
 def assemble_blob_uri(container_name: str, item_name: str) -> str:
     """Assemble a blob URI from account/container/item."""
