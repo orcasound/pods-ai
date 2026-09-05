@@ -38,7 +38,7 @@ PODSAI_MODEL_REVISION = "36620370fd59c8a70f9b7be6060d4f40717e796d"
 
 # TODO: get this data from https://live.orcasound.net/api/json/feeds.
 
-def get_api_from_feed() -> dict:
+def get_hydro_attributes_from_feed() -> dict:
     hydrophone_location_data = {}
     """Get the API data from the Orcasound feed."""
     try:

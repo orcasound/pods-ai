@@ -8,7 +8,7 @@ import LiveInferenceOrchestrator as orchestrator
 
 
 def test_orcasound_attributes_pulled_from_feed() -> None:
-    result_dict = orchestrator.get_api_from_feed()
+    result_dict = orchestrator.get_hydro_attributes_from_feed()
     assert (result_dict.get("rpi_andrews_bay").get("name") == "Andrews Bay")
 
 def test_is_positive_label_uses_multiclass_negative_set() -> None:
