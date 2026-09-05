@@ -16,7 +16,7 @@ requests
 scipy
 soundfile
 spacy>=3.5.4
-fastai==1.0.61
+fastai==2.8.8
 torch>=2.1.0
 torchvision>=0.16.0
 torchaudio>=2.1.0
