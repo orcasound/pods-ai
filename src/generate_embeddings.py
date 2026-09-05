@@ -13,7 +13,7 @@ from model_inference import get_model_inference
 
 
 PODSAI_MODEL_ID = "davethaler/whale-call-detector"
-PODSAI_AST_MODEL_REVISION = "db51f75da131de0e53e8080a1f2c5f4b534810aa"
+PODSAI_AST_MODEL_REVISION = "36620370fd59c8a70f9b7be6060d4f40717e796d"
 
 EMBEDDING_CSV_BASE_FIELDS = [
     "manifest_row_index",

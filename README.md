@@ -494,7 +494,7 @@ python src/compare_models.py \
 
 Example output layout (actual metric values vary with the evaluated dataset):
 ```
-Loaded 134 test samples from output\csv\testing_60s_samples.csv
+Loaded 144 test samples from output\csv\testing_60s_samples.csv
 WAV directory: output/testing-wav
 Models to evaluate: fastai, orcahello, podsai, oldpodsai
 
@@ -505,10 +505,10 @@ Model Comparison Summary
 ================================================================================================================
 Model           Evaluated   Correct  Accuracy      F1    RFP%    RFN%    TFP%    TFN%    HFP%    HFN%   Avg Time
 ----------------------------------------------------------------------------------------------------------------
-fastai                134        52     38.8%   0.120   64.6%   55.8%    0.0%  100.0%    0.0%  100.0%     11.84s
-orcahello             134        34     25.4%   0.125   95.1%   42.3%    0.0%  100.0%    0.0%  100.0%      4.59s
-oldpodsai             134        72     53.7%   0.477   19.5%   46.2%   16.3%   63.3%   15.5%   38.9%      4.47s
-podsai                134        66     49.3%   0.414   29.3%   38.5%    1.0%   70.0%    0.0%   88.9%      6.49s
+fastai                144        58     40.3%   0.116   62.0%   55.8%    0.0%  100.0%    0.0%  100.0%     13.50s
+orcahello             144        36     25.0%   0.119   93.5%   42.3%    0.0%  100.0%    0.0%  100.0%      4.89s
+oldpodsai             144        72     50.0%   0.462   26.1%   46.2%   14.9%   63.3%   14.3%   38.9%      4.84s
+podsai                144        68     47.2%   0.507   16.3%   42.3%    4.4%   36.7%    0.0%   88.9%      7.52s
 ================================================================================================================
 
 Definitions:
@@ -522,6 +522,7 @@ Definitions:
 
 Confusion Matrix for fastai (rows=actual, cols=predicted):
                 other  resident     total
+       bird         6         4        10
       human         6         4        10
    humpback        10         8        18
      jingle         7         0         7
@@ -532,6 +533,7 @@ Confusion Matrix for fastai (rows=actual, cols=predicted):
 
 Confusion Matrix for orcahello (rows=actual, cols=predicted):
                 other  resident     total
+       bird         2         8        10
       human         0        10        10
    humpback         4        14        18
      jingle         0         7         7
@@ -541,24 +543,26 @@ Confusion Matrix for orcahello (rows=actual, cols=predicted):
       water         0        10        10
 
 Confusion Matrix for oldpodsai (rows=actual, cols=predicted):
-                 human   humpback   resident  transient     vessel      water      total
-      human          7          1          1          1          0          0         10
-   humpback          1         11          4          2          0          0         18
-     jingle          0          7          0          0          0          0          7
-   resident          5          1         28         14          1          3         52
-  transient          1          9          9         11          0          0         30
-     vessel          0          0          2          0          5          0          7
-      water          0          0          0          0          0         10         10
+                 human   humpback     jingle   resident  transient     vessel      water      total
+       bird          0          0          1          8          0          1          0         10
+      human          7          1          0          1          1          0          0         10
+   humpback          1         11          0          4          2          0          0         18
+     jingle          0          7          0          0          0          0          0          7
+   resident          5          1          0         28         14          1          3         52
+  transient          1          9          0          9         11          0          0         30
+     vessel          0          0          0          2          0          5          0          7
+      water          0          0          0          0          0          0         10         10
 
 Confusion Matrix for podsai (rows=actual, cols=predicted):
-                 human   humpback     jingle   resident  transient     vessel      water      total
-      human          8          0          0          0          1          1          0         10
-   humpback          0          2          0          5          0         10          1         18
-     jingle          0          0          6          0          0          1          0          7
-   resident          0          0          0         32          0         17          3         52
-  transient          0          0          0         19          9          2          0         30
-     vessel          0          0          0          0          0          7          0          7
-      water          0          0          0          0          0          8          2         10
+                 human   humpback   resident  transient     vessel      water      total
+       bird          0          0          3          0          7          0         10
+      human          9          0          0          1          0          0         10
+   humpback          0          2          3          1         11          1         18
+     jingle          0          0          0          0          7          0          7
+   resident          1          0         30          3         16          2         52
+  transient          0          0          9         19          2          0         30
+     vessel          0          0          0          0          7          0          7
+      water          0          0          0          0          9          1         10
 ```
 
 Note: the potential of the podsai model is greater than shown above.  The same version used in the
@@ -571,34 +575,37 @@ DETAILED EVALUATION METRICS
 Dataset: trainer test split from output/wav (80/20 split of training samples).
 
 Class Distribution:
-  water        - True:   8, Predicted:   7
-  resident     - True:  23, Predicted:  23
-  transient    - True:  12, Predicted:  12
+  water        - True:   9, Predicted:  12
+  resident     - True:  23, Predicted:  25
+  transient    - True:  12, Predicted:  10
   humpback     - True:  12, Predicted:  12
-  vessel       - True:  11, Predicted:  13
-  jingle       - True:   6, Predicted:   6
-  human        - True:   9, Predicted:   8
+  vessel       - True:  11, Predicted:   9
+  jingle       - True:   6, Predicted:   4
+  human        - True:   9, Predicted:  10
+  bird         - True:  10, Predicted:  10
 
 Per-Class Performance:
 Class        Precision    Recall       F1          
 ------------------------------------------------
-water        0.857        0.750        0.800       
-resident     0.957        0.957        0.957       
-transient    0.917        0.917        0.917       
-humpback     0.917        0.917        0.917       
-vessel       0.692        0.818        0.750       
-jingle       0.833        0.833        0.833       
-human        1.000        0.889        0.941       
+water        0.750        1.000        0.857       
+resident     0.920        1.000        0.958       
+transient    1.000        0.833        0.909       
+humpback     1.000        1.000        1.000       
+vessel       0.889        0.727        0.800       
+jingle       1.000        0.667        0.800       
+human        0.900        1.000        0.947       
+bird         1.000        1.000        1.000       
 
 Confusion Matrix (rows=true, cols=predicted):
-                 water  resident  transien  humpback    vessel    jingle     human
-       water         6         0         0         0         2         0         0
-    resident         0        22         0         0         1         0         0
-   transient         0         1        11         0         0         0         0
-    humpback         0         0         1        11         0         0         0
-      vessel         0         0         0         1         9         1         0
-      jingle         1         0         0         0         0         5         0
-       human         0         0         0         0         1         0         8
+                 water  resident  transien  humpback    vessel    jingle     human      bird
+       water         9         0         0         0         0         0         0         0
+    resident         0        23         0         0         0         0         0         0
+   transient         0         2        10         0         0         0         0         0
+    humpback         0         0         0        12         0         0         0         0
+      vessel         3         0         0         0         8         0         0         0
+      jingle         0         0         0         0         1         4         1         0
+       human         0         0         0         0         0         0         9         0
+        bird         0         0         0         0         0         0         0        10
 ============================================================
 ```
 
