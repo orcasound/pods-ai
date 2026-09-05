@@ -12,6 +12,7 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
+import requests
 
 from model_inference import get_model_inference
 from pytz import timezone as pytz_tz
@@ -34,59 +35,34 @@ PODSAI_MODEL_ID = "davethaler/whale-call-detector"
 # renovate: datasource=git-refs depName=https://huggingface.co/davethaler/whale-call-detector versioning=git.
 PODSAI_MODEL_REVISION = "36620370fd59c8a70f9b7be6060d4f40717e796d"
 
+def get_hydro_attributes_from_feed() -> dict:
+    hydrophone_location_data = {}
+    """Get the API data from the Orcasound feed."""
+    try:
+        response = requests.get("https://live.orcasound.net/api/json/feeds")
+        response.raise_for_status()
+        data = response.json().get("data")
+        for location in data:
+            attributes = location.get("attributes", {})
+            node_name = attributes.get("node_name")
+            name = attributes.get("name")
+            coordinates = attributes.get("location_point", {}).get("coordinates", [])
+            if len(coordinates) == 2:
+                longitude, latitude = coordinates
+            hydrophone_location_data[node_name] = {
+                "id": node_name,
+                "name": name,
+                "longitude": float(longitude),
+                "latitude": float(latitude)
+            }
+    except requests.exceptions.HTTPError as err:
+        print(f"HTTP Error occurred: {err}")
+        # Print the raw text/JSON from the server which often contains the real error logs
+        print("Server Response context:")
+        print(response.text)
+    return hydrophone_location_data
 
-# TODO: get this data from https://live.orcasound.net/api/json/feeds.
-source_guid_to_location = {
-    "rpi_andrews_bay": {
-        "id": "rpi_andrews_bay",
-        "name": "Andrews Bay",
-        "longitude": -123.1666492,
-        "latitude": 48.5500299,
-    },
-    "rpi_bush_point": {
-        "id": "rpi_bush_point",
-        "name": "Bush Point",
-        "longitude": -122.6040035,
-        "latitude": 48.0336664,
-    },
-    "rpi_mast_center": {
-        "id": "rpi_mast_center",
-        "name": "Mast Center",
-        "longitude": -122.32512,
-        "latitude": 47.34922,
-    },
-    "rpi_north_sjc": {
-        "id": "rpi_north_sjc",
-        "name": "North San Juan Channel",
-        "longitude": -123.058779,
-        "latitude": 48.591294,
-    },
-    "rpi_orcasound_lab": {
-        "id": "rpi_orcasound_lab",
-        "name": "Orcasound Lab",
-        "longitude": -123.1735774,
-        "latitude": 48.5583362,
-    },
-    "rpi_point_robinson": {
-        "id": "rpi_point_robinson",
-        "name": "Point Robinson",
-        "longitude": -122.37267,
-        "latitude": 47.388383,
-    },
-    "rpi_port_townsend": {
-        "id": "rpi_port_townsend",
-        "name": "Port Townsend",
-        "longitude": -122.760614,
-        "latitude": 48.135743,
-    },
-    "rpi_sunset_bay": {
-        "id": "rpi_sunset_bay",
-        "name": "Sunset Bay",
-        "longitude": -122.33393605795372,
-        "latitude": 47.86497296593844,
-    },
-}
-
+source_guid_to_location = get_hydro_attributes_from_feed()
 
 def assemble_blob_uri(container_name: str, item_name: str) -> str:
     """Assemble a blob URI from account/container/item."""
