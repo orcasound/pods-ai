@@ -39,7 +39,7 @@ from model_inference import get_model_inference
 
 PODSAI_MODEL_ID = "davethaler/whale-call-detector"
 # renovate: datasource=git-refs depName=https://huggingface.co/davethaler/whale-call-detector versioning=git.
-PODSAI_AST_MODEL_REVISION = "db51f75da131de0e53e8080a1f2c5f4b534810aa"
+PODSAI_AST_MODEL_REVISION = "36620370fd59c8a70f9b7be6060d4f40717e796d"
 PODSAI_WAV2VEC2_MODEL_REVISION = "cef82c6e9ee661646ea0c583aeb68f4f7ec6d9d8"
 # Preserve the existing exported constant name for compatibility.
 PODSAI_MODEL_REVISION = PODSAI_AST_MODEL_REVISION
@@ -186,27 +186,52 @@ def download_60s_audio_from_start_utc(
         return None
 
 
-# Gets x tags, any returned global and 1 most common local (even if negative).
+# Get global positive tags plus the most common non-whale context tag.
 def build_tags_list(
     result: dict[str, Any],
     id2label: Optional[dict[int, str]] = None,
     negative_labels: Optional[set[str]] = None,
 ) -> list[str]:
+    """Build deduplicated event tags from global and local predictions.
+
+    Multi-label model results contribute every supported global whale label,
+    followed by the most common non-whale local context label. Older single-label
+    results continue to use their primary label.
+
+    Args:
+        result: Inference result returned by ``run_inference`` or a model backend.
+        id2label: Optional mapping for integer local prediction IDs.
+        negative_labels: Optional labels treated as non-whale context labels.
+
+    Returns:
+        Ordered, duplicate-free event tags.
+    """
     from LiveInferenceOrchestrator import is_positive_label
 
-    effective_negative_labels = negative_labels if negative_labels is not None else NEGATIVE_LABELS
+    effective_negative_labels = (
+        negative_labels if negative_labels is not None else NEGATIVE_LABELS
+    )
     local_prediction_labels = []
 
-    # Return vals.
+    # Collect tags in output order.
     tags = []
 
-    # Add global prediction label if it's positive.
-    # list in case there are more than 1 global prediction of equal high confidence 3 samples.
     global_prediction_label = result.get("global_prediction_label", "")
-
-
-    if global_prediction_label and is_positive_label(global_prediction_label, negative_labels=effective_negative_labels):
-        tags.append(global_prediction_label)
+    global_prediction_labels = result.get("global_prediction_labels")
+    if global_prediction_labels is None:
+        global_prediction_labels = (
+            [global_prediction_label]
+            if global_prediction_label
+            and is_positive_label(
+                global_prediction_label,
+                negative_labels=effective_negative_labels,
+            )
+            else []
+        )
+    for label in global_prediction_labels:
+        if label and is_positive_label(label, negative_labels=effective_negative_labels):
+            if label not in tags:
+                tags.append(label)
 
     # Add labels from local predictions regardless if positive or negative.
     local_predictions = result.get("local_predictions", [])
@@ -218,29 +243,14 @@ def build_tags_list(
     if not local_prediction_labels:
         return tags
 
-    # Get most common local tag
-    # If 2-way tie of most common local tags, then:
-        # If first tied tag is same as global, return second tied tag.
-        # If second tied tag is same as global, return first tied tag.
-        # If neither equal global, pick first tied tag.
-    # If no tie, return most common local tag.
+    # Add the most common non-whale local context label.
     most_common_counts = Counter(local_prediction_labels).most_common()
-    if (len(most_common_counts) > 1 and most_common_counts[0][1] == most_common_counts[1][1]):
-        if (most_common_counts[0][0] == global_prediction_label):
-            tags.append(most_common_counts[1][0])
-            return tags
-        elif (most_common_counts[1][0] == global_prediction_label):
-            tags.append(most_common_counts[0][0])
-            return tags
-        else:
-            tags.append(most_common_counts[0][0])
-            return tags
-    else:
-        if (most_common_counts[0][0] != global_prediction_label):
-            tags.append(most_common_counts[0][0])
-            return tags
-        else:
-            return tags
+    for label, _count in most_common_counts:
+        if not is_positive_label(label, negative_labels=effective_negative_labels):
+            if label not in tags:
+                tags.append(label)
+            break
+    return tags
 
 
 def prediction_to_label(prediction: Any, id2label: Optional[dict[int, str]]) -> str:
@@ -327,6 +337,8 @@ def run_inference(wav_path: str, model_type: str = "podsai",
               Each value is the mean local_confidence for windows that predicted
               that class and whose confidence exceeds the model's threshold.
             - global_prediction_label: predicted class label for the whole file
+            - global_prediction_labels: ordered positive class labels supported
+              by the clip; older model results fall back to the single label
             - global_confidence: confidence score (0.0-1.0) for the global prediction
             - predict_time: time in seconds spent in the model's predict() method
             - positive_segments_count: number of positive PODS-AI segments above threshold
@@ -338,6 +350,7 @@ def run_inference(wav_path: str, model_type: str = "podsai",
     segment_duration = 3.0
     positive_segments_count = 0
     positive_segments: list[dict[str, Any]] = []
+    global_prediction_labels: list[str] = []
 
     if model_type == "fastai":
         if model_path is None:
@@ -365,6 +378,7 @@ def run_inference(wav_path: str, model_type: str = "podsai",
         ]
         global_prediction = result.get("global_prediction", 0)
         global_prediction_label = "resident" if global_prediction else "other"
+        global_prediction_labels = [global_prediction_label] if global_prediction_label == "resident" else []
         global_confidence = resident_prob
 
     elif model_type == "orcahello":
@@ -394,6 +408,7 @@ def run_inference(wav_path: str, model_type: str = "podsai",
         ]
         global_prediction = result.get("global_prediction", 0)
         global_prediction_label = "resident" if global_prediction else "other"
+        global_prediction_labels = [global_prediction_label] if global_prediction_label == "resident" else []
         global_confidence = resident_prob
 
     elif model_type == "podsai":
@@ -428,6 +443,18 @@ def run_inference(wav_path: str, model_type: str = "podsai",
             if isinstance(label, str):
                 local_prediction_labels.append(label)
         global_prediction_label = result.get("global_prediction_label", "")
+        global_prediction_labels = result.get("global_prediction_labels")
+        if global_prediction_labels is None:
+            from LiveInferenceOrchestrator import is_positive_label
+
+            global_prediction_labels = (
+                [global_prediction_label]
+                if (
+                    global_prediction_label
+                    and is_positive_label(global_prediction_label)
+                )
+                else []
+            )
         global_confidence = float(result.get("global_confidence", 0.0))
         positive_segments_count, positive_segments = calculate_positive_segments(
             local_predictions=local_predictions,
@@ -447,6 +474,7 @@ def run_inference(wav_path: str, model_type: str = "podsai",
     return {
         "probabilities": probabilities,
         "global_prediction_label": global_prediction_label,
+        "global_prediction_labels": global_prediction_labels,
         "global_confidence": global_confidence,
         "predict_time": predict_time,
         "local_predictions": local_predictions,
@@ -472,6 +500,9 @@ def print_results(results: dict, model_type: str) -> None:
 
     print(f"Model type: {model_type}")
     print(f"Global prediction: {label} (confidence: {confidence:.4f})")
+    global_labels = results.get("global_prediction_labels", [])
+    if len(global_labels) > 1:
+        print(f"Global predictions: {', '.join(global_labels)}")
     print(f"Prediction time: {predict_time:.2f}s")
     if model_type == "podsai":
         local_predictions = results.get("local_predictions", [])

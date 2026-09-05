@@ -70,6 +70,14 @@ def _make_testing_rows():
     ]
 
 
+def test_multilabel_prediction_counts_matching_species_as_correct():
+    """Exact-match models accept a supported class in a multi-label result."""
+    from compare_models import is_correct_prediction
+
+    assert is_correct_prediction("transient", "resident", "podsai", ["resident", "transient"])
+    assert not is_correct_prediction("humpback", "resident", "podsai", ["resident", "transient"])
+
+
 # ---------------------------------------------------------------------------
 # Tests for load_test_samples()
 # ---------------------------------------------------------------------------
@@ -1112,6 +1120,26 @@ class TestConfusionMatrix:
             result = evaluate_model("podsai", "/model", [sample], wav_dir)
 
         assert result.confusion_matrix == {"resident": {"resident": 1}}
+
+    def test_multilabel_metrics_count_secondary_species_as_true_positive(self, tmp_path):
+        """F1 and false-negative rates use all labels, not only the primary view."""
+        from compare_models import evaluate_model
+
+        sample = self._make_sample("transient")
+        wav_dir = self._make_wav(tmp_path, sample)
+        mock_result = {
+            "global_prediction_label": "resident",
+            "global_prediction_labels": ["resident", "transient"],
+            "global_confidence": 0.8,
+            "predict_time": 1.0,
+        }
+        with patch("compare_models.run_inference", return_value=mock_result):
+            result = evaluate_model("podsai", "/model", [sample], wav_dir)
+
+        assert result.correct == 1
+        assert result.false_negative_count_for_label("transient") == 0
+        assert result.false_positive_count_for_label("resident") == 1
+        assert result.whale_f1 == 0.5
 
     def test_confusion_matrix_populated_on_false_positive(self, tmp_path):
         """evaluate_model records actual→predicted in confusion_matrix for false positives."""

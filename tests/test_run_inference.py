@@ -27,7 +27,7 @@ import soundfile as sf
 # Pinned PODS-AI model revision for integration-test stability.
 PODSAI_TEST_MODEL_ID = "davethaler/whale-call-detector"
 # renovate: datasource=git-refs depName=https://huggingface.co/davethaler/whale-call-detector versioning=git.
-PODSAI_TEST_MODEL_REVISION = "db51f75da131de0e53e8080a1f2c5f4b534810aa"
+PODSAI_TEST_MODEL_REVISION = "36620370fd59c8a70f9b7be6060d4f40717e796d"
 
 
 # ---------------------------------------------------------------------------
@@ -422,6 +422,28 @@ class TestRunInferencePodsAI:
         finally:
             Path(wav_path).unlink(missing_ok=True)
 
+    def test_negative_legacy_prediction_has_no_global_positive_labels(self):
+        """Legacy negative results should not be promoted to positive labels."""
+        wav_path = _make_wav()
+        try:
+            mock_model = _make_podsai_model_mock()
+            mock_model.predict.return_value = {
+                "local_predictions": [],
+                "local_confidences": [],
+                "global_prediction_label": "water",
+                "global_confidence": 0.0,
+                "per_class_probabilities": {"water": 1.0},
+            }
+            with patch("run_inference.get_model_inference", return_value=mock_model):
+                from run_inference import run_inference
+
+                result = run_inference(wav_path, model_type="podsai", model_path="fake-path")
+
+            assert result["global_prediction_label"] == "water"
+            assert result["global_prediction_labels"] == []
+        finally:
+            Path(wav_path).unlink(missing_ok=True)
+
     def test_defaults_model_path_to_davethaler_hub(self):
         """When model_path is None for podsai, get_model_inference uses davethaler/whale-call-detector."""
         wav_path = _make_wav()
@@ -714,6 +736,42 @@ class TestBuildTagsList:
         
         tags = build_tags_list(result, id2label)
         assert set(tags) == {"resident", "vessel"}
+
+    def test_tags_include_all_global_positive_labels_without_duplicates(self):
+        """Multi-label global predictions are preserved before local context."""
+        from run_inference import build_tags_list
+
+        result = {
+            "global_prediction_label": "resident",
+            "global_prediction_labels": ["resident", "transient"],
+            "local_predictions": [1, 2, 1, 2],
+        }
+        id2label = {1: "resident", 2: "transient"}
+
+        assert build_tags_list(result, id2label) == ["resident", "transient"]
+
+    def test_tags_do_not_add_secondary_local_whale_context(self):
+        """Local whale labels below the global threshold remain out of context tags."""
+        from run_inference import build_tags_list
+
+        result = {
+            "global_prediction_label": "resident",
+            "local_predictions": ["resident", "humpback", "resident"],
+        }
+
+        assert build_tags_list(result) == ["resident"]
+
+    def test_tags_deduplicate_global_and_local_positive_labels(self):
+        """Global positives are emitted once even when repeated locally."""
+        from run_inference import build_tags_list
+
+        result = {
+            "global_prediction_label": "resident",
+            "global_prediction_labels": ["resident", "transient", "resident"],
+            "local_predictions": ["resident", "resident", "water"],
+        }
+
+        assert build_tags_list(result) == ["resident", "transient", "water"]
 
 # ---------------------------------------------------------------------------
 # Tests for main() CLI

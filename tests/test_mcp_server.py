@@ -220,7 +220,31 @@ class TestMCPServer(unittest.TestCase):
         
         self.assertEqual(result["orcahello_label"], "resident")
         self.assertEqual(result["podsai_label"], "resident")
+        self.assertEqual(result["details"]["podsai"]["global_prediction_labels"], ["resident"])
         self.assertTrue(result["models_agree"])
+
+    @patch("model_inference.get_model_inference")
+    @patch("mcp_server.Path.exists", return_value=True)
+    @patch("mcp_server.Path.is_absolute", return_value=True)
+    def test_compare_models_negative_legacy_result_has_empty_positive_labels(
+        self, mock_abs, mock_exists, mock_get_model
+    ):
+        """Legacy negative predictions must keep the positive-label list empty."""
+        mock_model = MagicMock()
+        mock_model.predict.return_value = {
+            "global_prediction_label": "water",
+            "global_confidence": 0.9,
+            "local_confidences": [],
+        }
+        mock_get_model.return_value = mock_model
+
+        from mcp_server import compare_models_on_clip
+
+        with patch("mcp_server.Path.suffix", new_callable=unittest.mock.PropertyMock) as mock_suffix:
+            mock_suffix.return_value = ".wav"
+            result = compare_models_on_clip("/abs/path/test.wav")
+
+        self.assertEqual(result["details"]["podsai"]["global_prediction_labels"], [])
 
     @patch("mcp_server.find_unlabeled_detections")
     @patch("builtins.open", new_callable=unittest.mock.mock_open)
