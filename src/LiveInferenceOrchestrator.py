@@ -38,29 +38,54 @@ PODSAI_MODEL_REVISION = "36620370fd59c8a70f9b7be6060d4f40717e796d"
 
 # TODO: get this data from https://live.orcasound.net/api/json/feeds.
 
+def get_api_from_feed() -> dict:
+    hydrophone_location_data = {}
+    """Get the API data from the Orcasound feed."""
+    try:
+        response = requests.get("https://live.orcasound.net/api/json/feeds")
+        response.raise_for_status()
+        data = response.json().get("data")
+        for location in data:
+            attributes = location.get("attributes", {})
+            node_name = attributes.get("node_name")
+            name = attributes.get("name")
+            coordinates = attributes.get("location_point", {}).get("coordinates", [])
+            if len(coordinates) == 2:
+                longitude, latitude = coordinates
+            hydrophone_location_data[node_name] = {
+                "id": node_name,
+                "name": name,
+                "longitude": float(longitude),
+                "latitude": float(latitude)
+            }
+    except requests.exceptions.HTTPError as err:
+        print(f"HTTP Error occurred: {err}")
+        # Print the raw text/JSON from the server which often contains the real error logs
+        print("Server Response context:")
+        print(response.text)
+    return hydrophone_location_data
+
+
 def get_api_data_json(location_name: str) -> dict:
-    response = requests.get("https://live.orcasound.net/api/json/feeds")
-    response.raise_for_status()
-    data = response.json().get("data")
-    index = next((i for i, item in enumerate(data) if item.get("attributes").get("node_name") == location_name), None)
-    output_data = {
-        "id": data[index].get("attributes").get("node_name"),
-        "name": data[index].get("attributes").get("name"),
-        "longitude": float(data[index].get("attributes").get("location_point").get("coordinates")[0]),
-        "latitude": float(data[index].get("attributes").get("location_point").get("coordinates")[1])
-    }
+    try:
+        response = requests.get("https://live.orcasound.net/api/json/feeds")
+        response.raise_for_status()
+        data = response.json().get("data")
+        index = next((i for i, loc in enumerate(data) if loc.get("attributes").get("node_name") == location_name), None)
+        output_data = {
+            "id": data[index].get("attributes").get("node_name"),
+            "name": data[index].get("attributes").get("name"),
+            "longitude": float(data[index].get("attributes").get("location_point").get("coordinates")[0]),
+            "latitude": float(data[index].get("attributes").get("location_point").get("coordinates")[1])
+        }
+    except requests.exceptions.HTTPError as err:
+        print(f"HTTP Error occurred: {err}")
+        # Print the raw text/JSON from the server which often contains the real error logs
+        print("Server Response context:")
+        print(response.text)
     return output_data
 
-source_guid_to_location = {
-    "rpi_andrews_bay": get_api_data_json("rpi_andrews_bay"),
-    "rpi_bush_point": get_api_data_json("rpi_bush_point"),
-    "rpi_mast_center": get_api_data_json("rpi_mast_center"),
-    "rpi_north_sjc": get_api_data_json("rpi_north_sjc"),
-    "rpi_orcasound_lab": get_api_data_json("rpi_orcasound_lab"),
-    "rpi_point_robinson": get_api_data_json("rpi_point_robinson"),
-    "rpi_port_townsend": get_api_data_json("rpi_port_townsend"),
-    "rpi_sunset_bay": get_api_data_json("rpi_sunset_bay")
-}
+source_guid_to_location = get_api_from_feed()
 
 def assemble_blob_uri(container_name: str, item_name: str) -> str:
     """Assemble a blob URI from account/container/item."""
