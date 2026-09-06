@@ -68,6 +68,10 @@ jobs:
         run: |
           python src/download_wavs.py
 
+      - name: Process humpback signal wavs
+        run: |
+          python bootstrap/src/process_humpback_wavs.py
+
       - name: Train model
         run: >
           python src/train_podsai_model.py

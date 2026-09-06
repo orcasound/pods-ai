@@ -193,6 +193,25 @@ def _get_relative_wav_path(row: CSVRow) -> Path:
     return Path(row.category) / _get_wav_filename(row.node_name, row.timestamp_pst)
 
 
+HUMPBACK_SIGNAL_WAV_PREFIX = "signals-humpback_"
+
+
+def is_external_humpback_training_wav(relative_path: Path) -> bool:
+    """
+    Return True for submodule-derived humpback segments used in training.
+
+    These files are produced by bootstrap/src/process_humpback_wavs.py and are
+    not listed in training_3s_samples.csv, so download cleanup must keep them
+    (issue #412).
+    """
+    return (
+        len(relative_path.parts) >= 2
+        and relative_path.parts[0] == "humpback"
+        and relative_path.name.startswith(HUMPBACK_SIGNAL_WAV_PREFIX)
+        and relative_path.suffix.lower() == ".wav"
+    )
+
+
 def _copy_wav_from_cache_if_exists(expected_path: Path, output_root: Path, cache_root: Path | None) -> bool:
     """
     Copy a WAV file from cache_root into output_root if it exists there.
@@ -221,10 +240,14 @@ def delete_stale_wavs(output_root: Path, expected_relative_paths: set[Path]) -> 
 
     deleted_count = 0
     for wav_path in output_root.rglob("*.wav"):
-        if wav_path.relative_to(output_root) not in expected_relative_paths:
-            wav_path.unlink()
-            print(f"Deleted stale wav: {wav_path}")
-            deleted_count += 1
+        relative_path = wav_path.relative_to(output_root)
+        if relative_path in expected_relative_paths:
+            continue
+        if is_external_humpback_training_wav(relative_path):
+            continue
+        wav_path.unlink()
+        print(f"Deleted stale wav: {wav_path}")
+        deleted_count += 1
 
     for directory in sorted((path for path in output_root.rglob("*") if path.is_dir()), reverse=True):
         if directory == output_root:
