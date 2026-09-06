@@ -15,7 +15,7 @@ import torch
 import librosa
 import numpy as np
 from collections import Counter
-from typing import Optional
+from typing import Optional, Sequence
 from transformers import AutoFeatureExtractor, AutoModelForAudioClassification
 from pathlib import Path
 from datetime import datetime
@@ -26,6 +26,37 @@ from model_inference import ModelInference
 # Segment grouping size for scaling the positive calls threshold.
 # For every SEGMENT_GROUP_SIZE segments, require at least 1 positive prediction.
 SEGMENT_GROUP_SIZE = 10
+
+
+def count_non_adjacent_positive_events(positive_mask: Sequence[bool | int]) -> int:
+    """Count distinct acoustic events by collapsing adjacent positive segments.
+
+    Sliding windows hop by 1–2 seconds, so one call often lights up two
+    neighboring segments. Those neighbors are one event. A gap of one or more
+    non-positive segments starts a new event.
+
+    Examples:
+        [1, 1, 1, 0] → 1 event
+        [1, 0, 1, 0] → 2 events
+        [1, 1, 0, 1, 1] → 2 events
+    """
+    events = 0
+    in_run = False
+    for value in positive_mask:
+        if bool(value) and not in_run:
+            events += 1
+            in_run = True
+        elif not bool(value):
+            in_run = False
+    return events
+
+
+def meets_min_positive_event_threshold(
+    positive_mask: Sequence[bool | int],
+    min_num_positive_calls_threshold: int,
+) -> bool:
+    """Return True when collapsed event count meets the configured threshold."""
+    return count_non_adjacent_positive_events(positive_mask) >= min_num_positive_calls_threshold
 
 # HuggingFace model_type value for the Audio Spectrogram Transformer architecture.
 # AST models expect a pre-computed mel spectrogram; raw-audio models (e.g. Wav2Vec2)
@@ -58,10 +89,12 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
             model_path: Path to model directory or HuggingFace Hub model ID
             device: Device to run inference on ('cuda', 'cpu', or None for auto)
             threshold: Confidence threshold for positive predictions (default: 0.5)
-            min_num_positive_calls_threshold: Minimum positive predictions for global positive classification.
-                                             The effective threshold scales with audio length: it requires
-                                             at least 1 positive per SEGMENT_GROUP_SIZE (10) segments, but
-                                             is capped at min_num_positive_calls_threshold. Formula:
+            min_num_positive_calls_threshold: Minimum distinct (non-adjacent) positive
+                                             events for a global positive classification.
+                                             Adjacent overlapping positives collapse to one
+                                             event. The effective threshold scales with audio
+                                             length: at least 1 event per SEGMENT_GROUP_SIZE
+                                             (10) segments, capped at this value. Formula:
                                              min(ceil(segments/10), min_num_positive_calls_threshold).
                                              Default: use instance value (typically 3).
             model_revision: Git commit hash or tag to pin the HuggingFace Hub model revision.
@@ -421,10 +454,12 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
                          With hop_duration=2, a 60s audio produces ~29 confidence values.
                          With hop_duration=1, a 60s audio produces ~58 confidence values (matching FastAI).
             threshold: Confidence threshold for positive (non-other) predictions (default: use instance value)
-            min_num_positive_calls_threshold: Minimum positive predictions for global positive classification.
-                                             The effective threshold scales with audio length: it requires
-                                             at least 1 positive per SEGMENT_GROUP_SIZE (10) segments, but
-                                             is capped at min_num_positive_calls_threshold. Formula:
+            min_num_positive_calls_threshold: Minimum distinct (non-adjacent) positive
+                                             events for a global positive classification.
+                                             Adjacent overlapping positives collapse to one
+                                             event. The effective threshold scales with audio
+                                             length: at least 1 event per SEGMENT_GROUP_SIZE
+                                             (10) segments, capped at this value. Formula:
                                              min(ceil(segments/10), min_num_positive_calls_threshold).
                                              Default: use instance value (typically 3).
 
@@ -631,15 +666,20 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
             for class_id, conf in zip(local_predictions, local_confidences)
             if class_id not in self.negative_class_ids and conf >= threshold
         ]
+        positive_mask = [
+            class_id not in self.negative_class_ids and conf >= threshold
+            for class_id, conf in zip(local_predictions, local_confidences)
+        ]
 
-        # Scale the positive calls threshold based on the number of segments.
-        # For every SEGMENT_GROUP_SIZE segments, require at least 1 positive prediction.
+        # Scale the positive-event threshold based on the number of segments.
+        # For every SEGMENT_GROUP_SIZE segments, require at least 1 distinct event.
         # Cap at min_num_positive_calls_threshold to avoid requiring too many for very long clips.
         total_segments = len(local_predictions)
         scaled_threshold = max(1, (total_segments + SEGMENT_GROUP_SIZE - 1) // SEGMENT_GROUP_SIZE)
         effective_threshold = min(scaled_threshold, min_num_positive_calls_threshold)
 
-        # Keep every whale class that independently meets the evidence threshold.
+        # Keep every whale class that independently meets the event threshold.
+        # Adjacent overlapping positives for the same class collapse to one event.
         # The primary label remains the legacy single-label result.
         class_votes: dict[int, list[float]] = {}
         for class_id, conf in positive_predictions:
@@ -648,7 +688,12 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
         qualifying_classes = {
             class_id: confidences
             for class_id, confidences in class_votes.items()
-            if len(confidences) >= effective_threshold
+            if count_non_adjacent_positive_events(
+                [
+                    pred == class_id and conf >= threshold
+                    for pred, conf in zip(local_predictions, local_confidences)
+                ]
+            ) >= effective_threshold
         }
         if qualifying_classes:
             # Deterministic order: vote count, mean confidence, then label name
@@ -666,7 +711,7 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
         else:
             # Preserve the legacy majority-vote result when aggregate evidence
             # reaches the threshold but no individual class does.
-            if len(positive_predictions) >= effective_threshold and class_votes:
+            if count_non_adjacent_positive_events(positive_mask) >= effective_threshold and class_votes:
                 # Tie-breaker order is count -> mean confidence -> label name
                 # lexicographically, matching the multi-label ordering above.
                 global_prediction_id = sorted(
