@@ -404,7 +404,9 @@ class TestPodsAIInferenceIndexing:
 
         from podsai_inference import PodsAIInference
 
-        model = PodsAIInference("test-model-path", min_num_positive_calls_threshold=2)
+        # Event collapsing treats a contiguous run as one detection, so the
+        # per-class threshold is 1 distinct event (not 2 raw overlapping votes).
+        model = PodsAIInference("test-model-path", min_num_positive_calls_threshold=1)
         sr = 16000
         audio = np.zeros(30 * sr, dtype=np.float32)
         with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as audio_file:
