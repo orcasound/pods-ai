@@ -154,13 +154,17 @@ class OrcaHelloSRKWInference(ModelInference):
                 wav_file_path, self.inference_config
             )
         except Exception as e:
-            print(f"Error running inference on {wav_file_path}: {type(e).__name__}: {e}")
+            error_message = (
+                f"{type(e).__name__}: {e}"
+            )
+            print(f"Error running inference on {wav_file_path}: {error_message}")
             return {
                 "local_predictions": [],
                 "local_confidences": [],
                 "global_prediction": 0,
                 "global_prediction_label": "other",
                 "global_confidence": 0.0,
+                "error": error_message,
                 "hop_duration": float(self.inference_config.inference.window_hop_s),
                 "segment_duration": float(self.inference_config.inference.window_s),
             }

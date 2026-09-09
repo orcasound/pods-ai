@@ -389,6 +389,10 @@ def run_inference(wav_path: str, model_type: str = "podsai",
         start_time = time.perf_counter()
         result = model.predict(wav_path)
         predict_time = time.perf_counter() - start_time
+        if result.get("error"):
+            raise RuntimeError(
+                f"OrcaHello inference failed for {wav_path}: {result['error']}"
+            )
         local_predictions = result.get("local_predictions", [])
         local_confidences = result.get("local_confidences", [])
         hop_duration = float(result.get("hop_duration", 1.0))
