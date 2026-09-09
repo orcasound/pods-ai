@@ -24,7 +24,7 @@ spec:
         kubernetes.azure.com/agentpool: f4sv2pool
       containers:
         - name: pods-ai-inference-system
-          image: orcaconservancycr.azurecr.io/pods-ai-live-inference-system:08-10-2026.v1.2.1
+          image: orcaconservancycr.azurecr.io/pods-ai-live-inference-system:09-05-2026.v1.4.0
           resources:
             requests:
               cpu: "400m"
