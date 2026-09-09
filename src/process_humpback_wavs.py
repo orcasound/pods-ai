@@ -21,7 +21,21 @@ import ffmpeg
 
 DEFAULT_SEGMENT_DURATION_SECONDS = 3  # Default length of each output segment in seconds.
 FILENAME_SAFE_PATTERN = r"[^A-Za-z0-9_-]"  # Characters to replace when sanitizing filenames.
-EXTERNAL_HUMPBACK_DIR = Path(__file__).parents[2] / "external" / "signals-humpback"
+EXTERNAL_HUMPBACK_DIR = Path(__file__).parents[1] / "external" / "signals-humpback"
+
+
+def should_retain_humpback_source(
+    duration_seconds: float,
+    segment_duration: int = DEFAULT_SEGMENT_DURATION_SECONDS,
+) -> bool:
+    """
+    Return True when a source clip can yield at least one training segment.
+
+    Short noise/blips below ``segment_duration`` are rejected so they never
+    enter output/wav/humpback/. Confirmed humpback recordings that are long
+    enough are kept and split into labeled humpback windows.
+    """
+    return duration_seconds >= segment_duration
 
 
 def process_external_humpback_wavs(external_dir: Path, output_root: Path, segment_duration: int = DEFAULT_SEGMENT_DURATION_SECONDS):
@@ -56,7 +70,7 @@ def process_external_humpback_wavs(external_dir: Path, output_root: Path, segmen
             print(f"Warning: Could not probe {wav_file}: {e}")
             continue
 
-        if duration < segment_duration:
+        if not should_retain_humpback_source(duration, segment_duration):
             print(f"Skipping (too short, {duration:.2f}s): {wav_file.name}")
             continue
 

@@ -16,9 +16,9 @@ Both files can be updated manually by editing rows directly, or via scripts (for
 
 The active scripts in `src` include:
 
-1. **download_wavs.py**: Uses `output/csv/training_3s_samples.csv` and `output/csv/testing_60s_samples.csv` to download wav files.
+1. **download_wavs.py**: Uses `output/csv/training_3s_samples.csv` and `output/csv/testing_60s_samples.csv` to download wav files. It keeps `output/wav/humpback/signals-humpback_*.wav` segments from the `signals-humpback` submodule (those rows are not in the training CSV).
 2. **make_spectrograms.py**: Creates a png file for each wav file in a subdirectory of `output/png`.
-3. **train_podsai_model.py**: Trains a PODS-AI model on the generated training samples.
+3. **train_podsai_model.py**: Trains a PODS-AI model on the generated training samples, including retained humpback signal windows.
 4. **compare_models.py**: Evaluates models using `output/csv/testing_60s_samples.csv`.
 5. **generate_embeddings.py**: Generates `output/csv/embeddings.csv` from `output/csv/testing_60s_samples.csv`.
 
@@ -28,6 +28,7 @@ flowchart TD;
     orcaHelloModel[(HuggingFace orcasound/orcahello-srkw-detector-v1)];
     trainingSamples@{ shape: doc, label: "training_3s_samples.csv" };
     testingSamples@{ shape: doc, label: "testing_60s_samples.csv" };
+    signalsHumpback@{ shape: doc, label: "signals-humpback" };
     wav@{ shape: docs, label: "wav/*" };
     testingWav@{ shape: docs, label: "testing-wav/*" };
     concatenated@{ shape: docs, label: "concatenated.wav" };
@@ -35,6 +36,7 @@ flowchart TD;
     embeddings@{ shape: docs, label: "embeddings.csv" };
 
     downloadWavs@{ shape: rect, label: "download_wavs.py" };
+    processHumpbackWavs@{ shape: rect, label: "process_humpback_wavs.py" };
     trainPodsaiModel@{ shape: rect, label: "train_podsai_model.py" };
     compareModels@{ shape: rect, label: "compare_models.py" };
     concatenateWavs@{ shape: rect, label: "concatenate_wavs.py" };
@@ -42,6 +44,7 @@ flowchart TD;
     generateEmbeddings@{ shape: rect, label: "generate_embeddings.py" };
 
     trainingSamples-->downloadWavs-->wav;
+    signalsHumpback-->processHumpbackWavs-->wav;
     testingSamples-->downloadWavs-->testingWav;
 
     wav-->trainPodsaiModel-->podsaiModel;

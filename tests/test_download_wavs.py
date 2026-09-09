@@ -13,6 +13,7 @@ from download_wavs import (
     CSVRow,
     add_seconds_to_timestamp_pst,
     download_testing_sample,
+    is_external_humpback_training_wav,
     process_csv,
     process_testing_csv,
     run_download_wavs,
@@ -162,6 +163,46 @@ class TestCacheAndCleanup:
 
             assert expected.exists()
             assert not stale.exists()
+
+    def test_process_csv_keeps_humpback_signal_wavs_and_rejects_noise(self):
+        """signals-humpback segments stay in training; unlabeled noise is deleted."""
+        with TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            csv_path = tmp_path / "training_3s_samples.csv"
+            csv_path.write_text(
+                "category,node_name,timestamp_pst,uri,description,notes\n"
+                "resident,rpi_andrews_bay,2025_01_01_00_00_00_PST,uri,desc,note\n",
+                encoding="utf-8",
+            )
+
+            output_root = tmp_path / "output-wav"
+            expected = output_root / "resident" / "rpi-andrews-bay_2025_01_01_00_00_00_PST.wav"
+            humpback_signal = (
+                output_root / "humpback" / "signals-humpback_song_0000s.wav"
+            )
+            noise = output_root / "humpback" / "random_noise.wav"
+            expected.parent.mkdir(parents=True, exist_ok=True)
+            humpback_signal.parent.mkdir(parents=True, exist_ok=True)
+            expected.write_bytes(b"keep")
+            humpback_signal.write_bytes(b"humpback")
+            noise.write_bytes(b"noise")
+
+            process_csv(csv_path, output_root)
+
+            assert expected.exists()
+            assert humpback_signal.exists()
+            assert not noise.exists()
+
+    def test_is_external_humpback_training_wav_matches_signal_segments(self):
+        assert is_external_humpback_training_wav(
+            Path("humpback") / "signals-humpback_song_0000s.wav"
+        )
+        assert not is_external_humpback_training_wav(
+            Path("humpback") / "rpi-orcasound-lab_2025_01_01_00_00_00_PST.wav"
+        )
+        assert not is_external_humpback_training_wav(
+            Path("water") / "signals-humpback_song_0000s.wav"
+        )
 
     def test_process_testing_csv_copies_from_cache_and_deletes_stale(self):
         with TemporaryDirectory() as tmp:
