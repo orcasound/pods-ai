@@ -752,7 +752,7 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
                     class_counts = Counter(background_predictions)
                     global_prediction_id = class_counts.most_common(1)[0][0]
                     global_confidence = float(np.mean([
-                        probs[global_prediction_id] for probs in smoothed_probs
+                        probs[global_prediction_id] for probs in segment_probs
                     ]))
                 else:
                     if "other" in self.label2id:
