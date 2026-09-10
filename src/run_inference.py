@@ -513,7 +513,7 @@ def print_results(results: dict, model_type: str) -> None:
     local_predictions = results.get("local_predictions", [])
     local_confidences = results.get("local_confidences", [])
     local_prediction_labels = results.get("local_prediction_labels", [])
-    hop_duration = results.get("hop_duration", 1.0)
+    hop_duration = results.get("hop_duration", 2.0)
 
     if local_predictions and local_confidences:
         print(f"\nSegments: {len(local_predictions)} total")
