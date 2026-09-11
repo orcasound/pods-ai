@@ -24,6 +24,14 @@ from podsai_inference import NUM_SPECIAL_TOKENS
 PODSAI_TEST_MODEL_ID = "davethaler/whale-call-detector"
 # renovate: datasource=git-refs depName=https://huggingface.co/davethaler/whale-call-detector versioning=git.
 PODSAI_TEST_MODEL_REVISION = "36620370fd59c8a70f9b7be6060d4f40717e796d"
+# The repository retains training checkpoints; integration tests need only the
+# root model artifacts and should not download every historical checkpoint.
+PODSAI_MODEL_ALLOW_PATTERNS = [
+    "config.json",
+    "preprocessor_config.json",
+    "model.safetensors",
+    "training_args.bin",
+]
 
 
 def _resolve_podsai_test_model_path() -> str:
@@ -47,6 +55,7 @@ def _resolve_podsai_test_model_path() -> str:
         return hf_snapshot_download(
             repo_id=PODSAI_TEST_MODEL_ID,
             revision=PODSAI_TEST_MODEL_REVISION,
+            allow_patterns=PODSAI_MODEL_ALLOW_PATTERNS,
         )
     except Exception:
         pytest.skip(

@@ -145,6 +145,12 @@ def _resolve_podsai_test_model_path() -> str:
         return hf_snapshot_download(
             repo_id=PODSAI_TEST_MODEL_ID,
             revision=PODSAI_TEST_MODEL_REVISION,
+            allow_patterns=[
+                "config.json",
+                "preprocessor_config.json",
+                "model.safetensors",
+                "training_args.bin",
+            ],
         )
     except Exception:
         pytest.skip(
@@ -653,6 +659,20 @@ class TestRunInferenceOrcaHello:
         finally:
             Path(wav_path).unlink(missing_ok=True)
 
+    def test_orcahello_inference_error_is_not_silently_accepted(self):
+        """Audio decoder failures must fail the runner instead of becoming negatives."""
+        wav_path = _make_wav()
+        try:
+            mock_model = _make_orcahello_model_mock()
+            mock_model.predict.return_value["error"] = "LibsndfileError: System error"
+            with patch("run_inference.get_model_inference", return_value=mock_model):
+                from run_inference import run_inference
+
+                with pytest.raises(RuntimeError, match="OrcaHello inference failed"):
+                    run_inference(wav_path, model_type="orcahello", model_path="model")
+        finally:
+            Path(wav_path).unlink(missing_ok=True)
+
     def test_defaults_model_path_to_orcahello_hub(self):
         """When model_path is None for orcahello, get_model_inference uses orcahello-srkw-detector-v1."""
         wav_path = _make_wav()
@@ -974,6 +994,8 @@ class TestMainCLI:
             "global_prediction_label": "resident",
             "global_confidence": 0.7,
             "local_predictions": [0, 1, 2, 4],
+            "local_prediction_labels": ["water", "resident", "transient", "vessel"],
+            "local_confidences": [0.9, 0.7, 0.8, 0.9],
             "positive_segments_count": 2,
             "positive_segments": [
                 {
@@ -991,8 +1013,8 @@ class TestMainCLI:
         print_results(results, "podsai")
         captured = capsys.readouterr()
         assert "Positive segments: 2/4" in captured.out
-        assert "2025-01-15 12:29:02 PST: resident (confidence: 0.700)" in captured.out
-        assert "2025-01-15 12:29:04 PST: transient (confidence: 0.800)" in captured.out
+        assert "  +2.0s: resident (confidence: 0.700)" in captured.out
+        assert "  +4.0s: transient (confidence: 0.800)" in captured.out
 
 
 class TestPinnedPodsAIModelPath:
@@ -1023,6 +1045,12 @@ class TestPinnedPodsAIModelPath:
         mock_snapshot.assert_called_once_with(
             repo_id=PODSAI_TEST_MODEL_ID,
             revision=PODSAI_TEST_MODEL_REVISION,
+            allow_patterns=[
+                "config.json",
+                "preprocessor_config.json",
+                "model.safetensors",
+                "training_args.bin",
+            ],
         )
 
 
@@ -1139,18 +1167,16 @@ class TestIntegrationWithRealModels:
 
     # Parametrized tests for FastAI model on different audio types.
     @pytest.mark.parametrize("wav_fixture,label,xfail_reason", [
-        ("resident_wav_path", "resident",
-         "FastAI model may fail to extract segments on some platforms or audio clips"),
+        ("resident_wav_path", "resident", None),
         ("transient_wav_path", "transient",
          "FastAI binary model may predict resident on transient clips"),
         ("humpback_wav_path", "humpback", "FastAI binary model may misclassify humpback as resident"),
         ("vessel_wav_path", "vessel", "FastAI binary model may predict vessel as resident"),
         ("water_wav_path", "water",
          "FastAI binary model may predict resident on ambient water clips"),
-        ("human_wav_path", "human",
-         "FastAI model may fail to extract segments on some platforms or audio clips"),
-        ("jingle_wav_path", "jingle", "FastAI binary model may predict resident on jingle clips"),
-        ("bird_wav_path", "bird", "FastAI binary model may predict resident on bird clips"),
+        ("human_wav_path", "human", None),
+        ("jingle_wav_path", "jingle", None),
+        ("bird_wav_path", "bird", None),
     ])
     def test_fastai_model_inference(
         self,
@@ -1213,45 +1239,21 @@ class TestIntegrationWithRealModels:
 
     # Parametrized CLI integration tests.
     @pytest.mark.parametrize("wav_fixture,model_type,model_path_fixture", [
-        pytest.param("resident_wav_path", "fastai", "fastai_model_path",
-                     marks=pytest.mark.xfail(
-                         reason="FastAI model may fail to extract segments on some platforms",
-                         strict=False)),
+        ("resident_wav_path", "fastai", "fastai_model_path"),
         ("resident_wav_path", "podsai", "podsai_model_path"),
-        pytest.param("transient_wav_path", "fastai", "fastai_model_path",
-                     marks=pytest.mark.xfail(
-                         reason="FastAI model may fail to extract segments on some platforms",
-                         strict=False)),
+        ("transient_wav_path", "fastai", "fastai_model_path"),
         ("transient_wav_path", "podsai", "podsai_model_path"),
-        pytest.param("humpback_wav_path", "fastai", "fastai_model_path",
-                     marks=pytest.mark.xfail(
-                         reason="FastAI model may fail to extract segments on some platforms",
-                         strict=False)),
+        ("humpback_wav_path", "fastai", "fastai_model_path"),
         ("humpback_wav_path", "podsai", "podsai_model_path"),
-        pytest.param("vessel_wav_path", "fastai", "fastai_model_path",
-                     marks=pytest.mark.xfail(
-                         reason="FastAI model may fail to extract segments on some platforms",
-                         strict=False)),
+        ("vessel_wav_path", "fastai", "fastai_model_path"),
         ("vessel_wav_path", "podsai", "podsai_model_path"),
-        pytest.param("water_wav_path", "fastai", "fastai_model_path",
-                     marks=pytest.mark.xfail(
-                         reason="FastAI model may fail to extract segments on some platforms",
-                         strict=False)),
+        ("water_wav_path", "fastai", "fastai_model_path"),
         ("water_wav_path", "podsai", "podsai_model_path"),
-        pytest.param("human_wav_path", "fastai", "fastai_model_path",
-                     marks=pytest.mark.xfail(
-                         reason="FastAI model may fail to extract segments on some platforms",
-                         strict=False)),
+        ("human_wav_path", "fastai", "fastai_model_path"),
         ("human_wav_path", "podsai", "podsai_model_path"),
-        pytest.param("jingle_wav_path", "fastai", "fastai_model_path",
-                     marks=pytest.mark.xfail(
-                         reason="FastAI model may fail to extract segments on some platforms",
-                         strict=False)),
+        ("jingle_wav_path", "fastai", "fastai_model_path"),
         ("jingle_wav_path", "podsai", "podsai_model_path"),
-        pytest.param("bird_wav_path", "fastai", "fastai_model_path",
-                     marks=pytest.mark.xfail(
-                         reason="FastAI model may fail to extract segments on some platforms",
-                         strict=False)),
+        ("bird_wav_path", "fastai", "fastai_model_path"),
         ("bird_wav_path", "podsai", "podsai_model_path"),
     ])
     def test_cli_integration(
