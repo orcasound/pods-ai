@@ -266,7 +266,7 @@ def load_model(orch_config: dict[str, Any], logger: logging.Logger) -> Any:
     model_revision = orch_config.get("model_hf_repo_revision", PODSAI_MODEL_REVISION)
     threshold = float(orch_config.get("threshold", 0.5))
     min_num_positive_calls_threshold = int(
-        orch_config.get("min_num_positive_calls_threshold", 3)
+        orch_config.get("min_num_positive_calls_threshold", 2)
     )
     device = orch_config.get("device")
 

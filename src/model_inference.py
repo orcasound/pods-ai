@@ -235,7 +235,7 @@ class FastAIModel(ModelInference):
     """
 
     def __init__(self, model_path: str = "./model", model_name: str = "stg2-rn18.pkl",
-                 threshold: float = 0.5, min_num_positive_calls_threshold: int = 3,
+                 threshold: float = 0.5, min_num_positive_calls_threshold: int = 2,
                  use_gpu: bool = True, smooth_predictions: bool = True,
                  batch_size: int = 32):
         """

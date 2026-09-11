@@ -337,7 +337,7 @@ def run_inference(wav_path: str, model_type: str = "podsai",
               Each value is the mean local_confidence for windows that predicted
               that class and whose confidence exceeds the model's threshold.
             - global_prediction_label: predicted class label for the whole file
-            - global_prediction_labels: ordered positive class labels supported
+            - global_prediction_labels: ordered class labels supported
               by the clip; older model results fall back to the single label
             - global_confidence: confidence score (0.0-1.0) for the global prediction
             - predict_time: time in seconds spent in the model's predict() method
