@@ -46,6 +46,7 @@ jobs:
             trainedproductionmodels.blob.core.windows.net:443
             transfer.xethub.hf.co:443
             us.aws.cdn.hf.co:443
+            live.orcasound.net:443
             *.stepsecurity.io:443
 
       - id: skip_check
@@ -136,6 +137,7 @@ jobs:
             trainedproductionmodels.blob.core.windows.net:443
             transfer.xethub.hf.co:443
             us.aws.cdn.hf.co:443
+            live.orcasound.net:443
             *.stepsecurity.io:443
             www.gyan.dev:443
 
