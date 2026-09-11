@@ -994,6 +994,8 @@ class TestMainCLI:
             "global_prediction_label": "resident",
             "global_confidence": 0.7,
             "local_predictions": [0, 1, 2, 4],
+            "local_prediction_labels": ["water", "resident", "transient", "vessel"],
+            "local_confidences": [0.9, 0.7, 0.8, 0.9],
             "positive_segments_count": 2,
             "positive_segments": [
                 {
@@ -1011,8 +1013,8 @@ class TestMainCLI:
         print_results(results, "podsai")
         captured = capsys.readouterr()
         assert "Positive segments: 2/4" in captured.out
-        assert "2025-01-15 12:29:02 PST: resident (confidence: 0.700)" in captured.out
-        assert "2025-01-15 12:29:04 PST: transient (confidence: 0.800)" in captured.out
+        assert "  +2.0s: resident (confidence: 0.700)" in captured.out
+        assert "  +4.0s: transient (confidence: 0.800)" in captured.out
 
 
 class TestPinnedPodsAIModelPath:

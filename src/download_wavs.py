@@ -494,8 +494,7 @@ def download_testing_sample(row: CSVRow, output_root: Path, cache_root: Path | N
     with TemporaryDirectory() as tmp_dir:
         wav_path = download_60s_audio(row.node_name, download_timestamp, tmp_dir)
         if wav_path is None:
-            print(f"Warning: Failed to download 60-second clip for {row.node_name} at {row.timestamp_pst}")
-            return
+            raise AssertionError(f"Error: Failed to download 60-second clip for {row.node_name} at {row.timestamp_pst}")
         shutil.move(wav_path, expected_path)
         print(f"Downloaded: {expected_path}")
 
