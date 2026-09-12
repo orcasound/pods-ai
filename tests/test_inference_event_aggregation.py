@@ -6,7 +6,7 @@ import pytest
 
 from podsai_inference import (
     _positive_event_ids,
-    count_non_adjacent,
+    count_non_adjacent_positive_events,
     meets_min_positive_event_threshold,
 )
 
@@ -29,10 +29,12 @@ def test_global_event_boundaries_are_shared_across_classes():
         ([1, 1, 1, 1], 2),
         ([1, 1, 1, 1, 1], 3),
         ([0, 1, 1, 0, 1], 2),
+        ([True, True, False, True], 2),
+        ([False, False], 0),
     ],
 )
-def test_count_non_adjacent(mask, expected_events):
-    assert count_non_adjacent(mask) == expected_events
+def test_count_non_adjacent_positive_events(mask, expected_events):
+    assert count_non_adjacent_positive_events(mask) == expected_events
 
 
 @pytest.mark.parametrize(

@@ -27,17 +27,15 @@ from model_inference import ModelInference
 # For every SEGMENT_GROUP_SIZE segments, require at least 1 positive prediction.
 SEGMENT_GROUP_SIZE = 10
 
-
-# Count non-adjacent occurrences for a class from local_predictions.
-def count_non_adjacent(indices: list[int]) -> int:
-    """Count distinct acoustic events by collapsing adjacent segments.
+def count_non_adjacent_positive_events(positive_mask: Sequence[bool | int]) -> int:
+    """Count distinct acoustic events by collapsing adjacent positive segments.
 
     At most two adjacent segments are collapsed into one event. Therefore a
-    contiguous run of length ``L`` contributes ``(L + 1) // 2`` events.
+    contiguous positive run of length ``L`` contributes ``(L + 1) // 2`` events.
 
     Sliding windows hop by 1-2 seconds, so one call often lights up two
     neighboring segments. Those neighbors are one event. A gap of one or more
-    segments starts a new event.
+    non-positive segments starts a new event.
 
     Examples:
         [1, 1, 1, 0] → 2 events
@@ -46,27 +44,29 @@ def count_non_adjacent(indices: list[int]) -> int:
         [1, 1, 1, 1] → 2 events
         [1, 1, 1, 1, 1] → 3 events
     """
-    if not indices:
-        return 0
-    count = 1
-    prev = indices[0]
-    for idx in indices[1:]:
-        if idx - prev > 1:
-            count += 1
-        prev = idx
-    return count
+    events = 0
+    run_length = 0
+    for value in positive_mask:
+        if bool(value):
+            run_length += 1
+        elif run_length:
+            events += (run_length + 1) // 2
+            run_length = 0
+    if run_length:
+        events += (run_length + 1) // 2
+    return events
 
 def meets_min_positive_event_threshold(
-    positive_mask: list[int],
+    positive_mask: Sequence[bool | int],
     min_num_positive_calls_threshold: int,
 ) -> bool:
     """Return True when collapsed event count meets the configured threshold."""
     return (
-        count_non_adjacent(positive_mask)
+        count_non_adjacent_positive_events(positive_mask)
         >= min_num_positive_calls_threshold
     )
 
-def _positive_event_ids(positive_mask: list[int]) -> list[Optional[int]]:
+def _positive_event_ids(positive_mask: Sequence[bool | int]) -> list[Optional[int]]:
     """Assign segments to global positive events, capped at two segments each."""
     event_ids: list[Optional[int]] = []
     event_id = -1
@@ -789,8 +789,8 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
 
         qualifying_ids: list[int] = []
         for cid in unique_local_ids:
-            indices = [i for i, p in enumerate(local_predictions) if p == cid]
-            non_adj_count = count_non_adjacent(indices)
+            mask = [1 if p == cid else 0 for p in local_predictions]
+            non_adj_count = count_non_adjacent_positive_events(mask)
             if non_adj_count >= min_calls:
                 qualifying_ids.append(cid)
 
