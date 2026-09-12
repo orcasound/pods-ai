@@ -792,8 +792,12 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
         seen_ids_set = set(unique_local_ids)
         positive_ids_set = seen_ids_set - negative_ids_set - background_ids_set
 
-        qualifying_ids: list[int] = []
+        qualifying_ids: list[int] = list(qualifying_classes)
         for cid in unique_local_ids:
+            if cid in qualifying_classes:
+                continue
+            if cid not in negative_ids_set and cid not in background_ids_set:
+                continue
             mask = [1 if p == cid else 0 for p in local_predictions]
             non_adj_count = count_non_adjacent_positive_events(mask)
             if non_adj_count >= min_calls:
