@@ -27,6 +27,7 @@ from model_inference import ModelInference
 # For every SEGMENT_GROUP_SIZE segments, require at least 1 positive prediction.
 SEGMENT_GROUP_SIZE = 10
 
+
 def count_non_adjacent_positive_events(positive_mask: Sequence[bool | int]) -> int:
     """Count distinct acoustic events by collapsing adjacent positive segments.
 
@@ -56,6 +57,7 @@ def count_non_adjacent_positive_events(positive_mask: Sequence[bool | int]) -> i
         events += (run_length + 1) // 2
     return events
 
+
 def meets_min_positive_event_threshold(
     positive_mask: Sequence[bool | int],
     min_num_positive_calls_threshold: int,
@@ -65,6 +67,7 @@ def meets_min_positive_event_threshold(
         count_non_adjacent_positive_events(positive_mask)
         >= min_num_positive_calls_threshold
     )
+
 
 def _positive_event_ids(positive_mask: Sequence[bool | int]) -> list[Optional[int]]:
     """Assign segments to global positive events, capped at two segments each."""
@@ -761,7 +764,9 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
         # Convert global prediction ID to label name.
         global_prediction_label = self.id2label[global_prediction_id]
 
-        # Calculate per-class mean probabilities across windows.
+        # Calculate per-class probabilities for display purposes.
+        # These represent the mean probability for every id2label key across all
+        # windows. Missing model output classes were padded with zeros above.
         per_class_probabilities = {}
         class_means: dict[int, float] = {}
         for class_id, label in self.id2label.items():
