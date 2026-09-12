@@ -288,7 +288,8 @@ class that independently meets the evidence threshold. The legacy
 - Use `global_prediction_labels` for new consumers; it is an ordered list and may
   contain multiple classes.
 - `global_prediction_label` is retained for single-label compatibility and selects
-  the first class ordered by vote count, mean confidence, then label name.
+  the first class in the priority order: whale classes, then bird/jingle, then
+  background classes, with each group ordered by mean class probability.
 - Empty or error responses always return `global_prediction_labels: []`, which
   clients should interpret as no classes.
 
