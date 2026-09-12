@@ -796,7 +796,7 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
         for cid in unique_local_ids:
             mask = [1 if p == cid else 0 for p in local_predictions]
             non_adj_count = count_non_adjacent_positive_events(mask)
-            if non_adj_count >= min_calls:
+            if non_adj_count >= effective_threshold:
                 qualifying_ids.append(cid)
 
         # Split qualifying ids into groups: positive, negative, background; order each by mean probability desc.
