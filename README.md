@@ -280,17 +280,17 @@ Per-class probabilities:
 ```
 
 For multi-class PODS-AI inference, `global_prediction_labels` also reports every
-positive whale class that independently meets the evidence threshold. The legacy
+class that independently meets the evidence threshold. The legacy
 `global_prediction_label` remains the primary label for compatibility.
 
 ### Compatibility / Migration
 
 - Use `global_prediction_labels` for new consumers; it is an ordered list and may
-  contain multiple positive whale classes.
+  contain multiple classes.
 - `global_prediction_label` is retained for single-label compatibility and selects
-  the first positive class ordered by vote count, mean confidence, then label name.
+  the first class ordered by vote count, mean confidence, then label name.
 - Empty or error responses always return `global_prediction_labels: []`, which
-  clients should interpret as no positive classes.
+  clients should interpret as no classes.
 
 **Example — FastAI model**
 

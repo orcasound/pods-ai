@@ -775,9 +775,6 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
             per_class_probabilities[label] = mean_prob
             class_means[class_id] = mean_prob
 
-        # Determine configured minimum calls (fallback to instance default).
-        min_calls = int(min_num_positive_calls_threshold) if min_num_positive_calls_threshold is not None else int(self.min_num_positive_calls_threshold)
-
         # Build the set of unique classes seen in local_predictions in first-seen order.
         seen_local = dict.fromkeys(local_predictions)
         unique_local_ids = list(seen_local.keys())
