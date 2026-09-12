@@ -123,7 +123,7 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
                                              length: at least 1 event per SEGMENT_GROUP_SIZE
                                              (10) segments, capped at this value. Formula:
                                              min(ceil(segments/10), min_num_positive_calls_threshold).
-                                             Default: use instance value (typically 3).
+                                             Default: use instance value (typically 2).
             model_revision: Git commit hash or tag to pin the HuggingFace Hub model revision.
                            Ignored when model_path is a local directory. (default: None)
             inference_batch_size: Number of spectrogram windows processed per model forward pass
@@ -488,7 +488,7 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
                                              length: at least 1 event per SEGMENT_GROUP_SIZE
                                              (10) segments, capped at this value. Formula:
                                              min(ceil(segments/10), min_num_positive_calls_threshold).
-                                             Default: use instance value (typically 3).
+                                             Default: use instance value (typically 2).
 
         Returns:
             Dictionary with keys:
@@ -501,7 +501,7 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
                                     i * hop_duration seconds from the start.
                 - global_prediction: Overall class ID for the entire audio
                 - global_prediction_label: Legacy primary label for the global prediction
-                - global_prediction_labels: Ordered positive labels, or [] when none qualify
+                - global_prediction_labels: Ordered labels, or [] when none qualify
                 - global_confidence: Overall confidence score (0.0-1.0) for the global prediction
             Returns dict with empty lists and error values if audio loading fails.
         """
@@ -798,16 +798,6 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
             non_adj_count = count_non_adjacent_positive_events(mask)
             if non_adj_count >= min_calls:
                 qualifying_ids.append(cid)
-
-        # Fallback when nothing qualifies: prefer global_prediction_id then other seen classes by mean prob.
-        if not qualifying_ids:
-            fallback_ids = []
-            if global_prediction_id in unique_local_ids:
-                fallback_ids.append(global_prediction_id)
-            other_ids = [cid for cid in unique_local_ids if cid != global_prediction_id]
-            other_ids.sort(key=lambda cid: class_means.get(cid, 0.0), reverse=True)
-            fallback_ids.extend(other_ids)
-            qualifying_ids = fallback_ids
 
         # Split qualifying ids into groups: positive, negative, background; order each by mean probability desc.
         positives = [cid for cid in qualifying_ids if cid in positive_ids_set]

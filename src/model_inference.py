@@ -212,7 +212,7 @@ class ModelInference:
                                     For multi-class models: class ID
                 - global_prediction_label: (Optional) Human-readable label for global prediction.
                                           Only provided by multi-class models.
-                - global_prediction_labels: (Optional) Ordered labels for all positive
+                - global_prediction_labels: (Optional) Ordered labels for all
                                            classes that independently meet the global
                                            evidence threshold. Older callers can use
                                            global_prediction_label as the primary label.
@@ -235,7 +235,7 @@ class FastAIModel(ModelInference):
     """
 
     def __init__(self, model_path: str = "./model", model_name: str = "stg2-rn18.pkl",
-                 threshold: float = 0.5, min_num_positive_calls_threshold: int = 2,
+                 threshold: float = 0.5, min_num_positive_calls_threshold: int = 3,
                  use_gpu: bool = True, smooth_predictions: bool = True,
                  batch_size: int = 32):
         """
