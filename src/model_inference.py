@@ -212,7 +212,7 @@ class ModelInference:
                                     For multi-class models: class ID
                 - global_prediction_label: (Optional) Human-readable label for global prediction.
                                           Only provided by multi-class models.
-                - global_prediction_labels: (Optional) Ordered labels for all positive
+                - global_prediction_labels: (Optional) Ordered labels for all
                                            classes that independently meet the global
                                            evidence threshold. Older callers can use
                                            global_prediction_label as the primary label.

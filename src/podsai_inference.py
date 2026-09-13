@@ -34,7 +34,7 @@ def count_non_adjacent_positive_events(positive_mask: Sequence[bool | int]) -> i
     At most two adjacent segments are collapsed into one event. Therefore a
     contiguous positive run of length ``L`` contributes ``(L + 1) // 2`` events.
 
-    Sliding windows hop by 1–2 seconds, so one call often lights up two
+    Sliding windows hop by 1-2 seconds, so one call often lights up two
     neighboring segments. Those neighbors are one event. A gap of one or more
     non-positive segments starts a new event.
 
@@ -106,7 +106,7 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
     """
 
     def __init__(self, model_path: str, device: Optional[str] = None,
-                 threshold: float = 0.5, min_num_positive_calls_threshold: int = 3,
+                 threshold: float = 0.5, min_num_positive_calls_threshold: int = 2,
                  model_revision: Optional[str] = None,
                  inference_batch_size: int = 8) -> None:
         """
@@ -123,7 +123,7 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
                                              length: at least 1 event per SEGMENT_GROUP_SIZE
                                              (10) segments, capped at this value. Formula:
                                              min(ceil(segments/10), min_num_positive_calls_threshold).
-                                             Default: use instance value (typically 3).
+                                             Default: use instance value (typically 2).
             model_revision: Git commit hash or tag to pin the HuggingFace Hub model revision.
                            Ignored when model_path is a local directory. (default: None)
             inference_batch_size: Number of spectrogram windows processed per model forward pass
@@ -488,7 +488,7 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
                                              length: at least 1 event per SEGMENT_GROUP_SIZE
                                              (10) segments, capped at this value. Formula:
                                              min(ceil(segments/10), min_num_positive_calls_threshold).
-                                             Default: use instance value (typically 3).
+                                             Default: use instance value (typically 2).
 
         Returns:
             Dictionary with keys:
@@ -501,7 +501,7 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
                                     i * hop_duration seconds from the start.
                 - global_prediction: Overall class ID for the entire audio
                 - global_prediction_label: Legacy primary label for the global prediction
-                - global_prediction_labels: Ordered positive labels, or [] when none qualify
+                - global_prediction_labels: Ordered labels, or [] when none qualify
                 - global_confidence: Overall confidence score (0.0-1.0) for the global prediction
             Returns dict with empty lists and error values if audio loading fails.
         """
@@ -599,7 +599,7 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
                     all_probs_list.append(batch_probs.cpu())
             all_probs = torch.cat(all_probs_list, dim=0)
         else:
-            # Raw-audio path (e.g. Wav2Vec2): collect segments, run feature extractor,
+            # Raw-audio path (e.g., Wav2Vec2): collect segments, run feature extractor,
             # then do a single batched forward pass.
             segments = []
             for pos_idx in range(num_positions):
@@ -763,25 +763,70 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
 
         # Convert global prediction ID to label name.
         global_prediction_label = self.id2label[global_prediction_id]
-        ordered_classes = list(dict.fromkeys(ordered_classes))
-        global_prediction_labels = [self.id2label[class_id] for class_id in ordered_classes]
 
         # Calculate per-class probabilities for display purposes.
         # These represent the mean probability for every id2label key across all
         # windows. Missing model output classes were padded with zeros above.
         per_class_probabilities = {}
+        class_means: dict[int, float] = {}
         for class_id, label in self.id2label.items():
             class_probs = [float(probs[class_id]) for probs in segment_probs]
-            per_class_probabilities[label] = float(np.mean(class_probs))
+            mean_prob = float(np.mean(class_probs))
+            per_class_probabilities[label] = mean_prob
+            class_means[class_id] = mean_prob
+
+        # Build the set of unique classes seen in local_predictions in first-seen order.
+        seen_local = dict.fromkeys(local_predictions)
+        unique_local_ids = list(seen_local.keys())
+
+        # Define label groups by name and map to ids when available.
+        NEGATIVE_LABEL_NAMES = {"jingle", "bird"}
+        BACKGROUND_LABEL_NAMES = {"other", "water", "vessel", "human"}
+
+        negative_ids_set = {self.label2id[l] for l in NEGATIVE_LABEL_NAMES if l in self.label2id}
+        background_ids_set = {self.label2id[l] for l in BACKGROUND_LABEL_NAMES if l in self.label2id}
+        # Positive ids are any seen ids not classified as negative or background.
+        seen_ids_set = set(unique_local_ids)
+        positive_ids_set = seen_ids_set - negative_ids_set - background_ids_set
+
+        qualifying_ids: list[int] = list(qualifying_classes)
+        for cid in unique_local_ids:
+            if cid in qualifying_classes:
+                continue
+            if cid not in negative_ids_set and cid not in background_ids_set:
+                continue
+            mask = [1 if p == cid else 0 for p in local_predictions]
+            non_adj_count = count_non_adjacent_positive_events(mask)
+            if non_adj_count >= effective_threshold:
+                qualifying_ids.append(cid)
+
+        # Split qualifying ids into groups: positive, negative, background; order each by mean probability desc.
+        positives = [cid for cid in qualifying_ids if cid in positive_ids_set]
+        negatives = [cid for cid in qualifying_ids if cid in negative_ids_set]
+        backgrounds = [cid for cid in qualifying_ids if cid in background_ids_set or (cid not in positive_ids_set and cid not in negative_ids_set)]
+
+        positives.sort(key=lambda cid: class_means.get(cid, 0.0), reverse=True)
+        negatives.sort(key=lambda cid: class_means.get(cid, 0.0), reverse=True)
+        backgrounds.sort(key=lambda cid: class_means.get(cid, 0.0), reverse=True)
+
+        ordered_ids = positives + negatives + backgrounds
+        # Build `global_prediction_labels` from ordered_ids (unchanged).
+        global_prediction_labels = [self.id2label.get(cid, str(cid)) for cid in ordered_ids]
+
+        # Set the singular global prediction to the first label in the ordered list,
+        # without modifying ordered_ids itself.
+        if ordered_ids:
+            global_prediction_id = ordered_ids[0]
+            global_prediction_label = self.id2label.get(global_prediction_id, str(global_prediction_id))
+            global_confidence = class_means.get(global_prediction_id, 0.0)
+        # else keep previously computed global_prediction_id/global_prediction_label.
 
         return {
             "local_predictions": local_predictions,
             "local_confidences": local_confidences,
             "local_probs": segment_probs,
             "global_prediction": global_prediction_id,
-            # Legacy single-label fallback: highest-priority positive class.
             "global_prediction_label": global_prediction_label,
-            # Ordered positive classes; empty when no class qualifies.
             "global_prediction_labels": global_prediction_labels,
             "global_confidence": global_confidence,
             "per_class_probabilities": per_class_probabilities,
