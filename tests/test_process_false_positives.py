@@ -157,6 +157,60 @@ class TestProcessFalsePositives:
         assert summary["rejected"] == 0
         mock_get_feeds.assert_called_once_with()
 
+    def test_testing_mode_appends_row_from_add_testing_60s_sample(self, tmp_path):
+        """Testing mode should append the single corrected 60-second row."""
+        feed = _make_feed()
+        detection = OrcaHelloDetection(
+            id="det_1",
+            feed=feed,
+            timestamp=datetime(2025, 1, 1, 12, 0, 0, tzinfo=timezone.utc),
+            status="rejected",
+            comments="Boat noise from a nearby vessel.",
+            tags="vessel",
+        )
+        manual_samples_path = tmp_path / "manual_testing_samples.csv"
+
+        with patch("process_false_positives.get_model_inference") as mock_get_model, \
+             patch("process_false_positives.get_orcasite_feeds_with_retry", return_value=[feed]), \
+             patch("process_false_positives.get_orcahello_detections", return_value=[detection]), \
+             patch("process_false_positives.add_training_3s_samples") as mock_add_training, \
+             patch(
+                 "process_false_positives.add_testing_60s_sample",
+                 return_value={
+                     "Category": "vessel",
+                     "NodeName": "rpi_test",
+                     "Timestamp": "2025_01_01_04_00_00_PST",
+                     "URI": "https://example.com/testing",
+                     "Description": "Boat noise from a nearby vessel.",
+                     "Notes": "fp_machine",
+                     "Confidence": 100,
+                     "Tags": "vessel",
+                 },
+             ) as mock_add_testing:
+            summary = process_false_positives(
+                manual_samples_path=manual_samples_path,
+                output_dir=tmp_path / "segments",
+                for_training=False,
+            )
+
+        mock_get_model.assert_not_called()
+        mock_add_training.assert_not_called()
+        assert mock_add_testing.call_count == 1
+        assert mock_add_testing.call_args.kwargs["corrected_class"] == "vessel"
+        assert mock_add_testing.call_args.kwargs["fallback_description"] == detection.comments
+        assert mock_add_testing.call_args.kwargs["fallback_notes"] == "fp_machine"
+        assert mock_add_testing.call_args.kwargs["fallback_tags"] == detection.tags
+        assert summary["rejected"] == 1
+        assert summary["whale_mismatch_segments"] == 1
+        assert summary["appended"] == 1
+        assert summary["duplicates"] == 0
+
+        with open(manual_samples_path, "r", encoding="utf-8") as handle:
+            rows = list(csv.DictReader(handle))
+        assert len(rows) == 1
+        assert rows[0]["Category"] == "vessel"
+        assert rows[0]["URI"] == "https://example.com/testing"
+
     def test_appends_only_mismatched_whale_segments_with_corrected_class(self, tmp_path):
         """Whale-class segments should be rewritten unless they already match the corrected class."""
         feed = _make_feed()

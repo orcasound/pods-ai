@@ -18,6 +18,7 @@ from add_samples import (
     DEFAULT_OUTPUT_DIR,
     HOP_DURATION,
     SEGMENT_DURATION,
+    add_testing_60s_sample,
     add_training_3s_samples,
     format_timestamp_pst,
     get_segment_prediction,
@@ -703,6 +704,57 @@ class TestAddSamples:
         """add_training_3s_samples should raise ValueError when the filename cannot be parsed and no args given."""
         with pytest.raises(ValueError, match="Cannot infer"):
             add_training_3s_samples(wav_file="recording.wav")
+
+
+class TestAddTesting60sSample:
+    """Tests for add_testing_60s_sample."""
+
+    def test_uses_detection_lookup_metadata_when_available(self):
+        """Rows should use description/notes/tags from detections.csv when a match exists."""
+        detection_info = type(
+            "DetectionInfo",
+            (),
+            {"description": "from detections", "notes": "from_notes", "tags": "resident;vessel"},
+        )()
+
+        with patch("add_samples.lookup_detection_in_csv", return_value=detection_info) as mock_lookup, \
+             patch("add_samples.generate_uri", return_value="https://example.com/test"):
+            row = add_testing_60s_sample(
+                node_name="rpi_orcasound_lab",
+                base_timestamp="2025_01_15_12_30_00_PST",
+                corrected_class="vessel",
+                fallback_description="fallback description",
+                fallback_notes="fallback notes",
+                fallback_tags="fallback tags",
+            )
+
+        mock_lookup.assert_called_once_with(
+            "rpi_orcasound_lab",
+            "2025_01_15_12_30_00_PST",
+            "bootstrap/csv/detections.csv",
+        )
+        assert row["Description"] == "from detections"
+        assert row["Notes"] == "from_notes"
+        assert row["Tags"] == "resident;vessel"
+        assert row["Category"] == "vessel"
+
+    def test_uses_fallback_metadata_when_detection_missing(self):
+        """Rows should use fallback description/notes/tags when detections.csv has no match."""
+        with patch("add_samples.lookup_detection_in_csv", return_value=None), \
+             patch("add_samples.generate_uri", return_value="https://example.com/test"):
+            row = add_testing_60s_sample(
+                node_name="rpi_orcasound_lab",
+                base_timestamp="2025_01_15_12_30_00_PST",
+                corrected_class="vessel",
+                fallback_description="  fallback description  ",
+                fallback_notes="  fp_machine  ",
+                fallback_tags="  vessel  ",
+            )
+
+        assert row["Description"] == "fallback description"
+        assert row["Notes"] == "fp_machine"
+        assert row["Tags"] == "vessel"
+        assert row["Category"] == "vessel"
 
 
 class TestMain:
