@@ -652,10 +652,8 @@ def add_testing_60s_sample(
     """
     Returns a dictionary with manual_testing_60s_samples.csv fields.
 
-    If node_name or base_timestamp are not provided they are inferred from the
-    wav_file filename (or from the uri), which must follow the convention used by download_wavs.py:
-    {node_name_with_hyphens}_{YYYY_MM_DD_HH_MM_SS_PST}.wav
-    (e.g., rpi-orcasound-lab_2025_12_17_22_34_03_PST.wav).
+    ``node_name`` and ``base_timestamp`` identify the 60-second sample and are required.
+    The URI is generated from those values.
 
     Args:
         node_name: Hydrophone node name (e.g., "rpi_orcasound_lab").

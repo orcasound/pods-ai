@@ -210,7 +210,7 @@ def process_false_positives(
                     )
                     segment_rows = [segment_row]
                 else:
-                    # For the training set, we need to run PODS-AI inference on the 60econd WAV to find mismatched whale-class segments.
+                    # For the training set, we need to run PODS-AI inference on the 60-second WAV to find mismatched whale-class segments.
                     print(f"Checking rejected OrcaHello detection at {timestamp_str}")
 
                     wav_path = download_60s_audio(feed.node_name, timestamp_str, temp_dir)

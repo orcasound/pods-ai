@@ -401,6 +401,7 @@ def get_orcahello_detections(feed: OrcasiteFeed) -> List[OrcaHelloDetection]:
             status=status,
             confidence=confidence,
             comments=(item.get("comments") or "").strip(),
+            tags=(item.get("tags") or "").strip()
         )
 
         results.append(det)
