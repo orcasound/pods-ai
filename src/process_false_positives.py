@@ -251,19 +251,31 @@ def process_false_positives(
                         summary["processing_failed"] += 1
                         continue
 
-            mismatched_whale_rows = []
-            for row in segment_rows:
-                row_category = row.get("Category")
-                if row_category not in WHALE_CLASSES or row_category == corrected_class:
-                    continue
-                updated_row = dict(row)
-                updated_row["Category"] = corrected_class
-                mismatched_whale_rows.append(updated_row)
+            # For training, only append whale-class subsegments whose predicted
+            # category differs from the corrected class (mismatches). For testing,
+            # add_testing_60s_sample already returns a single row with Category set
+            # to the corrected_class; include that row directly in the append set
+            # so testing samples are written.
+            if not for_training:
+                append_rows = list(segment_rows)
+                # Count testing rows as processed segments for diagnostics.
+                summary["whale_mismatch_segments"] += len(append_rows)
+            else:
+                mismatched_whale_rows = []
+                for row in segment_rows:
+                    row_category = row.get("Category")
+                    if row_category not in WHALE_CLASSES or row_category == corrected_class:
+                        continue
+                    updated_row = dict(row)
+                    updated_row["Category"] = corrected_class
+                    mismatched_whale_rows.append(updated_row)
 
-            summary["whale_mismatch_segments"] += len(mismatched_whale_rows)
+                append_rows = mismatched_whale_rows
+                summary["whale_mismatch_segments"] += len(mismatched_whale_rows)
+
             appended, duplicates = append_manual_samples(
                 manual_samples_path,
-                mismatched_whale_rows,
+                append_rows,
                 existing_uris,
             )
             summary["appended"] += appended
