@@ -40,7 +40,7 @@ RESIDENT_TERMS = ("resident", "pod")
 TRANSIENT_TERMS = ("bigg", "transient")
 HUMAN_TERMS = ("human", "radio")
 VESSEL_TERMS = ("vessel", "ship", "boat", "train")
-OTHER_TERMS = ("seal")
+OTHER_TERMS = ("seal","sea lion")
 WHALE_CLASSES = {"resident", "transient", "humpback"}
 OTHER_CLASSES = {"bird", "human", "vessel", "jingle", "water", "other"}
 # Phrases that negate "humpback" or "vessel" labels (e.g. human-written "No humpback nor vessel").
