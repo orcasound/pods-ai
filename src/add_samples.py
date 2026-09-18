@@ -570,7 +570,7 @@ def add_training_3s_samples(
         # Use Description and Notes from detections.csv.
         shared_description = detection_info.description
         shared_notes = detection_info.notes
-        shared_tags = detection_info.tags
+        shared_tags = ""
     else:
         shared_description = (fallback_description or "").strip()
         candidate_notes = (fallback_notes or "").strip()

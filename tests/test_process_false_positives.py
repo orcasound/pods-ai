@@ -148,7 +148,7 @@ class TestProcessFalsePositives:
             return_value=[feed],
         ) as mock_get_feeds, patch(
             "process_false_positives.get_model_inference"
-        ), patch("process_false_positives.get_orcahello_moderated_detections", return_value=[]):
+        ), patch("process_false_positives.get_orcahello_detections", return_value=[]):
             summary = process_false_positives(
                 manual_samples_path=tmp_path / "manual_samples.csv",
                 output_dir=tmp_path / "segments",
@@ -178,7 +178,7 @@ class TestProcessFalsePositives:
 
         with patch("process_false_positives.get_model_inference") as mock_get_model, \
              patch("process_false_positives.get_orcasite_feeds_with_retry", return_value=[feed]), \
-             patch("process_false_positives.get_orcahello_moderated_detections", return_value=[detection]), \
+             patch("process_false_positives.get_orcahello_detections", return_value=[detection]), \
              patch("process_false_positives.download_60s_audio", return_value=str(wav_path)), \
              patch(
                  "process_false_positives.add_training_3s_samples",
@@ -257,7 +257,7 @@ class TestProcessFalsePositives:
 
         with patch("process_false_positives.get_model_inference") as mock_get_model, \
              patch("process_false_positives.get_orcasite_feeds_with_retry", return_value=[feed]), \
-             patch("process_false_positives.get_orcahello_moderated_detections", return_value=[detection]), \
+             patch("process_false_positives.get_orcahello_detections", return_value=[detection]), \
              patch("process_false_positives.download_60s_audio", return_value=str(wav_path)), \
              patch(
                  "process_false_positives.add_training_3s_samples",
@@ -319,7 +319,7 @@ class TestProcessFalsePositives:
 
         with patch("process_false_positives.get_model_inference") as mock_get_model, \
              patch("process_false_positives.get_orcasite_feeds_with_retry", return_value=[feed]), \
-             patch("process_false_positives.get_orcahello_moderated_detections", return_value=[detection]), \
+             patch("process_false_positives.get_orcahello_detections", return_value=[detection]), \
              patch("process_false_positives.download_60s_audio", return_value=str(wav_path)), \
              patch(
                  "process_false_positives.add_training_3s_samples",
@@ -408,7 +408,7 @@ class TestProcessFalsePositives:
         with patch("process_false_positives.get_model_inference") as mock_get_model, \
              patch("process_false_positives.get_orcasite_feeds_with_retry", return_value=[feed]), \
              patch(
-                 "process_false_positives.get_orcahello_moderated_detections",
+                 "process_false_positives.get_orcahello_detections",
                  return_value=[next_detection, failed_detection],
              ), \
              patch("process_false_positives.download_60s_audio", return_value=str(wav_path)), \
@@ -474,7 +474,7 @@ class TestProcessFalsePositives:
         with patch("process_false_positives.get_model_inference") as mock_get_model, \
              patch("process_false_positives.get_orcasite_feeds_with_retry", return_value=[feed]), \
              patch(
-                 "process_false_positives.get_orcahello_moderated_detections",
+                 "process_false_positives.get_orcahello_detections",
                  return_value=[matching_detection, non_matching_detection],
              ), \
              patch("process_false_positives.download_60s_audio", return_value=str(wav_path)), \
@@ -539,7 +539,7 @@ class TestProcessFalsePositives:
         with patch("process_false_positives.get_model_inference"), \
              patch("process_false_positives.get_orcasite_feeds_with_retry", return_value=[feed]), \
              patch(
-                 "process_false_positives.get_orcahello_moderated_detections",
+                 "process_false_positives.get_orcahello_detections",
                  return_value=[confirmed, unreviewed, out_of_range],
              ):
             summary = process_false_positives(

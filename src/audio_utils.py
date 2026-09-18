@@ -230,13 +230,13 @@ def get_node_name_for_feed(feed: OrcasiteFeed) -> str:
     return feed.node_name
 
 
-def get_orcahello_moderated_detections(
+def get_orcahello_detections(
     feed: OrcasiteFeed,
     start_time: Optional[datetime] = None,
     end_time: Optional[datetime] = None
 ) -> List[OrcaHelloDetection]:
     """
-    Retrieve moderated OrcaHello detections and return those whose audio URI contains the given feed's node_name.
+    Retrieve OrcaHello detections and return those whose audio URI contains the given feed's node_name.
     """
     if not COSMOS_KEY:
         raise ValueError("COSMOS_KEY environment variable must be set and non-empty to fetch OrcaHello detections")
@@ -249,7 +249,7 @@ def get_orcahello_moderated_detections(
 
     query = """
         SELECT * FROM c
-        WHERE c.location.id = @node_name AND c.reviewed = true
+        WHERE c.location.id = @node_name
     """
     params = [{"name": "@node_name", "value": node_name}]
     if start_time:

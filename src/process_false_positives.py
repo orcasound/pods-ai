@@ -26,7 +26,7 @@ from audio_utils import (
     SKIP_TERMS,
     download_60s_audio,
     format_timestamp_pst,
-    get_orcahello_moderated_detections,
+    get_orcahello_detections,
     parse_pst_timestamp,
 )
 from manual_samples_utils import append_manual_samples, load_existing_uris
@@ -167,7 +167,7 @@ def process_false_positives(
         csv_writer.writerow(
             ["Category", "NodeName", "Timestamp", "URI", "Description", "Notes", "Confidence", "Tags"]
         )
-        for detection in get_orcahello_moderated_detections(feed, start_time, end_time):
+        for detection in get_orcahello_detections(feed, start_time, end_time):
             if detection.timestamp is None:
                 continue
             status = detection.status.lower()
