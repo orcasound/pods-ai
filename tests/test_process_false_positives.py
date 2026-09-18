@@ -77,6 +77,22 @@ class TestGetCorrectedClass:
         """'No vessel' should suppress the vessel keyword match → water."""
         assert get_corrected_class("No vessel here", None) == "water"
 
+    def test_tags_override_comments(self):
+        """Tags should take precedence over comments."""
+        assert get_corrected_class("Humpback whale song", "vessel") == "vessel"
+
+    def test_tags_case_and_whitespace_and_multiple(self):
+        """Tags are split on ';', stripped, and matched case-insensitively; first matching tag returned."""
+        assert get_corrected_class("", "  Humpback  ; other") == "humpback"
+
+    def test_tags_unknown_returns_water(self):
+        """If tags contain no known classes, return 'water'."""
+        assert get_corrected_class("Boat noise", "unknown;maybe") == "water"
+
+    def test_tags_first_match_returned(self):
+        """First matching tag should be returned when multiple known tags present."""
+        assert get_corrected_class("", "resident;vessel") == "resident"
+
 
 class TestAppendManualSamples:
     """Tests for append_manual_samples."""
