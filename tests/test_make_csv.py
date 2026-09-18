@@ -16,7 +16,7 @@ from pytz import timezone as pytz_timezone
 from make_csv import (
     PACIFIC_TZ,
     get_orcasite_detections,
-    get_orcahello_detections,
+    get_orcahello_moderated_detections,
     get_orcasite_feeds,
     parse_pst_timestamp,
     process_all_feeds,
@@ -125,7 +125,7 @@ class TestProcessAllFeedsTimestampFilter:
 
         with patch("make_csv.get_orcasite_feeds") as mock_feeds, \
              patch("make_csv.get_orcasite_detections") as mock_dets, \
-             patch("make_csv.get_orcahello_detections") as mock_oh:
+             patch("make_csv.get_orcahello_moderated_detections") as mock_oh:
 
             from make_csv import OrcasiteFeed
             feed = OrcasiteFeed(
@@ -395,8 +395,8 @@ class TestGetOrcasiteDetectionsWithRetry:
         mock_sleep.assert_not_called()
 
 
-class TestGetOrcahelloDetections:
-    """Tests for get_orcahello_detections."""
+class TestGetOrcahelloModeratedDetections:
+    """Tests for get_orcahello_moderated_detections."""
 
     def test_includes_comments_from_cosmos_items(self):
         """The returned detection should preserve the moderation comments field."""
@@ -427,7 +427,7 @@ class TestGetOrcahelloDetections:
         mock_client.get_database_client.return_value = mock_database
 
         with patch("make_csv.CosmosClient", return_value=mock_client):
-            detections = get_orcahello_detections(feed)
+            detections = get_orcahello_moderated_detections(feed)
 
         assert len(detections) == 1
         assert detections[0].status == "rejected"
@@ -460,7 +460,7 @@ class TestGetOrcahelloDetections:
         mock_client.get_database_client.return_value = mock_database
 
         with patch("make_csv.CosmosClient", return_value=mock_client):
-            detections = get_orcahello_detections(feed)
+            detections = get_orcahello_moderated_detections(feed)
 
         assert len(detections) == 1
         assert detections[0].status == "confirmed"

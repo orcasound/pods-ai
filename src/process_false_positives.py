@@ -26,7 +26,7 @@ from audio_utils import (
     SKIP_TERMS,
     download_60s_audio,
     format_timestamp_pst,
-    get_moderated_orcahello_detections,
+    get_orcahello_moderated_detections,
     parse_pst_timestamp,
 )
 from manual_samples_utils import append_manual_samples, load_existing_uris
@@ -48,7 +48,7 @@ NO_HUMPBACK_TERMS = ("no humpback", "not humpback")
 NO_VESSEL_TERMS = ("no vessel", "nor vessel", "no boat", "nor boat", "no ship", "nor ship", "no train", "nor train")
 
 
-def get_corrected_class(tags: str, comments: str) -> Optional[str]:
+def get_corrected_class(comments: str, tags: Optional[str]) -> Optional[str]:
     """Infer the corrected class from OrcaHello moderation tags and comments.
 
     Use tags if available, otherwise infer from comments.  Return None if no class can be inferred.
@@ -67,7 +67,7 @@ def get_corrected_class(tags: str, comments: str) -> Optional[str]:
             normalized_tag = tag.strip().lower()
             if normalized_tag in WHALE_CLASSES or normalized_tag in OTHER_CLASSES:
                 return normalized_tag
-        return "other"
+        return "water"
 
     # Drop auto-generated "AI: …" lines so they do not influence class inference.
     human_lines = [
@@ -167,7 +167,7 @@ def process_false_positives(
         csv_writer.writerow(
             ["Category", "NodeName", "Timestamp", "URI", "Description", "Notes", "Confidence", "Tags"]
         )
-        for detection in get_moderated_orcahello_detections(feed, start_time, end_time):
+        for detection in get_orcahello_moderated_detections(feed, start_time, end_time):
             if detection.timestamp is None:
                 continue
             status = detection.status.lower()
@@ -189,7 +189,7 @@ def process_false_positives(
 
             timestamp_str = format_timestamp_pst(detection.timestamp)
             summary["rejected"] += 1
-            corrected_class = get_corrected_class(detection.tags, detection.comments)
+            corrected_class = get_corrected_class(detection.comments, detection.tags)
             if corrected_class is None:
                 print(f"Skipping {feed.node_name} {timestamp_str}: could not determine corrected class from comment '{detection.comments}' and tags '{detection.tags}'.")
                 summary["unknown_class"] += 1

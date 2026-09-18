@@ -230,7 +230,7 @@ def get_node_name_for_feed(feed: OrcasiteFeed) -> str:
     return feed.node_name
 
 
-def get_moderated_orcahello_detections(
+def get_orcahello_moderated_detections(
     feed: OrcasiteFeed,
     start_time: Optional[datetime] = None,
     end_time: Optional[datetime] = None

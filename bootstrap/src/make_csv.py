@@ -48,6 +48,7 @@ class OrcaHelloDetection:
     status: str                  # e.g., "confirmed", "rejected", etc.
     confidence: Optional[float] = None  # Confidence score from model inference
     comments: str = ""
+    tags: str = ""
 
 # Terms in a detection description that indicate the label cannot be determined with confidence.
 SKIP_TERMS = {'?', 'not sure', 'unsure', 'possibl', 'sounds like', 'sounded like', 'ould be'}

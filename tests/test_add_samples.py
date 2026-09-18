@@ -18,7 +18,7 @@ from add_samples import (
     DEFAULT_OUTPUT_DIR,
     HOP_DURATION,
     SEGMENT_DURATION,
-    add_samples,
+    add_training_3s_samples,
     format_timestamp_pst,
     get_segment_prediction,
     main as add_samples_main,
@@ -400,7 +400,7 @@ class TestAddSamples:
              patch("add_samples.lookup_detection_in_csv", return_value=None), \
              patch("add_samples.generate_uri", return_value="https://example.com/test"):
 
-            results = add_samples(
+            results = add_training_3s_samples(
                 wav_file="fake.wav",
                 node_name="rpi_orcasound_lab",
                 base_timestamp="2025_01_15_12_30_00_PST",
@@ -433,7 +433,7 @@ class TestAddSamples:
              patch("add_samples.lookup_detection_in_csv", return_value=None), \
              patch("add_samples.generate_uri", return_value="https://example.com/test"):
 
-            add_samples(
+            add_training_3s_samples(
                 wav_file="fake.wav",
                 node_name="rpi_orcasound_lab",
                 base_timestamp="2025_01_15_12_30_00_PST",
@@ -457,7 +457,7 @@ class TestAddSamples:
         with patch("add_samples.split_wav_into_segments", return_value=fake_segments), \
              patch("add_samples.lookup_detection_in_csv", return_value=None), \
              patch("add_samples.generate_uri", return_value="https://example.com/test"):
-            results = add_samples(
+            results = add_training_3s_samples(
                 wav_file="fake.wav",
                 node_name="rpi_orcasound_lab",
                 base_timestamp="2025_01_15_12_30_00_PST",
@@ -482,7 +482,7 @@ class TestAddSamples:
         with patch("add_samples.split_wav_into_segments", return_value=fake_segments), \
              patch("add_samples.lookup_detection_in_csv", return_value=None), \
              patch("add_samples.generate_uri", return_value="https://example.com/test"):
-            results = add_samples(
+            results = add_training_3s_samples(
                 wav_file="fake.wav",
                 node_name="rpi_orcasound_lab",
                 base_timestamp="2025_01_15_12_30_00_PST",
@@ -506,7 +506,7 @@ class TestAddSamples:
         with patch("add_samples.split_wav_into_segments", return_value=fake_segments), \
              patch("add_samples.lookup_detection_in_csv", return_value=None), \
              patch("add_samples.generate_uri", return_value="https://example.com/test"):
-            results = add_samples(
+            results = add_training_3s_samples(
                 wav_file="fake.wav",
                 node_name="rpi_orcasound_lab",
                 base_timestamp="2025_01_15_12_30_00_PST",
@@ -532,7 +532,7 @@ class TestAddSamples:
         with patch("add_samples.split_wav_into_segments", return_value=fake_segments), \
              patch("add_samples.lookup_detection_in_csv", return_value=None), \
              patch("add_samples.generate_uri", return_value="https://example.com/test"):
-            add_samples(
+            add_training_3s_samples(
                 wav_file="fake.wav",
                 node_name="rpi_orcasound_lab",
                 base_timestamp="2025_01_15_12_30_00_PST",
@@ -551,6 +551,7 @@ class TestAddSamples:
             "Description",
             "Notes",
             "Confidence",
+            "Tags",
         ]
         header_index = parsed_rows.index(header_row)
         rows = parsed_rows[header_index + 1: header_index + 1 + len(fake_segments)]
@@ -560,9 +561,9 @@ class TestAddSamples:
         assert all(row[5] == "manual" for row in rows)
 
     def test_returns_empty_when_no_segments(self, tmp_path):
-        """add_samples should return [] if split_wav_into_segments yields nothing."""
+        """add_training_3s_samples should return [] if split_wav_into_segments yields nothing."""
         with patch("add_samples.split_wav_into_segments", return_value=[]):
-            results = add_samples(
+            results = add_training_3s_samples(
                 wav_file="fake.wav",
                 node_name="rpi_orcasound_lab",
                 base_timestamp="2025_01_15_12_30_00_PST",
@@ -585,7 +586,7 @@ class TestAddSamples:
              patch("add_samples.lookup_detection_in_csv", return_value=None), \
              patch("add_samples.generate_uri", return_value="https://example.com/test"):
 
-            add_samples(
+            add_training_3s_samples(
                 wav_file="fake.wav",
                 node_name="rpi_orcasound_lab",
                 base_timestamp="2025_01_15_12_30_00_PST",
@@ -610,7 +611,7 @@ class TestAddSamples:
              patch("add_samples.lookup_detection_in_csv", return_value=None), \
              patch("add_samples.generate_uri", return_value="https://example.com/test"):
 
-            add_samples(
+            add_training_3s_samples(
                 wav_file="fake.wav",
                 node_name="rpi_orcasound_lab",
                 base_timestamp="2025_01_15_12_30_00_PST",
@@ -623,7 +624,7 @@ class TestAddSamples:
         assert mock_model.predict.call_count == 2
 
     def test_always_uses_podsai_model_type(self, tmp_path):
-        """add_samples should always call get_model_inference with model_type='podsai'."""
+        """add_training_3s_samples should always call get_model_inference with model_type='podsai'."""
         fake_segments = self._fake_split(tmp_path)
         mock_model = MagicMock()
         mock_model.predict.return_value = {
@@ -636,7 +637,7 @@ class TestAddSamples:
              patch("add_samples.lookup_detection_in_csv", return_value=None), \
              patch("add_samples.generate_uri", return_value="https://example.com/test"):
 
-            add_samples(
+            add_training_3s_samples(
                 wav_file="fake.wav",
                 node_name="rpi_orcasound_lab",
                 base_timestamp="2025_01_15_12_30_00_PST",
@@ -648,7 +649,7 @@ class TestAddSamples:
         assert call_args[1]["model_type"] == "podsai"
 
     def test_infers_node_and_timestamp_from_filename(self, tmp_path):
-        """add_samples should parse node_name and base_timestamp from a well-formed filename."""
+        """add_training_3s_samples should parse node_name and base_timestamp from a well-formed filename."""
         fake_segments = self._fake_split(tmp_path)
         mock_model = MagicMock()
         mock_model.predict.return_value = {
@@ -661,7 +662,7 @@ class TestAddSamples:
              patch("add_samples.lookup_detection_in_csv", return_value=None), \
              patch("add_samples.generate_uri", return_value="https://example.com/test"):
 
-            add_samples(
+            add_training_3s_samples(
                 wav_file="rpi-orcasound-lab_2025_01_15_12_30_00_PST.wav",
                 output_dir=str(tmp_path),
                 model_path="/path/to/model",
@@ -686,7 +687,7 @@ class TestAddSamples:
              patch("add_samples.lookup_detection_in_csv", return_value=None), \
              patch("add_samples.generate_uri", return_value="https://example.com/test"):
 
-            add_samples(
+            add_training_3s_samples(
                 wav_file="rpi-orcasound-lab_2025_01_15_12_30_00_PST.wav",
                 node_name="rpi_sunset_bay",
                 base_timestamp="2026_06_01_00_00_00_PST",
@@ -699,9 +700,9 @@ class TestAddSamples:
         assert call_kwargs[0][2] == "2026_06_01_00_00_00_PST"
 
     def test_raises_for_bad_filename_when_no_explicit_args(self):
-        """add_samples should raise ValueError when the filename cannot be parsed and no args given."""
+        """add_training_3s_samples should raise ValueError when the filename cannot be parsed and no args given."""
         with pytest.raises(ValueError, match="Cannot infer"):
-            add_samples(wav_file="recording.wav")
+            add_training_3s_samples(wav_file="recording.wav")
 
 
 class TestMain:
@@ -712,7 +713,7 @@ class TestMain:
         wav_path = tmp_path / "input.wav"
         wav_path.write_bytes(b"wav")
 
-        with patch("add_samples.add_samples", return_value=[{"Category": "resident"}]) as mock_add_samples:
+        with patch("add_samples.add_training_3s_samples", return_value=[{"Category": "resident"}]) as mock_add_samples:
             monkeypatch.setattr(
                 sys,
                 "argv",

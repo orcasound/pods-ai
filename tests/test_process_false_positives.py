@@ -34,48 +34,48 @@ class TestGetCorrectedClass:
 
     def test_detects_transient_keywords(self):
         """Transient-related comments should map to transient."""
-        assert get_corrected_class("Likely transient calls from Bigg's whales.") == "transient"
+        assert get_corrected_class("Likely transient calls from Bigg's whales.", None) == "transient"
 
     def test_detects_vessel_keywords(self):
         """Boat-like comments should map to vessel."""
-        assert get_corrected_class("This is boat noise, not whales.") == "vessel"
+        assert get_corrected_class("This is boat noise, not whales.", None) == "vessel"
 
     def test_returns_none_for_unsure_comments(self):
         """Ambiguous comments should be skipped."""
-        assert get_corrected_class("Not sure what this is.") is None
+        assert get_corrected_class("Not sure what this is.", None) is None
 
     def test_strips_ai_prefix_line_before_inferring_class(self):
         """An 'AI: humpback' prefix line should be ignored so it does not produce 'humpback'."""
         # Only the auto-generated line is present; nothing else to infer from → None.
-        assert get_corrected_class("AI: humpback") is None
+        assert get_corrected_class("AI: humpback", None) is None
 
     def test_no_humpback_alone_returns_water(self):
         """'No humpback' alone gives no positive signal → water."""
-        assert get_corrected_class("No humpback") == "water"
+        assert get_corrected_class("No humpback", None) == "water"
 
     def test_ai_prefix_plus_no_humpback_returns_water(self):
         """'AI: humpback\\nNo humpback' is a false humpback with no other signal → water."""
-        assert get_corrected_class("AI: humpback\nNo humpback") == "water"
+        assert get_corrected_class("AI: humpback\nNo humpback", None) == "water"
 
     def test_no_humpback_nor_vessel_returns_water(self):
         """'No humpback nor vessel' with no other signal should resolve to water."""
-        assert get_corrected_class("No humpback nor vessel") == "water"
+        assert get_corrected_class("No humpback nor vessel", None) == "water"
 
     def test_ai_prefix_plus_no_humpback_nor_vessel_returns_water(self):
         """Full 'AI: humpback\\nNo humpback nor vessel' comment should resolve to water."""
-        assert get_corrected_class("AI: humpback\nNo humpback nor vessel") == "water"
+        assert get_corrected_class("AI: humpback\nNo humpback nor vessel", None) == "water"
 
     def test_no_humpback_with_vessel_positive_returns_vessel(self):
         """'No humpback' with an unambiguous vessel keyword should still resolve to vessel."""
-        assert get_corrected_class("No humpback. Boat noise.") == "vessel"
+        assert get_corrected_class("No humpback. Boat noise.", None) == "vessel"
 
     def test_humpback_positive_without_negation_still_returns_humpback(self):
         """A plain 'humpback' mention (no negation) should still map to humpback."""
-        assert get_corrected_class("Humpback whale song") == "humpback"
+        assert get_corrected_class("Humpback whale song", None  ) == "humpback"
 
     def test_no_vessel_prevents_vessel_match(self):
         """'No vessel' should suppress the vessel keyword match → water."""
-        assert get_corrected_class("No vessel here") == "water"
+        assert get_corrected_class("No vessel here", None) == "water"
 
 
 class TestAppendManualSamples:
@@ -132,7 +132,7 @@ class TestProcessFalsePositives:
             return_value=[feed],
         ) as mock_get_feeds, patch(
             "process_false_positives.get_model_inference"
-        ), patch("process_false_positives.get_orcahello_detections", return_value=[]):
+        ), patch("process_false_positives.get_orcahello_moderated_detections", return_value=[]):
             summary = process_false_positives(
                 manual_samples_path=tmp_path / "manual_samples.csv",
                 output_dir=tmp_path / "segments",
@@ -162,10 +162,10 @@ class TestProcessFalsePositives:
 
         with patch("process_false_positives.get_model_inference") as mock_get_model, \
              patch("process_false_positives.get_orcasite_feeds_with_retry", return_value=[feed]), \
-             patch("process_false_positives.get_orcahello_detections", return_value=[detection]), \
+             patch("process_false_positives.get_orcahello_moderated_detections", return_value=[detection]), \
              patch("process_false_positives.download_60s_audio", return_value=str(wav_path)), \
              patch(
-                 "process_false_positives.add_samples",
+                 "process_false_positives.add_training_3s_samples",
                  return_value=[
                      {
                          "Category": "resident",
@@ -241,10 +241,10 @@ class TestProcessFalsePositives:
 
         with patch("process_false_positives.get_model_inference") as mock_get_model, \
              patch("process_false_positives.get_orcasite_feeds_with_retry", return_value=[feed]), \
-             patch("process_false_positives.get_orcahello_detections", return_value=[detection]), \
+             patch("process_false_positives.get_orcahello_moderated_detections", return_value=[detection]), \
              patch("process_false_positives.download_60s_audio", return_value=str(wav_path)), \
              patch(
-                 "process_false_positives.add_samples",
+                 "process_false_positives.add_training_3s_samples",
                  return_value=[
                      {
                          "Category": "resident",
@@ -303,10 +303,10 @@ class TestProcessFalsePositives:
 
         with patch("process_false_positives.get_model_inference") as mock_get_model, \
              patch("process_false_positives.get_orcasite_feeds_with_retry", return_value=[feed]), \
-             patch("process_false_positives.get_orcahello_detections", return_value=[detection]), \
+             patch("process_false_positives.get_orcahello_moderated_detections", return_value=[detection]), \
              patch("process_false_positives.download_60s_audio", return_value=str(wav_path)), \
              patch(
-                 "process_false_positives.add_samples",
+                 "process_false_positives.add_training_3s_samples",
                  return_value=[
                      {
                          "Category": "transient",
@@ -392,12 +392,12 @@ class TestProcessFalsePositives:
         with patch("process_false_positives.get_model_inference") as mock_get_model, \
              patch("process_false_positives.get_orcasite_feeds_with_retry", return_value=[feed]), \
              patch(
-                 "process_false_positives.get_orcahello_detections",
+                 "process_false_positives.get_orcahello_moderated_detections",
                  return_value=[next_detection, failed_detection],
              ), \
              patch("process_false_positives.download_60s_audio", return_value=str(wav_path)), \
              patch(
-                 "process_false_positives.add_samples",
+                 "process_false_positives.add_training_3s_samples",
                  side_effect=[
                      RuntimeError("decode error"),
                      [
@@ -458,12 +458,12 @@ class TestProcessFalsePositives:
         with patch("process_false_positives.get_model_inference") as mock_get_model, \
              patch("process_false_positives.get_orcasite_feeds_with_retry", return_value=[feed]), \
              patch(
-                 "process_false_positives.get_orcahello_detections",
+                 "process_false_positives.get_orcahello_moderated_detections",
                  return_value=[matching_detection, non_matching_detection],
              ), \
              patch("process_false_positives.download_60s_audio", return_value=str(wav_path)), \
              patch(
-                 "process_false_positives.add_samples",
+                 "process_false_positives.add_training_3s_samples",
                  return_value=[
                      {
                          "Category": "resident",
@@ -523,7 +523,7 @@ class TestProcessFalsePositives:
         with patch("process_false_positives.get_model_inference"), \
              patch("process_false_positives.get_orcasite_feeds_with_retry", return_value=[feed]), \
              patch(
-                 "process_false_positives.get_orcahello_detections",
+                 "process_false_positives.get_orcahello_moderated_detections",
                  return_value=[confirmed, unreviewed, out_of_range],
              ):
             summary = process_false_positives(
