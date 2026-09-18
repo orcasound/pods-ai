@@ -237,7 +237,7 @@ class TestProcessFalseNegatives:
              patch("process_false_negatives.get_orcasite_feeds_with_retry", return_value=[feed]), \
              patch("process_false_negatives.get_orcahello_moderated_detections", return_value=[detection]), \
              patch("process_false_negatives.download_60s_audio", return_value=str(wav_path)), \
-             patch("process_false_negatives.add_training_3s_samples", return_value=segment_rows) as mock_add_samples:
+             patch("process_false_negatives.add_training_3s_samples") as mock_add_samples:
             summary = process_false_negatives(
                 manual_samples_path=tmp_path / "manual_samples.csv",
                 output_dir=tmp_path / "segments",

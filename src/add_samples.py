@@ -832,7 +832,7 @@ def main() -> int:
         return 1
 
     try:
-        results = add_training_samples(
+        results = add_training_3s_samples(
             wav_file=args.wav_file,
             uri=args.uri,
             node_name=args.node_name,
