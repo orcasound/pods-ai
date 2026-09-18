@@ -111,7 +111,7 @@ def process_false_positives(
 
     The returned summary includes ``confirmed`` and ``unreviewed`` counters for
     in-range detections that were not rejected, giving diagnostic context when
-    ``rejected`` is zero (e.g. because human review is still pending).
+    ``rejected`` is zero (e.g., because human review is still pending).
     """
     summary = {
         "confirmed": 0,
@@ -144,7 +144,7 @@ def process_false_positives(
 
     for feed in feeds:
         print(f"Processing feed {feed.node_name}")
-        for detection in get_orcahello_detections(feed):
+        for detection in get_orcahello_detections(feed, start_time, end_time):
             if detection.timestamp is None:
                 continue
             status = detection.status.lower()

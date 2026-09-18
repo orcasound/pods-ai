@@ -87,7 +87,7 @@ def process_false_negatives(
 
     for feed in feeds:
         print(f"Processing feed {feed.node_name}")
-        for detection in get_orcahello_detections(feed):
+        for detection in get_orcahello_detections(feed, start_time, end_time):
             if detection.status.lower() != "confirmed" or detection.timestamp is None:
                 continue
             # OrcaHello detections are returned in descending timestamp order.
