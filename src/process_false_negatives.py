@@ -20,7 +20,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Optional
 
-from add_samples import DEFAULT_DETECTIONS_CSV, DEFAULT_MODEL_PATH, DEFAULT_OUTPUT_DIR, add_samples
+from add_samples import DEFAULT_DETECTIONS_CSV, DEFAULT_MODEL_PATH, DEFAULT_OUTPUT_DIR, add_training_3s_samples
 from audio_utils import (
     download_60s_audio,
     format_timestamp_pst,
@@ -127,7 +127,7 @@ def process_false_negatives(
                         f"Running add_samples.py for {feed.node_name} {timestamp_str} "
                         "with corrected class 'resident'."
                     )
-                    podsai_segment_rows = add_samples(
+                    podsai_segment_rows = add_training_3s_samples(
                         wav_file=wav_path,
                         node_name=feed.node_name,
                         base_timestamp=timestamp_str,

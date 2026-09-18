@@ -19,7 +19,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Optional
 
-from add_samples import DEFAULT_DETECTIONS_CSV, DEFAULT_MODEL_PATH, DEFAULT_OUTPUT_DIR, add_samples
+from add_samples import DEFAULT_DETECTIONS_CSV, DEFAULT_MODEL_PATH, DEFAULT_OUTPUT_DIR, add_training_3s_samples, add_testing_60s_sample
 from audio_utils import (
     SKIP_TERMS,
     download_60s_audio,
@@ -31,7 +31,8 @@ from manual_samples_utils import append_manual_samples, load_existing_uris
 from model_inference import get_model_inference
 from orcasite_feeds import get_orcasite_feeds_with_retry
 
-DEFAULT_MANUAL_SAMPLES_CSV = "output/csv/new_manual_samples.csv"
+DEFAULT_MANUAL_TRAINING_SAMPLES_CSV = "output/csv/new_manual_training_samples.csv"
+DEFAULT_MANUAL_TESTING_SAMPLES_CSV = "output/csv/new_manual_testing_samples.csv"
 BIRD_TERMS = ("bird", "pigu", "keir")
 RESIDENT_TERMS = ("resident", "pod")
 TRANSIENT_TERMS = ("bigg", "transient")
@@ -113,6 +114,7 @@ def process_false_positives(
     model_path: str = DEFAULT_MODEL_PATH,
     detections_csv: str = DEFAULT_DETECTIONS_CSV,
     feed_filter: Optional[str] = None,
+    for_training: bool = True,
     actual_category_filter: Optional[str] = None,
     start_time: Optional[datetime] = None,
     end_time: Optional[datetime] = None,
@@ -149,8 +151,9 @@ def process_false_positives(
             return summary
 
     existing_uris = load_existing_uris(manual_samples_path)
-    print(f"Loading podsai model from {model_path}...")
-    model = get_model_inference(model_type="podsai", model_path=model_path)
+    if for_training:
+        print(f"Loading podsai model from {model_path}...")
+        model = get_model_inference(model_type="podsai", model_path=model_path)
 
     for feed in feeds:
         print(f"Processing feed {feed.node_name}")
@@ -184,6 +187,7 @@ def process_false_positives(
             if normalized_category_filter and corrected_class != normalized_category_filter:
                 continue
 
+            # For the training set, we need to run PODS-AI inference on the 60econd WAV to find mismatched whale-class segments.
             print(f"Checking rejected OrcaHello detection at {timestamp_str}")
 
             with TemporaryDirectory() as temp_dir:
@@ -193,37 +197,54 @@ def process_false_positives(
                     summary["download_failed"] += 1
                     continue
 
-                try:
-                    inference = model.predict(wav_path)
-                    if inference.get("global_prediction_label") != "resident":
-                        print(
-                            f"Continuing with {feed.node_name} {timestamp_str}: "
-                            "PODS-AI global prediction is not resident."
-                        )
-                        summary["not_false_positive"] += 1
+                if not for_training:
+                    # For the testing set, we do not need to run PODS-AI inference on the 60-second WAV.
+                    print(f"Appending mismatched whale-class segments to {manual_samples_path} for {feed.node_name} {timestamp_str} with corrected class '{corrected_class}'.")
+                    print(f"Running add_samples.py for {feed.node_name} {timestamp_str} with corrected class '{corrected_class}'.")
 
-                    print(
-                        f"Running add_samples.py for {feed.node_name} {timestamp_str} "
-                        f"with corrected class '{corrected_class}'."
-                    )
-
-                    segment_rows = add_samples(
+                    segment_row = add_testing_60s_sample(
                         wav_file=wav_path,
                         node_name=feed.node_name,
                         base_timestamp=timestamp_str,
-                        output_dir=str(output_dir),
-                        model_path=model_path,
                         detections_csv=detections_csv,
-                        model=model,
                         corrected_class=corrected_class,
                         fallback_description=detection.comments,
                         fallback_notes="fp_machine",
                         fallback_tags=detection.tags,
                     )
-                except Exception as exc:
-                    print(f"Skipping {feed.node_name} {timestamp_str}: processing failed ({exc}).")
-                    summary["processing_failed"] += 1
-                    continue
+                    segment_rows = [segment_row]
+                else:
+                    try:
+                        inference = model.predict(wav_path)
+                        if inference.get("global_prediction_label") != "resident":
+                            print(
+                                f"Continuing with {feed.node_name} {timestamp_str}: "
+                                "PODS-AI global prediction is not resident."
+                            )
+                            summary["not_false_positive"] += 1
+
+                        print(
+                            f"Running add_samples.py for {feed.node_name} {timestamp_str} "
+                            f"with corrected class '{corrected_class}'."
+                        )
+
+                        segment_rows = add_training_3s_samples(
+                            wav_file=wav_path,
+                            node_name=feed.node_name,
+                            base_timestamp=timestamp_str,
+                            output_dir=str(output_dir),
+                            model_path=model_path,
+                            detections_csv=detections_csv,
+                            model=model,
+                            corrected_class=corrected_class,
+                            fallback_description=detection.comments,
+                            fallback_notes="fp_machine",
+                            fallback_tags=detection.tags,
+                        )
+                    except Exception as exc:
+                        print(f"Skipping {feed.node_name} {timestamp_str}: processing failed ({exc}).")
+                        summary["processing_failed"] += 1
+                        continue
 
             mismatched_whale_rows = []
             for row in segment_rows:
@@ -250,10 +271,18 @@ def main() -> int:
     """Run the false-positive processing CLI."""
     parser = argparse.ArgumentParser(
         description=(
-            "Process rejected OrcaHello resident detections, re-run PODS-AI on the "
+            "Process rejected OrcaHello resident detections looking for new training "
+            "or testing samples.  For training samples, re-run PODS-AI on the "
             "60-second WAV, and append mismatched whale-class sub-segments to "
-            "new_manual_samples.csv with a corrected class."
+            "new_manual_training_samples.csv with a corrected class.  For testing "
+            "append mismatched whale-class segments to new_manual_testing_samples.csv."
         )
+    )
+    parser.add_argument(
+        "--set",
+        type=str,
+        default="training",
+        help="training or testing",
     )
     parser.add_argument(
         "--feed",
@@ -279,8 +308,7 @@ def main() -> int:
     )
     parser.add_argument(
         "--manual-samples-csv",
-        default=DEFAULT_MANUAL_SAMPLES_CSV,
-        help="Path to new_manual_samples.csv.",
+        help="Path to new manual samples csv.",
     )
     parser.add_argument(
         "--output-dir",
@@ -308,16 +336,29 @@ def main() -> int:
 
     start_time = parse_pst_timestamp(args.start) if args.start else None
     end_time = None if (args.end or "").lower() == "now" else parse_pst_timestamp(args.end)
+    result_set = args.set.lower()
+    if result_set not in ("training", "testing"):
+        print(f"Invalid set value: {args.set}. Must be 'training' or 'testing'.")
+        return 1
+
+    manual_samples_csv = args.manual_samples_csv
+    if not manual_samples_csv:
+        manual_samples_csv = (
+            DEFAULT_MANUAL_TRAINING_SAMPLES_CSV
+            if result_set == "training"
+            else DEFAULT_MANUAL_TESTING_SAMPLES_CSV
+        )
 
     summary = process_false_positives(
-        manual_samples_path=Path(args.manual_samples_csv),
+        manual_samples_path=Path(manual_samples_csv),
         output_dir=Path(args.output_dir),
         model_path=args.model_path,
         detections_csv=args.detections_csv,
         feed_filter=args.feed,
+        for_training=(result_set == "training"),
         actual_category_filter=args.category,
         start_time=start_time,
-        end_time=end_time,
+        end_time=end_time
     )
 
     print("\nSummary:")

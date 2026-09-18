@@ -458,7 +458,7 @@ def get_segment_prediction(model: object, segment_path: Path) -> tuple[str, floa
     return label, confidence
 
 
-def add_samples(
+def add_training_3s_samples(
     wav_file: Optional[str] = None,
     uri: Optional[str] = None,
     node_name: Optional[str] = None,
@@ -641,6 +641,156 @@ def add_samples(
     return results
 
 
+def add_testing_60s_sample(
+    wav_file: Optional[str] = None,
+    uri: Optional[str] = None,
+    node_name: Optional[str] = None,
+    base_timestamp: Optional[str] = None,
+    output_dir: str = DEFAULT_OUTPUT_DIR,
+    detections_csv: str = DEFAULT_DETECTIONS_CSV,
+    corrected_class: Optional[str] = None,
+    fallback_description: Optional[str] = None,
+    fallback_notes: Optional[str] = None,
+    fallback_tags: Optional[str] = None
+) -> dict:
+    """
+    Saves segments to output_dir using the filename convention
+    {node_name_with_hyphens}_{timestamp_pst}.wav and returns a
+    dictionary with manual_testing_60s_samples.csv fields.
+
+    Either wav_file or uri must be provided:
+    - If wav_file is provided, uses that local file
+    - If uri is provided, downloads the 60-second audio from Orcasound
+
+    If node_name or base_timestamp are not provided they are inferred from the
+    wav_file filename (or from the uri), which must follow the convention used by download_wavs.py:
+    {node_name_with_hyphens}_{YYYY_MM_DD_HH_MM_SS_PST}.wav
+    (e.g., rpi-orcasound-lab_2025_12_17_22_34_03_PST.wav).
+
+    Args:
+        wav_file: Path to the input WAV file. Either wav_file or uri must be provided.
+        uri: Detection URI to download audio from. Either wav_file or uri must be provided.
+        node_name: Hydrophone node name (e.g., "rpi_orcasound_lab").
+            Inferred from wav_file filename or uri if not provided.
+        base_timestamp: PST timestamp of the start of the recording
+            (e.g., "2025_01_15_12_30_00_PST").
+            Inferred from wav_file filename or uri if not provided.
+        output_dir: Directory to save segments (default: "new").
+        detections_csv: Path to detections.csv for detection lookup (default: "bootstrap/csv/detections.csv").
+        corrected_class: Optional corrected class. When provided, rows whose
+            predicted class already matches this class are not printed.
+        fallback_description: Optional description to use when the detection
+            is not found in detections.csv.
+        fallback_notes: Optional notes to use when the detection is not found
+            in detections.csv. Defaults to "manual" when not provided.
+        fallback_tags: Optional tags to use when the detection is not found
+            in detections.csv. Defaults to None when not provided.
+
+    Returns:
+        Dictionary with keys matching testing_60s_samples.csv format:
+        Category, NodeName, Timestamp, URI, Description, Notes, Confidence, Tags.
+
+    Raises:
+        ValueError: If neither wav_file nor uri is provided, or if node_name or
+            base_timestamp cannot be inferred and are not provided.
+    """
+    if wav_file is None and uri is None:
+        raise ValueError("Either wav_file or uri must be provided")
+
+    if wav_file is not None and uri is not None:
+        raise ValueError("Cannot specify both wav_file and uri")
+
+    # Handle URI-based download.
+    temp_dir = None
+    if uri is not None:
+        # Parse node name and timestamp from URI.
+        if node_name is None or base_timestamp is None:
+            inferred_node, inferred_ts = parse_uri(uri)
+            if node_name is None:
+                node_name = inferred_node
+            if base_timestamp is None:
+                base_timestamp = inferred_ts
+
+        print(f"Downloading 60-second audio from URI...")
+        print(f"  Node: {node_name}")
+        print(f"  Timestamp: {base_timestamp}")
+
+        # Download the 60-second WAV file.
+        temp_dir = TemporaryDirectory()
+        wav_path = download_60s_audio(node_name, base_timestamp, temp_dir.name)
+
+        if wav_path is None:
+            temp_dir.cleanup()
+            raise ValueError(f"Failed to download audio for {node_name} at {base_timestamp}")
+
+        wav_file = wav_path
+        print(f"Downloaded to: {wav_file}")
+
+    # At this point wav_file is set (either user-provided or downloaded).
+    if node_name is None or base_timestamp is None:
+        inferred_node, inferred_ts = parse_node_and_timestamp_from_filename(wav_file)
+        if node_name is None:
+            node_name = inferred_node
+        if base_timestamp is None:
+            base_timestamp = inferred_ts
+
+    out_dir = Path(output_dir)
+
+    # Try to look up detection info in detections.csv.
+    detection_info = lookup_detection_in_csv(node_name, base_timestamp, detections_csv)
+    if detection_info:
+        # Use Description and Notes from detections.csv.
+        shared_description = detection_info.description
+        shared_notes = detection_info.notes
+        shared_tags = detection_info.tags
+    else:
+        shared_description = (fallback_description or "").strip()
+        candidate_notes = (fallback_notes or "").strip()
+        shared_notes = candidate_notes if candidate_notes else "manual"
+        shared_tags = (fallback_tags or "").strip()
+
+    # Clean up temporary directory if we downloaded the file.
+    if temp_dir is not None:
+        temp_dir.cleanup()
+
+    print("\nSegment in manual_samples.csv format:")
+    csv_writer = csv.writer(sys.stdout, lineterminator="\n")
+    csv_writer.writerow(
+        ["Category", "NodeName", "Timestamp", "URI", "Description", "Notes", "Confidence", "Tags"]
+    )
+
+    # Generate URI matching this segment's timestamp.
+    segment_uri = generate_uri(node_name, base_timestamp)
+
+    # Create row dict matching manual_samples.csv format.
+    row = {
+            "Category": corrected_class,
+            "NodeName": node_name,
+            "Timestamp": base_timestamp,
+            "URI": segment_uri,
+            "Description": shared_description,
+            "Notes": shared_notes,
+            "Confidence": 100,
+            "Tags": shared_tags
+        }
+
+    # Print in CSV format (ready to copy-paste) unless already corrected.
+    csv_writer.writerow(
+        [
+            corrected_class,
+            node_name,
+            base_timestamp,
+            segment_uri,
+            shared_description,
+            shared_notes,
+            row["Confidence"],
+            shared_tags,
+        ]
+        )
+
+    return row
+
+
 def main() -> int:
     """Entry point for the add_samples CLI.
 
@@ -746,7 +896,7 @@ def main() -> int:
         return 1
 
     try:
-        results = add_samples(
+        results = add_training_samples(
             wav_file=args.wav_file,
             uri=args.uri,
             node_name=args.node_name,
