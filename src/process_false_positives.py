@@ -14,6 +14,8 @@ For each rejected OrcaHello detection in the selected timeframe, this script:
 """
 
 import argparse
+import csv
+import sys
 from datetime import datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -39,7 +41,7 @@ TRANSIENT_TERMS = ("bigg", "transient")
 HUMAN_TERMS = ("human", "radio")
 VESSEL_TERMS = ("vessel", "ship", "boat", "train")
 WHALE_CLASSES = {"resident", "transient", "humpback"}
-OTHER_CLASSES = {"bird", "human", "vessel", "jingle", "water"}
+OTHER_CLASSES = {"bird", "human", "vessel", "jingle", "water", "other"}
 # Phrases that negate "humpback" or "vessel" labels (e.g. human-written "No humpback nor vessel").
 NO_HUMPBACK_TERMS = ("no humpback", "not humpback")
 NO_VESSEL_TERMS = ("no vessel", "nor vessel", "no boat", "nor boat", "no ship", "nor ship", "no train", "nor train")
@@ -64,6 +66,7 @@ def get_corrected_class(tags: str, comments: str) -> Optional[str]:
             normalized_tag = tag.strip().lower()
             if normalized_tag in WHALE_CLASSES or normalized_tag in OTHER_CLASSES:
                 return normalized_tag
+        return "other"
 
     # Drop auto-generated "AI: …" lines so they do not influence class inference.
     human_lines = [
@@ -157,6 +160,10 @@ def process_false_positives(
 
     for feed in feeds:
         print(f"Processing feed {feed.node_name}")
+        csv_writer = csv.writer(sys.stdout, lineterminator="\n")
+        csv_writer.writerow(
+            ["Category", "NodeName", "Timestamp", "URI", "Description", "Notes", "Confidence", "Tags"]
+        )
         for detection in get_moderated_orcahello_detections(feed, start_time, end_time):
             if detection.timestamp is None:
                 continue
@@ -181,29 +188,15 @@ def process_false_positives(
             summary["rejected"] += 1
             corrected_class = get_corrected_class(detection.tags, detection.comments)
             if corrected_class is None:
-                print(f"Skipping {feed.node_name} {timestamp_str}: could not determine corrected class from comment '{detection.comments}'.")
+                print(f"Skipping {feed.node_name} {timestamp_str}: could not determine corrected class from comment '{detection.comments}' and tags '{detection.tags}'.")
                 summary["unknown_class"] += 1
                 continue
             if normalized_category_filter and corrected_class != normalized_category_filter:
                 continue
 
-            # For the training set, we need to run PODS-AI inference on the 60econd WAV to find mismatched whale-class segments.
-            print(f"Checking rejected OrcaHello detection at {timestamp_str}")
-
             with TemporaryDirectory() as temp_dir:
-                wav_path = download_60s_audio(feed.node_name, timestamp_str, temp_dir)
-                if wav_path is None:
-                    print(f"Skipping {feed.node_name} {timestamp_str}: failed to download audio.")
-                    summary["download_failed"] += 1
-                    continue
-
                 if not for_training:
-                    # For the testing set, we do not need to run PODS-AI inference on the 60-second WAV.
-                    print(f"Appending mismatched whale-class segments to {manual_samples_path} for {feed.node_name} {timestamp_str} with corrected class '{corrected_class}'.")
-                    print(f"Running add_samples.py for {feed.node_name} {timestamp_str} with corrected class '{corrected_class}'.")
-
                     segment_row = add_testing_60s_sample(
-                        wav_file=wav_path,
                         node_name=feed.node_name,
                         base_timestamp=timestamp_str,
                         detections_csv=detections_csv,
@@ -214,6 +207,15 @@ def process_false_positives(
                     )
                     segment_rows = [segment_row]
                 else:
+                    # For the training set, we need to run PODS-AI inference on the 60econd WAV to find mismatched whale-class segments.
+                    print(f"Checking rejected OrcaHello detection at {timestamp_str}")
+
+                    wav_path = download_60s_audio(feed.node_name, timestamp_str, temp_dir)
+                    if wav_path is None:
+                        print(f"Skipping {feed.node_name} {timestamp_str}: failed to download audio.")
+                        summary["download_failed"] += 1
+                        continue
+
                     try:
                         inference = model.predict(wav_path)
                         if inference.get("global_prediction_label") != "resident":
