@@ -24,7 +24,7 @@ from audio_utils import (
     SKIP_TERMS,
     download_60s_audio,
     format_timestamp_pst,
-    get_orcahello_detections,
+    get_moderated_orcahello_detections,
     parse_pst_timestamp,
 )
 from manual_samples_utils import append_manual_samples, load_existing_uris
@@ -38,15 +38,18 @@ TRANSIENT_TERMS = ("bigg", "transient")
 HUMAN_TERMS = ("human", "radio")
 VESSEL_TERMS = ("vessel", "ship", "boat", "train")
 WHALE_CLASSES = {"resident", "transient", "humpback"}
+OTHER_CLASSES = {"bird", "human", "vessel", "jingle", "water"}
 # Phrases that negate "humpback" or "vessel" labels (e.g. human-written "No humpback nor vessel").
 NO_HUMPBACK_TERMS = ("no humpback", "not humpback")
 NO_VESSEL_TERMS = ("no vessel", "nor vessel", "no boat", "nor boat", "no ship", "nor ship", "no train", "nor train")
 
 
-def get_corrected_class(comments: str) -> Optional[str]:
-    """Infer the corrected class from OrcaHello moderation comments.
+def get_corrected_class(tags: str, comments: str) -> Optional[str]:
+    """Infer the corrected class from OrcaHello moderation tags and comments.
 
-    Auto-generated "AI: …" prefix lines are stripped before parsing so that
+    Use tags if available, otherwise infer from comments.  Return None if no class can be inferred.
+
+    Auto-generated "AI: …" prefix comment lines are stripped before parsing so that
     phrases like "AI: humpback" do not influence the result.  Explicit negations
     ("No humpback", "No humpback nor vessel") are recognised:
 
@@ -54,6 +57,13 @@ def get_corrected_class(comments: str) -> Optional[str]:
     * "No humpback nor vessel" (and no other positive signal) – returns
       ``"water"``.
     """
+    if tags:
+        # Use the first tag matching a class as the corrected class if available.
+        for tag in tags.split(";"):
+            normalized_tag = tag.strip().lower()
+            if normalized_tag in WHALE_CLASSES or normalized_tag in OTHER_CLASSES:
+                return normalized_tag
+
     # Drop auto-generated "AI: …" lines so they do not influence class inference.
     human_lines = [
         line for line in (comments or "").splitlines()
@@ -144,7 +154,7 @@ def process_false_positives(
 
     for feed in feeds:
         print(f"Processing feed {feed.node_name}")
-        for detection in get_orcahello_detections(feed, start_time, end_time):
+        for detection in get_moderated_orcahello_detections(feed, start_time, end_time):
             if detection.timestamp is None:
                 continue
             status = detection.status.lower()
@@ -166,9 +176,9 @@ def process_false_positives(
 
             timestamp_str = format_timestamp_pst(detection.timestamp)
             summary["rejected"] += 1
-            corrected_class = get_corrected_class(detection.comments)
+            corrected_class = get_corrected_class(detection.tags, detection.comments)
             if corrected_class is None:
-                print(f"Skipping {feed.node_name} {timestamp_str}: could not determine corrected class from comments.")
+                print(f"Skipping {feed.node_name} {timestamp_str}: could not determine corrected class from comment '{detection.comments}'.")
                 summary["unknown_class"] += 1
                 continue
             if normalized_category_filter and corrected_class != normalized_category_filter:
@@ -208,6 +218,7 @@ def process_false_positives(
                         corrected_class=corrected_class,
                         fallback_description=detection.comments,
                         fallback_notes="fp_machine",
+                        fallback_tags=detection.tags,
                     )
                 except Exception as exc:
                     print(f"Skipping {feed.node_name} {timestamp_str}: processing failed ({exc}).")

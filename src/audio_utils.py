@@ -53,6 +53,7 @@ class OrcaHelloDetection:
     timestamp: Optional[datetime]
     status: str
     confidence: Optional[float] = None
+    tags: str = ""
     comments: str = ""
 
 
@@ -229,13 +230,13 @@ def get_node_name_for_feed(feed: OrcasiteFeed) -> str:
     return feed.node_name
 
 
-def get_orcahello_detections(
+def get_moderated_orcahello_detections(
     feed: OrcasiteFeed,
     start_time: Optional[datetime] = None,
     end_time: Optional[datetime] = None
 ) -> List[OrcaHelloDetection]:
     """
-    Retrieve OrcaHello detections and return those whose audio URI contains the given feed's node_name.
+    Retrieve moderated OrcaHello detections and return those whose audio URI contains the given feed's node_name.
     """
     if not COSMOS_KEY:
         raise ValueError("COSMOS_KEY environment variable must be set and non-empty to fetch OrcaHello detections")
@@ -248,7 +249,7 @@ def get_orcahello_detections(
 
     query = """
         SELECT * FROM c
-        WHERE c.location.id = @node_name
+        WHERE c.location.id = @node_name AND c.reviewed = true
     """
     params = [{"name": "@node_name", "value": node_name}]
     if start_time:
@@ -296,7 +297,8 @@ def get_orcahello_detections(
                 timestamp=ts,
                 status=status,
                 confidence=confidence,
-                comments=(item.get("comments") or "").strip(),
+                tags=(item.get("tags") or "").strip(),
+                comments=(item.get("comments") or "").strip()
             )
         )
 

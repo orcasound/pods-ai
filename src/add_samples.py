@@ -471,6 +471,7 @@ def add_samples(
     corrected_class: Optional[str] = None,
     fallback_description: Optional[str] = None,
     fallback_notes: Optional[str] = None,
+    fallback_tags: Optional[str] = None
 ) -> list[dict]:
     """
     Split a 60-second audio sample into 3-second segments, save them, and run inference on each.
@@ -511,10 +512,12 @@ def add_samples(
             is not found in detections.csv.
         fallback_notes: Optional notes to use when the detection is not found
             in detections.csv. Defaults to "manual" when not provided.
+        fallback_tags: Optional tags to use when the detection is not found
+            in detections.csv. Defaults to None when not provided.
 
     Returns:
         List of dictionaries with keys matching manual_samples.csv format:
-        Category, NodeName, Timestamp, URI, Description, Notes, Confidence.
+        Category, NodeName, Timestamp, URI, Description, Notes, Confidence, Tags.
 
     Raises:
         ValueError: If neither wav_file nor uri is provided, or if node_name or
@@ -568,10 +571,12 @@ def add_samples(
         # Use Description and Notes from detections.csv.
         shared_description = detection_info.description
         shared_notes = detection_info.notes
+        shared_tags = detection_info.tags
     else:
         shared_description = (fallback_description or "").strip()
         candidate_notes = (fallback_notes or "").strip()
         shared_notes = candidate_notes if candidate_notes else "manual"
+        shared_tags = (fallback_tags or "").strip()
 
     # Split the WAV and save segments.
     segments = split_wav_into_segments(wav_file, node_name, base_timestamp, out_dir)
@@ -593,7 +598,7 @@ def add_samples(
     print("\nSegments in manual_samples.csv format:")
     csv_writer = csv.writer(sys.stdout, lineterminator="\n")
     csv_writer.writerow(
-        ["Category", "NodeName", "Timestamp", "URI", "Description", "Notes", "Confidence"]
+        ["Category", "NodeName", "Timestamp", "URI", "Description", "Notes", "Confidence", "Tags"]
     )
 
     for seg_path, timestamp_str in segments:
@@ -614,6 +619,7 @@ def add_samples(
             "Description": shared_description,
             "Notes": shared_notes,
             "Confidence": f"{confidence_pct:.1f}",
+            "Tags": shared_tags
         }
         results.append(row)
 
@@ -628,6 +634,7 @@ def add_samples(
                     shared_description,
                     shared_notes,
                     row["Confidence"],
+                    shared_tags,
                 ]
             )
 
