@@ -40,6 +40,7 @@ RESIDENT_TERMS = ("resident", "pod")
 TRANSIENT_TERMS = ("bigg", "transient")
 HUMAN_TERMS = ("human", "radio")
 VESSEL_TERMS = ("vessel", "ship", "boat", "train")
+OTHER_TERMS = ("seal")
 WHALE_CLASSES = {"resident", "transient", "humpback"}
 OTHER_CLASSES = {"bird", "human", "vessel", "jingle", "water", "other"}
 # Phrases that negate "humpback" or "vessel" labels (e.g. human-written "No humpback nor vessel").
@@ -96,6 +97,8 @@ def get_corrected_class(tags: str, comments: str) -> Optional[str]:
         return "vessel"
     if "jingl" in text:
         return "jingle"
+    if any(term in text for term in OTHER_TERMS):
+        return "other"
     if "water" in text:
         return "water"
     # No positive signal found: the sound is ambient noise.
