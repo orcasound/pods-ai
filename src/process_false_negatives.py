@@ -102,7 +102,7 @@ def process_false_negatives(
             print(f"Checking confirmed OrcaHello detection at {timestamp_str}")
 
             with TemporaryDirectory() as temp_dir:
-                wav_path = download_60s_audio(node_name: feed.node_name, min_end_timestamp_str: timestamp_str, tmp_dir: temp_dir)
+                wav_path = download_60s_audio(node_name=feed.node_name, min_end_timestamp_str=timestamp_str, tmp_dir=temp_dir)
                 if wav_path is None:
                     print(f"Skipping {feed.node_name} {timestamp_str}: failed to download audio.")
                     summary["download_failed"] += 1
