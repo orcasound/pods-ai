@@ -40,7 +40,7 @@ def load_manual_samples(manual_samples_path: Path) -> list[dict]:
         with open(manual_samples_path, 'r', encoding='utf-8') as f:
             reader = csv.DictReader(f)
 
-            required_fields = {'Category', 'NodeName', 'Timestamp', 'URI'}
+            required_fields = {'Category', 'NodeName', 'StartTimestamp', 'URI'}
             if not required_fields.issubset(set(reader.fieldnames or [])):
                 missing = required_fields - set(reader.fieldnames or [])
                 print(f"  Warning: Required columns missing in {manual_samples_path}: {missing}")
@@ -56,7 +56,7 @@ def load_manual_samples(manual_samples_path: Path) -> list[dict]:
                     manual_samples.append({
                         'Category': row.get('Category', '').strip(),
                         'NodeName': row.get('NodeName', '').strip(),
-                        'Timestamp': row.get('Timestamp', '').strip(),
+                        'StartTimestamp': row.get('StartTimestamp', '').strip(),
                         'URI': row.get('URI', '').strip(),
                         'Description': row.get('Description', '').strip(),
                         'Notes': row.get('Notes', '').strip(),
@@ -96,12 +96,12 @@ def predict_output_timestamp(
         return manual_timestamps[sample['URI']]
 
     if sample['Notes'] == 'tp_human_only':
-        return sample['Timestamp']
+        return sample['StartTimestamp']
 
     if sample.get('_from_manual_samples', False):
-        return sample['Timestamp']
+        return sample['StartTimestamp']
 
-    return subtract_segment_duration(sample['Timestamp'], segment_duration)
+    return subtract_segment_duration(sample['StartTimestamp'], segment_duration)
 
 
 def merge_manual_samples(
@@ -139,7 +139,7 @@ def merge_manual_samples(
             replaced_count += 1
             print(
                 "  Replacing auto-selected sample "
-                f"(URI: {sample['URI']}, timestamp: {sample['Timestamp']} -> {output_ts}) "
+                f"(URI: {sample['URI']}, timestamp: {sample['StartTimestamp']} -> {output_ts}) "
                 "with manual sample"
             )
             continue

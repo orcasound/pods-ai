@@ -1,4 +1,4 @@
-Category,NodeName,Timestamp,URI,Description,Notes,Confidence
+Category,NodeName,StartTimestamp,URI,Description,Notes,Confidence
 human,rpi_sunset_bay,2024_07_19_12_51_09_PST,https://live.orcasound.net/bouts/new/sunset-bay?time=2024-07-19T19%3A51%3A09.000Z,Human voices causing false positives despite significant noise from something contacting ladder and/or hydrophone.,fp_machine_only,54.4156
 human,rpi_sunset_bay,2024_07_21_09_13_24_PST,https://live.orcasound.net/bouts/new/sunset-bay?time=2024-07-21T16%3A13%3A24.067Z,Human voices via am radio noise,fp_machine_only,62.5619
 human,rpi_sunset_bay,2024_07_23_11_32_51_PST,https://live.orcasound.net/bouts/new/sunset-bay?time=2024-07-23T18%3A32%3A51.186Z,Human voices causing false positives in contact and AM radio noise.,fp_machine_only,54.6530

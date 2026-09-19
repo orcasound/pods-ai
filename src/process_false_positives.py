@@ -16,7 +16,7 @@ For each rejected OrcaHello detection in the selected timeframe, this script:
 import argparse
 import csv
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Optional
@@ -27,7 +27,7 @@ from audio_utils import (
     download_60s_audio,
     format_timestamp_pst,
     get_orcahello_detections,
-    parse_pst_timestamp,
+    parse_timestamp_pst,
 )
 from manual_samples_utils import append_manual_samples, load_existing_uris
 from model_inference import get_model_inference
@@ -165,7 +165,7 @@ def process_false_positives(
         print(f"Processing feed {feed.node_name}")
         csv_writer = csv.writer(sys.stdout, lineterminator="\n")
         csv_writer.writerow(
-            ["Category", "NodeName", "Timestamp", "URI", "Description", "Notes", "Confidence", "Tags"]
+            ["Category", "NodeName", "StartTimestamp", "URI", "Description", "Notes", "Confidence", "Tags"]
         )
         for detection in get_orcahello_detections(feed, start_time, end_time):
             if detection.timestamp is None:
@@ -187,11 +187,11 @@ def process_false_positives(
             if end_time is not None and detection.timestamp > end_time:
                 continue
 
-            timestamp_str = format_timestamp_pst(detection.timestamp)
+            timestamp_str_pst = format_timestamp_pst(detection.timestamp)
             summary["rejected"] += 1
             corrected_class = get_corrected_class(detection.comments, detection.tags)
             if corrected_class is None:
-                print(f"Skipping {feed.node_name} {timestamp_str}: could not determine corrected class from comment '{detection.comments}' and tags '{detection.tags}'.")
+                print(f"Skipping {feed.node_name} {timestamp_str_pst}: could not determine corrected class from comment '{detection.comments}' and tags '{detection.tags}'.")
                 summary["unknown_class"] += 1
                 continue
             if normalized_category_filter and corrected_class != normalized_category_filter:
@@ -199,9 +199,10 @@ def process_false_positives(
 
             with TemporaryDirectory() as temp_dir:
                 if not for_training:
+                    testing_start_timestamp = format_timestamp_pst(detection.timestamp)
                     segment_row = add_testing_60s_sample(
                         node_name=feed.node_name,
-                        base_timestamp=timestamp_str,
+                        start_timestamp=testing_start_timestamp,
                         detections_csv=detections_csv,
                         corrected_class=corrected_class,
                         fallback_description=detection.comments,
@@ -211,11 +212,12 @@ def process_false_positives(
                     segment_rows = [segment_row]
                 else:
                     # For the training set, we need to run PODS-AI inference on the 60-second WAV to find mismatched whale-class segments.
-                    print(f"Checking rejected OrcaHello detection at {timestamp_str}")
+                    print(f"Checking rejected OrcaHello detection at {timestamp_str_pst}")
 
-                    wav_path = download_60s_audio(feed.node_name, timestamp_str, temp_dir)
+                    min_end_timestamp_pst_str = format_timestamp_pst(detection.timestamp + timedelta(seconds=60))
+                    wav_path = download_60s_audio(node_name=feed.node_name, min_end_timestamp_pst_str=min_end_timestamp_pst_str, tmp_dir=temp_dir)
                     if wav_path is None:
-                        print(f"Skipping {feed.node_name} {timestamp_str}: failed to download audio.")
+                        print(f"Skipping {feed.node_name} {timestamp_str_pst}: failed to download audio.")
                         summary["download_failed"] += 1
                         continue
 
@@ -223,20 +225,20 @@ def process_false_positives(
                         inference = model.predict(wav_path)
                         if inference.get("global_prediction_label") != "resident":
                             print(
-                                f"Continuing with {feed.node_name} {timestamp_str}: "
+                                f"Continuing with {feed.node_name} {timestamp_str_pst}: "
                                 "PODS-AI global prediction is not resident."
                             )
                             summary["not_false_positive"] += 1
 
                         print(
-                            f"Running add_samples.py for {feed.node_name} {timestamp_str} "
+                            f"Running add_samples.py for {feed.node_name} {timestamp_str_pst} "
                             f"with corrected class '{corrected_class}'."
                         )
 
                         segment_rows = add_training_3s_samples(
                             wav_file=wav_path,
                             node_name=feed.node_name,
-                            base_timestamp=timestamp_str,
+                            start_timestamp=timestamp_str_pst,
                             output_dir=str(output_dir),
                             model_path=model_path,
                             detections_csv=detections_csv,
@@ -247,7 +249,7 @@ def process_false_positives(
                             fallback_tags=detection.tags,
                         )
                     except Exception as exc:
-                        print(f"Skipping {feed.node_name} {timestamp_str}: processing failed ({exc}).")
+                        print(f"Skipping {feed.node_name} {timestamp_str_pst}: processing failed ({exc}).")
                         summary["processing_failed"] += 1
                         continue
 
@@ -351,8 +353,8 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    start_time = parse_pst_timestamp(args.start) if args.start else None
-    end_time = None if (args.end or "").lower() == "now" else parse_pst_timestamp(args.end)
+    start_time = parse_timestamp_pst(args.start) if args.start else None
+    end_time = None if (args.end or "").lower() == "now" else parse_timestamp_pst(args.end)
     result_set = args.set.lower()
     if result_set not in ("training", "testing"):
         print(f"Invalid set value: {args.set}. Must be 'training' or 'testing'.")

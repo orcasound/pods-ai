@@ -101,7 +101,7 @@ class TestAppendManualSamples:
         """Rows with URIs already in the file should not be appended again."""
         manual_samples_path = tmp_path / "manual_samples.csv"
         manual_samples_path.write_text(
-            "Category,NodeName,Timestamp,URI,Description,Notes,Confidence\n"
+            "Category,NodeName,StartTimestamp,URI,Description,Notes,Confidence\n"
             "vessel,rpi_test,2025_01_01_00_00_00_PST,https://example.com/existing,desc,notes,90.0\n",
             encoding="utf-8",
         )
@@ -110,7 +110,7 @@ class TestAppendManualSamples:
             {
                 "Category": "vessel",
                 "NodeName": "rpi_test",
-                "Timestamp": "2025_01_01_00_00_00_PST",
+                "StartTimestamp": "2025_01_01_00_00_00_PST",
                 "URI": "https://example.com/existing",
                 "Description": "desc",
                 "Notes": "notes",
@@ -119,7 +119,7 @@ class TestAppendManualSamples:
             {
                 "Category": "vessel",
                 "NodeName": "rpi_test",
-                "Timestamp": "2025_01_01_00_00_02_PST",
+                "StartTimestamp": "2025_01_01_00_00_02_PST",
                 "URI": "https://example.com/new",
                 "Description": "desc",
                 "Notes": "notes",
@@ -179,7 +179,7 @@ class TestProcessFalsePositives:
                  return_value={
                      "Category": "vessel",
                      "NodeName": "rpi_test",
-                     "Timestamp": "2025_01_01_04_00_00_PST",
+                     "StartTimestamp": "2025_01_01_04_00_00_PST",
                      "URI": "https://example.com/testing",
                      "Description": "Boat noise from a nearby vessel.",
                      "Notes": "fp_machine",
@@ -197,6 +197,7 @@ class TestProcessFalsePositives:
         mock_add_training.assert_not_called()
         assert mock_add_testing.call_count == 1
         assert mock_add_testing.call_args.kwargs["corrected_class"] == "vessel"
+        assert mock_add_testing.call_args.kwargs["start_timestamp"] == "2025_01_01_04_00_00_PST"
         assert mock_add_testing.call_args.kwargs["fallback_description"] == detection.comments
         assert mock_add_testing.call_args.kwargs["fallback_notes"] == "fp_machine"
         assert mock_add_testing.call_args.kwargs["fallback_tags"] == detection.tags
@@ -225,7 +226,7 @@ class TestProcessFalsePositives:
         wav_path.write_bytes(b"wav")
         manual_samples_path = tmp_path / "manual_samples.csv"
         manual_samples_path.write_text(
-            "Category,NodeName,Timestamp,URI,Description,Notes,Confidence\n"
+            "Category,NodeName,StartTimestamp,URI,Description,Notes,Confidence\n"
             "vessel,rpi_test,2025_01_01_04_00_00_PST,https://example.com/existing,desc,manual,90.0\n",
             encoding="utf-8",
         )
@@ -240,7 +241,7 @@ class TestProcessFalsePositives:
                      {
                          "Category": "resident",
                          "NodeName": "rpi_test",
-                         "Timestamp": "2025_01_01_04_00_00_PST",
+                         "StartTimestamp": "2025_01_01_04_00_00_PST",
                          "URI": "https://example.com/existing",
                          "Description": "desc",
                          "Notes": "manual",
@@ -249,7 +250,7 @@ class TestProcessFalsePositives:
                      {
                          "Category": "resident",
                          "NodeName": "rpi_test",
-                         "Timestamp": "2025_01_01_04_00_02_PST",
+                         "StartTimestamp": "2025_01_01_04_00_02_PST",
                          "URI": "https://example.com/new",
                          "Description": "desc",
                          "Notes": "manual",
@@ -258,7 +259,7 @@ class TestProcessFalsePositives:
                      {
                          "Category": "water",
                          "NodeName": "rpi_test",
-                         "Timestamp": "2025_01_01_04_00_04_PST",
+                         "StartTimestamp": "2025_01_01_04_00_04_PST",
                          "URI": "https://example.com/water",
                          "Description": "desc",
                          "Notes": "manual",
@@ -319,7 +320,7 @@ class TestProcessFalsePositives:
                      {
                          "Category": "resident",
                          "NodeName": "rpi_test",
-                         "Timestamp": "2025_01_01_04_00_02_PST",
+                         "StartTimestamp": "2025_01_01_04_00_02_PST",
                          "URI": "https://example.com/new",
                          "Description": "desc",
                          "Notes": "manual",
@@ -328,7 +329,7 @@ class TestProcessFalsePositives:
                      {
                          "Category": "water",
                          "NodeName": "rpi_test",
-                         "Timestamp": "2025_01_01_04_00_04_PST",
+                         "StartTimestamp": "2025_01_01_04_00_04_PST",
                          "URI": "https://example.com/water",
                          "Description": "desc",
                          "Notes": "manual",
@@ -381,7 +382,7 @@ class TestProcessFalsePositives:
                      {
                          "Category": "transient",
                          "NodeName": "rpi_test",
-                         "Timestamp": "2025_01_01_04_00_00_PST",
+                         "StartTimestamp": "2025_01_01_04_00_00_PST",
                          "URI": "https://example.com/correct",
                          "Description": "desc",
                          "Notes": "manual",
@@ -390,7 +391,7 @@ class TestProcessFalsePositives:
                      {
                          "Category": "resident",
                          "NodeName": "rpi_test",
-                         "Timestamp": "2025_01_01_04_00_02_PST",
+                         "StartTimestamp": "2025_01_01_04_00_02_PST",
                          "URI": "https://example.com/resident",
                          "Description": "desc",
                          "Notes": "manual",
@@ -399,7 +400,7 @@ class TestProcessFalsePositives:
                      {
                          "Category": "humpback",
                          "NodeName": "rpi_test",
-                         "Timestamp": "2025_01_01_04_00_04_PST",
+                         "StartTimestamp": "2025_01_01_04_00_04_PST",
                          "URI": "https://example.com/humpback",
                          "Description": "desc",
                          "Notes": "manual",
@@ -408,7 +409,7 @@ class TestProcessFalsePositives:
                      {
                          "Category": "water",
                          "NodeName": "rpi_test",
-                         "Timestamp": "2025_01_01_04_00_06_PST",
+                         "StartTimestamp": "2025_01_01_04_00_06_PST",
                          "URI": "https://example.com/water",
                          "Description": "desc",
                          "Notes": "manual",
@@ -474,7 +475,7 @@ class TestProcessFalsePositives:
                          {
                              "Category": "resident",
                              "NodeName": "rpi_test",
-                             "Timestamp": "2025_01_01_04_05_02_PST",
+                             "StartTimestamp": "2025_01_01_04_05_02_PST",
                              "URI": "https://example.com/new",
                              "Description": "desc",
                              "Notes": "manual",
@@ -538,7 +539,7 @@ class TestProcessFalsePositives:
                      {
                          "Category": "resident",
                          "NodeName": "rpi_test",
-                         "Timestamp": "2025_01_01_04_05_02_PST",
+                         "StartTimestamp": "2025_01_01_04_05_02_PST",
                          "URI": "https://example.com/new",
                          "Description": "desc",
                          "Notes": "manual",
