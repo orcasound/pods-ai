@@ -16,7 +16,7 @@ For each rejected OrcaHello detection in the selected timeframe, this script:
 import argparse
 import csv
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Optional
@@ -199,9 +199,12 @@ def process_false_positives(
 
             with TemporaryDirectory() as temp_dir:
                 if not for_training:
+                    testing_start_timestamp = format_timestamp_pst(
+                        detection.timestamp - timedelta(seconds=60)
+                    )
                     segment_row = add_testing_60s_sample(
                         node_name=feed.node_name,
-                        base_timestamp=timestamp_str,
+                        base_timestamp=testing_start_timestamp,
                         detections_csv=detections_csv,
                         corrected_class=corrected_class,
                         fallback_description=detection.comments,
