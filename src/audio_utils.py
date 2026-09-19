@@ -315,11 +315,11 @@ def _get_aligned_end_time(timestamp_str: str) -> datetime:
     return raw_end.replace(second=snapped_sec, microsecond=0)
 
 
-def download_60s_audio(node_name: str, timestamp_str: str, tmp_dir: str) -> Optional[str]:
+def download_60s_audio(node_name: str, min_end_timestamp_str: str, tmp_dir: str) -> Optional[str]:
     """
-    Download 60 seconds of audio ending on the next 10-second boundary after timestamp_str.
+    Download 60 seconds of audio ending at the next 10-second boundary after min_end_timestamp_str.
     """
-    end_time = _get_aligned_end_time(timestamp_str)
+    end_time = _get_aligned_end_time(min_end_timestamp_str)
     start_time = end_time - timedelta(seconds=60)
 
     hydrophone_stream_url = 'https://s3-us-west-2.amazonaws.com/audio-orcasound-net/' + node_name
@@ -391,7 +391,7 @@ def download_60s_audio(node_name: str, timestamp_str: str, tmp_dir: str) -> Opti
             print("  ERROR: No segments were successfully downloaded")
             return None
 
-        clipname = f"temp_60s_{node_name}_{timestamp_str}"
+        clipname = f"temp_60s_{node_name}_{min_end_timestamp_str}"
         if len(file_names) > 1:
             hls_file = os.path.join(tmp_dir, clipname + ".ts")
             with open(hls_file, "wb") as wfd:
