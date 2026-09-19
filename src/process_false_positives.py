@@ -187,11 +187,11 @@ def process_false_positives(
             if end_time is not None and detection.timestamp > end_time:
                 continue
 
-            timestamp_str = format_timestamp_pst(detection.timestamp)
+            timestamp_str_pst = format_timestamp_pst(detection.timestamp)
             summary["rejected"] += 1
             corrected_class = get_corrected_class(detection.comments, detection.tags)
             if corrected_class is None:
-                print(f"Skipping {feed.node_name} {timestamp_str}: could not determine corrected class from comment '{detection.comments}' and tags '{detection.tags}'.")
+                print(f"Skipping {feed.node_name} {timestamp_str_pst}: could not determine corrected class from comment '{detection.comments}' and tags '{detection.tags}'.")
                 summary["unknown_class"] += 1
                 continue
             if normalized_category_filter and corrected_class != normalized_category_filter:
@@ -212,12 +212,12 @@ def process_false_positives(
                     segment_rows = [segment_row]
                 else:
                     # For the training set, we need to run PODS-AI inference on the 60-second WAV to find mismatched whale-class segments.
-                    print(f"Checking rejected OrcaHello detection at {timestamp_str}")
+                    print(f"Checking rejected OrcaHello detection at {timestamp_str_pst}")
 
                     min_end_timestamp_pst_str = format_timestamp_pst(detection.timestamp + timedelta(seconds=60))
                     wav_path = download_60s_audio(node_name=feed.node_name, min_end_timestamp_pst_str=min_end_timestamp_pst_str, tmp_dir=temp_dir)
                     if wav_path is None:
-                        print(f"Skipping {feed.node_name} {timestamp_str}: failed to download audio.")
+                        print(f"Skipping {feed.node_name} {timestamp_str_pst}: failed to download audio.")
                         summary["download_failed"] += 1
                         continue
 
@@ -225,20 +225,20 @@ def process_false_positives(
                         inference = model.predict(wav_path)
                         if inference.get("global_prediction_label") != "resident":
                             print(
-                                f"Continuing with {feed.node_name} {timestamp_str}: "
+                                f"Continuing with {feed.node_name} {timestamp_str_pst}: "
                                 "PODS-AI global prediction is not resident."
                             )
                             summary["not_false_positive"] += 1
 
                         print(
-                            f"Running add_samples.py for {feed.node_name} {timestamp_str} "
+                            f"Running add_samples.py for {feed.node_name} {timestamp_str_pst} "
                             f"with corrected class '{corrected_class}'."
                         )
 
                         segment_rows = add_training_3s_samples(
                             wav_file=wav_path,
                             node_name=feed.node_name,
-                            start_timestamp=timestamp_str,
+                            start_timestamp=timestamp_str_pst,
                             output_dir=str(output_dir),
                             model_path=model_path,
                             detections_csv=detections_csv,
@@ -249,7 +249,7 @@ def process_false_positives(
                             fallback_tags=detection.tags,
                         )
                     except Exception as exc:
-                        print(f"Skipping {feed.node_name} {timestamp_str}: processing failed ({exc}).")
+                        print(f"Skipping {feed.node_name} {timestamp_str_pst}: processing failed ({exc}).")
                         summary["processing_failed"] += 1
                         continue
 

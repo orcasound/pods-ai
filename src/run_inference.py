@@ -26,7 +26,6 @@ from tempfile import TemporaryDirectory
 from typing import Any, Optional
 
 import ffmpeg
-from pytz import timezone as pytz_tz
 
 from audio_utils import (
     format_utc_iso_z,
@@ -37,8 +36,8 @@ from audio_utils import (
     get_folders_between_timestamp,
     load_m3u8_with_retry,
     PACIFIC_TZ,
-    UTC_TZ,
 )
+UTC_TZ = timezone.utc
 from model_inference import get_model_inference
 
 PODSAI_MODEL_ID = "davethaler/whale-call-detector"

@@ -315,13 +315,15 @@ def _get_aligned_end_time(timestamp_pst_str: str) -> datetime:
 def download_60s_audio(node_name: str, min_end_timestamp_pst_str: str, tmp_dir: str) -> Optional[str]:
     """
     Download 60 seconds of audio ending at the next 10-second boundary after min_end_timestamp_str.
+    Note that min_end_timestamp_str is the Orcasite time, which is off by ~2 seconds from real time.
     """
     # Compute the aligned end time and derive the 60s clip start UTC to reuse
     # the download_60s_audio_from_start_utc implementation which handles the
     # HLS folder/segment logic. This reduces duplication and keeps behavior
     # consistent between callers that request clips by end-time vs start-time.
     end_time = _get_aligned_end_time(min_end_timestamp_pst_str)
-    start_time = end_time - timedelta(seconds=60)
+    audio_offset = 2 # startup delay
+    start_time = end_time - timedelta(seconds=60) - timedelta(seconds=audio_offset)
     start_time_utc = start_time.astimezone(UTC_TZ)
 
     return download_60s_audio_from_start_utc(node_name, start_time_utc, tmp_dir)

@@ -56,7 +56,7 @@ class TestDownloadTestingSample:
             assert expected.exists()
 
     def test_tp_machine_only_downloads_60s_clip_from_start_timestamp(self):
-        """tp_machine_only rows should use download_60s_audio with a +60s timestamp."""
+        """tp_machine_only rows should use download_60s_audio with a +60s end timestamp."""
         row = CSVRow(
             category="humpback",
             node_name="rpi_orcasound_lab",
