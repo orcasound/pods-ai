@@ -112,7 +112,7 @@ class TestLoadTestSamples:
         first = samples[0]
         assert first.category == "resident"
         assert first.node_name == "rpi_orcasound_lab"
-        assert first.timestamp == "2023_08_18_00_59_53_PST"
+        assert first.start_timestamp == "2023_08_18_00_59_53_PST"
         assert first.uri == "https://example.com/1"
         assert first.notes == "tp_human_only"
 
@@ -222,7 +222,7 @@ class TestFindWavFile:
         sample = TestSample(
             category="resident",
             node_name="rpi_orcasound_lab",
-            timestamp="2023_08_18_00_59_53_PST",
+            start_timestamp="2023_08_18_00_59_53_PST",
             uri="",
             description="",
             notes="tp_human_only",
@@ -242,7 +242,7 @@ class TestFindWavFile:
         sample = TestSample(
             category="resident",
             node_name="rpi_orcasound_lab",
-            timestamp="2023_08_18_00_59_53_PST",
+            start_timestamp="2023_08_18_00_59_53_PST",
             uri="",
             description="",
             notes="tp_human_only",
@@ -260,7 +260,7 @@ class TestFindWavFile:
         sample = TestSample(
             category="human",
             node_name="rpi_sunset_bay",
-            timestamp="2024_08_07_11_23_23_PST",
+            start_timestamp="2024_08_07_11_23_23_PST",
             uri="",
             description="",
             notes="fp_machine_only",
@@ -458,7 +458,7 @@ class TestEvaluateModel:
         wav_dir = tmp_path / "testing-wav"
         for sample in samples:
             node_name_in_filename = sample.node_name.replace("_", "-")
-            wav_filename = f"{node_name_in_filename}_{sample.timestamp}.wav"
+            wav_filename = f"{node_name_in_filename}_{sample.start_timestamp}.wav"
             wav_file = wav_dir / sample.category / wav_filename
             wav_file.parent.mkdir(parents=True, exist_ok=True)
             wav_file.touch()
@@ -471,7 +471,7 @@ class TestEvaluateModel:
         sample = TestSample(
             category="resident",
             node_name="rpi_orcasound_lab",
-            timestamp="2023_08_18_00_59_53_PST",
+            start_timestamp="2023_08_18_00_59_53_PST",
             uri="",
             description="",
             notes="tp_human_only",
@@ -494,7 +494,7 @@ class TestEvaluateModel:
         sample = TestSample(
             category="human",
             node_name="rpi_sunset_bay",
-            timestamp="2024_08_07_11_23_23_PST",
+            start_timestamp="2024_08_07_11_23_23_PST",
             uri="",
             description="",
             notes="fp_machine_only",
@@ -516,7 +516,7 @@ class TestEvaluateModel:
         sample = TestSample(
             category="human",
             node_name="rpi_sunset_bay",
-            timestamp="2024_08_07_11_23_23_PST",
+            start_timestamp="2024_08_07_11_23_23_PST",
             uri="",
             description="",
             notes="fp_machine_only",
@@ -538,7 +538,7 @@ class TestEvaluateModel:
         sample = TestSample(
             category="resident",
             node_name="rpi_orcasound_lab",
-            timestamp="2023_08_18_00_59_53_PST",
+            start_timestamp="2023_08_18_00_59_53_PST",
             uri="",
             description="",
             notes="tp_human_only",
@@ -560,7 +560,7 @@ class TestEvaluateModel:
         sample = TestSample(
             category="resident",
             node_name="rpi_orcasound_lab",
-            timestamp="2023_08_18_00_59_53_PST",
+            start_timestamp="2023_08_18_00_59_53_PST",
             uri="",
             description="",
             notes="tp_human_only",
@@ -582,7 +582,7 @@ class TestEvaluateModel:
         sample = TestSample(
             category="resident",
             node_name="rpi_orcasound_lab",
-            timestamp="2023_08_18_00_59_53_PST",
+            start_timestamp="2023_08_18_00_59_53_PST",
             uri="",
             description="",
             notes="tp_human_only",
@@ -602,7 +602,7 @@ class TestEvaluateModel:
         sample = TestSample(
             category="resident",
             node_name="rpi_orcasound_lab",
-            timestamp="2023_08_18_00_59_53_PST",
+            start_timestamp="2023_08_18_00_59_53_PST",
             uri="",
             description="",
             notes="tp_human_only",
@@ -624,7 +624,7 @@ class TestEvaluateModel:
         sample = TestSample(
             category="human",
             node_name="rpi_sunset_bay",
-            timestamp="2024_08_07_11_23_23_PST",
+            start_timestamp="2024_08_07_11_23_23_PST",
             uri="",
             description="",
             notes="fp_machine_only",
@@ -646,7 +646,7 @@ class TestEvaluateModel:
         sample = TestSample(
             category="humpback",
             node_name="rpi_sunset_bay",
-            timestamp="2024_08_07_11_23_23_PST",
+            start_timestamp="2024_08_07_11_23_23_PST",
             uri="",
             description="",
             notes="",
@@ -684,7 +684,7 @@ class TestEvaluateModel:
         sample = TestSample(
             category="resident",
             node_name="rpi_orcasound_lab",
-            timestamp="2023_08_18_00_59_53_PST",
+            start_timestamp="2023_08_18_00_59_53_PST",
             uri="",
             description="",
             notes="tp_human_only",
@@ -1086,13 +1086,13 @@ class TestMainCLI:
 class TestConfusionMatrix:
     """Tests for per-class confusion matrix tracking in ModelResult and evaluate_model()."""
 
-    def _make_sample(self, category, node_name="rpi_orcasound_lab", timestamp="2023_08_18_00_59_53_PST"):
+    def _make_sample(self, category, node_name="rpi_orcasound_lab", start_timestamp="2023_08_18_00_59_53_PST"):
         """Return a TestSample with the given category."""
         from compare_models import TestSample
         return TestSample(
             category=category,
             node_name=node_name,
-            timestamp=timestamp,
+            start_timestamp=start_timestamp,
             uri="",
             description="",
             notes="",
@@ -1103,7 +1103,7 @@ class TestConfusionMatrix:
         from compare_models import TestSample
         wav_dir = tmp_path / "testing-wav"
         node_name_in_filename = sample.node_name.replace("_", "-")
-        wav_file = wav_dir / sample.category / f"{node_name_in_filename}_{sample.timestamp}.wav"
+        wav_file = wav_dir / sample.category / f"{node_name_in_filename}_{sample.start_timestamp}.wav"
         wav_file.parent.mkdir(parents=True, exist_ok=True)
         wav_file.touch()
         return wav_dir
@@ -1181,7 +1181,7 @@ class TestConfusionMatrix:
         wav_dir = tmp_path / "testing-wav"
         for s in samples:
             node = s.node_name.replace("_", "-")
-            wav = wav_dir / s.category / f"{node}_{s.timestamp}.wav"
+            wav = wav_dir / s.category / f"{node}_{s.start_timestamp}.wav"
             wav.parent.mkdir(parents=True, exist_ok=True)
             wav.touch()
 

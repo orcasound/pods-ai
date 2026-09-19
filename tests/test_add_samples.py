@@ -146,7 +146,7 @@ class TestSplitWavIntoSegments:
             segments = split_wav_into_segments(
                 wav_file="fake.wav",
                 node_name="rpi_orcasound_lab",
-                base_timestamp="2025_01_15_12_30_00_PST",
+                start_timestamp="2025_01_15_12_30_00_PST",
                 output_dir=tmp_path,
             )
 
@@ -169,7 +169,7 @@ class TestSplitWavIntoSegments:
             segments = split_wav_into_segments(
                 wav_file="fake.wav",
                 node_name="rpi_orcasound_lab",
-                base_timestamp="2025_01_15_12_30_00_PST",
+                start_timestamp="2025_01_15_12_30_00_PST",
                 output_dir=tmp_path,
             )
 
@@ -191,7 +191,7 @@ class TestSplitWavIntoSegments:
             segments = split_wav_into_segments(
                 wav_file="fake.wav",
                 node_name="rpi_orcasound_lab",
-                base_timestamp="2025_01_15_12_30_00_PST",
+                start_timestamp="2025_01_15_12_30_00_PST",
                 output_dir=tmp_path,
             )
 
@@ -215,7 +215,7 @@ class TestSplitWavIntoSegments:
             segments = split_wav_into_segments(
                 wav_file="fake.wav",
                 node_name="rpi_orcasound_lab",
-                base_timestamp="2025_01_15_12_30_00_PST",
+                start_timestamp="2025_01_15_12_30_00_PST",
                 output_dir=tmp_path,
             )
 
@@ -237,7 +237,7 @@ class TestSplitWavIntoSegments:
             segments = split_wav_into_segments(
                 wav_file="fake.wav",
                 node_name="rpi_orcasound_lab",
-                base_timestamp="2025_01_15_12_30_00_PST",
+                start_timestamp="2025_01_15_12_30_00_PST",
                 output_dir=tmp_path,
             )
 
@@ -250,7 +250,7 @@ class TestSplitWavIntoSegments:
             segments = split_wav_into_segments(
                 wav_file="missing.wav",
                 node_name="rpi_orcasound_lab",
-                base_timestamp="2025_01_15_12_30_00_PST",
+                start_timestamp="2025_01_15_12_30_00_PST",
                 output_dir=tmp_path,
             )
 
@@ -271,7 +271,7 @@ class TestSplitWavIntoSegments:
             segments = split_wav_into_segments(
                 wav_file="fake.wav",
                 node_name="rpi_orcasound_lab",
-                base_timestamp="2025_01_15_12_30_00_PST",
+                start_timestamp="2025_01_15_12_30_00_PST",
                 output_dir=tmp_path,
             )
 
@@ -299,7 +299,7 @@ class TestSplitWavIntoSegments:
             split_wav_into_segments(
                 wav_file="fake.wav",
                 node_name="rpi_orcasound_lab",
-                base_timestamp="2025_01_15_12_30_00_PST",
+                start_timestamp="2025_01_15_12_30_00_PST",
                 output_dir=new_dir,
             )
 
@@ -404,7 +404,7 @@ class TestAddSamples:
             results = add_training_3s_samples(
                 wav_file="fake.wav",
                 node_name="rpi_orcasound_lab",
-                base_timestamp="2025_01_15_12_30_00_PST",
+                start_timestamp="2025_01_15_12_30_00_PST",
                 output_dir=str(tmp_path),
                 model_path="/path/to/model",
             )
@@ -437,7 +437,7 @@ class TestAddSamples:
             add_training_3s_samples(
                 wav_file="fake.wav",
                 node_name="rpi_orcasound_lab",
-                base_timestamp="2025_01_15_12_30_00_PST",
+                start_timestamp="2025_01_15_12_30_00_PST",
                 output_dir=str(tmp_path),
             )
 
@@ -461,7 +461,7 @@ class TestAddSamples:
             results = add_training_3s_samples(
                 wav_file="fake.wav",
                 node_name="rpi_orcasound_lab",
-                base_timestamp="2025_01_15_12_30_00_PST",
+                start_timestamp="2025_01_15_12_30_00_PST",
                 output_dir=str(tmp_path),
                 model=mock_model,
                 fallback_description="Moderator note about this sample.",
@@ -486,7 +486,7 @@ class TestAddSamples:
             results = add_training_3s_samples(
                 wav_file="fake.wav",
                 node_name="rpi_orcasound_lab",
-                base_timestamp="2025_01_15_12_30_00_PST",
+                start_timestamp="2025_01_15_12_30_00_PST",
                 output_dir=str(tmp_path),
                 model=mock_model,
                 fallback_notes="fp_machine",
@@ -510,7 +510,7 @@ class TestAddSamples:
             results = add_training_3s_samples(
                 wav_file="fake.wav",
                 node_name="rpi_orcasound_lab",
-                base_timestamp="2025_01_15_12_30_00_PST",
+                start_timestamp="2025_01_15_12_30_00_PST",
                 output_dir=str(tmp_path),
                 model=mock_model,
                 corrected_class="vessel",
@@ -536,7 +536,7 @@ class TestAddSamples:
             add_training_3s_samples(
                 wav_file="fake.wav",
                 node_name="rpi_orcasound_lab",
-                base_timestamp="2025_01_15_12_30_00_PST",
+                start_timestamp="2025_01_15_12_30_00_PST",
                 output_dir=str(tmp_path),
                 model=mock_model,
                 fallback_description="comment,with comma\nand newline",
@@ -567,7 +567,7 @@ class TestAddSamples:
             results = add_training_3s_samples(
                 wav_file="fake.wav",
                 node_name="rpi_orcasound_lab",
-                base_timestamp="2025_01_15_12_30_00_PST",
+                start_timestamp="2025_01_15_12_30_00_PST",
                 output_dir=str(tmp_path),
             )
 
@@ -590,7 +590,7 @@ class TestAddSamples:
             add_training_3s_samples(
                 wav_file="fake.wav",
                 node_name="rpi_orcasound_lab",
-                base_timestamp="2025_01_15_12_30_00_PST",
+                start_timestamp="2025_01_15_12_30_00_PST",
                 output_dir=str(tmp_path),
                 model_path="/path/to/model",
             )
@@ -615,7 +615,7 @@ class TestAddSamples:
             add_training_3s_samples(
                 wav_file="fake.wav",
                 node_name="rpi_orcasound_lab",
-                base_timestamp="2025_01_15_12_30_00_PST",
+                start_timestamp="2025_01_15_12_30_00_PST",
                 output_dir=str(tmp_path),
                 model_path="/path/to/model",
                 model=mock_model,
@@ -641,7 +641,7 @@ class TestAddSamples:
             add_training_3s_samples(
                 wav_file="fake.wav",
                 node_name="rpi_orcasound_lab",
-                base_timestamp="2025_01_15_12_30_00_PST",
+                start_timestamp="2025_01_15_12_30_00_PST",
                 output_dir=str(tmp_path),
                 model_path="/path/to/model",
             )
@@ -650,7 +650,7 @@ class TestAddSamples:
         assert call_args[1]["model_type"] == "podsai"
 
     def test_infers_node_and_timestamp_from_filename(self, tmp_path):
-        """add_training_3s_samples should parse node_name and base_timestamp from a well-formed filename."""
+        """add_training_3s_samples should parse node_name and start_timestamp from a well-formed filename."""
         fake_segments = self._fake_split(tmp_path)
         mock_model = MagicMock()
         mock_model.predict.return_value = {
@@ -672,10 +672,10 @@ class TestAddSamples:
         # Verify the inferred values were passed to split_wav_into_segments.
         call_kwargs = mock_split.call_args
         assert call_kwargs[0][1] == "rpi_orcasound_lab"         # node_name
-        assert call_kwargs[0][2] == "2025_01_15_12_30_00_PST"   # base_timestamp
+        assert call_kwargs[0][2] == "2025_01_15_12_30_00_PST"   # start_timestamp
 
     def test_explicit_args_override_filename_inference(self, tmp_path):
-        """Explicit node_name and base_timestamp should take precedence over filename."""
+        """Explicit node_name and start_timestamp should take precedence over filename."""
         fake_segments = self._fake_split(tmp_path)
         mock_model = MagicMock()
         mock_model.predict.return_value = {
@@ -691,7 +691,7 @@ class TestAddSamples:
             add_training_3s_samples(
                 wav_file="rpi-orcasound-lab_2025_01_15_12_30_00_PST.wav",
                 node_name="rpi_sunset_bay",
-                base_timestamp="2026_06_01_00_00_00_PST",
+                start_timestamp="2026_06_01_00_00_00_PST",
                 output_dir=str(tmp_path),
                 model_path="/path/to/model",
             )
@@ -721,7 +721,7 @@ class TestAddTesting60sSample:
              patch("add_samples.generate_uri", return_value="https://example.com/test"):
             row = add_testing_60s_sample(
                 node_name="rpi_orcasound_lab",
-                base_timestamp="2025_01_15_12_30_00_PST",
+                start_timestamp="2025_01_15_12_30_00_PST",
                 corrected_class="vessel",
                 fallback_description="fallback description",
                 fallback_notes="fallback notes",
@@ -744,7 +744,7 @@ class TestAddTesting60sSample:
              patch("add_samples.generate_uri", return_value="https://example.com/test"):
             row = add_testing_60s_sample(
                 node_name="rpi_orcasound_lab",
-                base_timestamp="2025_01_15_12_30_00_PST",
+                start_timestamp="2025_01_15_12_30_00_PST",
                 corrected_class="vessel",
                 fallback_description="  fallback description  ",
                 fallback_notes="  fp_machine  ",
