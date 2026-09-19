@@ -38,7 +38,7 @@ class TestDownloadTestingSample:
         with TemporaryDirectory() as tmp:
             output_root = Path(tmp) / "testing-wav"
 
-            def _fake_download_60s_audio(node_name: str, timestamp_str: str, tmp_dir: str):
+            def _fake_download_60s_audio(node_name: str, min_end_timestamp_pst_str: str, tmp_dir: str):
                 """Create and return a temporary fake 60-second WAV path."""
                 wav_path = Path(tmp_dir) / "temp_60s.wav"
                 wav_path.write_bytes(b"fake wav content")
@@ -48,7 +48,9 @@ class TestDownloadTestingSample:
                 download_testing_sample(row, output_root)
 
             mock_download_60s.assert_called_once_with(
-                "rpi_andrews_bay", "2025_01_01_00_01_00_PST", ANY
+                node_name="rpi_andrews_bay",
+                min_end_timestamp_pst_str="2025_01_01_00_01_00_PST",
+                tmp_dir=ANY
             )
             expected = output_root / "resident" / "rpi-andrews-bay_2025_01_01_00_00_00_PST.wav"
             assert expected.exists()
@@ -66,7 +68,7 @@ class TestDownloadTestingSample:
 
         with TemporaryDirectory() as tmp:
             output_root = Path(tmp) / "testing-wav"
-            def _fake_download_60s_audio(node_name: str, timestamp_str: str, tmp_dir: str):
+            def _fake_download_60s_audio(node_name: str, min_end_timestamp_pst_str: str, tmp_dir: str):
                 """Create and return a temporary fake 60-second WAV path."""
                 wav_path = Path(tmp_dir) / "temp_60s.wav"
                 wav_path.write_bytes(b"fake wav content")

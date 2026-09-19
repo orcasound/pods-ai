@@ -110,7 +110,7 @@ class TestAppendManualSamples:
             {
                 "Category": "vessel",
                 "NodeName": "rpi_test",
-                "Timestamp": "2025_01_01_00_00_00_PST",
+                "StartTimestamp": "2025_01_01_00_00_00_PST",
                 "URI": "https://example.com/existing",
                 "Description": "desc",
                 "Notes": "notes",
@@ -119,7 +119,7 @@ class TestAppendManualSamples:
             {
                 "Category": "vessel",
                 "NodeName": "rpi_test",
-                "Timestamp": "2025_01_01_00_00_02_PST",
+                "StartTimestamp": "2025_01_01_00_00_02_PST",
                 "URI": "https://example.com/new",
                 "Description": "desc",
                 "Notes": "notes",
@@ -179,7 +179,7 @@ class TestProcessFalsePositives:
                  return_value={
                      "Category": "vessel",
                      "NodeName": "rpi_test",
-                     "Timestamp": "2025_01_01_04_00_00_PST",
+                     "StartTimestamp": "2025_01_01_04_00_00_PST",
                      "URI": "https://example.com/testing",
                      "Description": "Boat noise from a nearby vessel.",
                      "Notes": "fp_machine",
@@ -241,7 +241,7 @@ class TestProcessFalsePositives:
                      {
                          "Category": "resident",
                          "NodeName": "rpi_test",
-                         "Timestamp": "2025_01_01_04_00_00_PST",
+                         "StartTimestamp": "2025_01_01_04_00_00_PST",
                          "URI": "https://example.com/existing",
                          "Description": "desc",
                          "Notes": "manual",
@@ -250,7 +250,7 @@ class TestProcessFalsePositives:
                      {
                          "Category": "resident",
                          "NodeName": "rpi_test",
-                         "Timestamp": "2025_01_01_04_00_02_PST",
+                         "StartTimestamp": "2025_01_01_04_00_02_PST",
                          "URI": "https://example.com/new",
                          "Description": "desc",
                          "Notes": "manual",
@@ -259,7 +259,7 @@ class TestProcessFalsePositives:
                      {
                          "Category": "water",
                          "NodeName": "rpi_test",
-                         "Timestamp": "2025_01_01_04_00_04_PST",
+                         "StartTimestamp": "2025_01_01_04_00_04_PST",
                          "URI": "https://example.com/water",
                          "Description": "desc",
                          "Notes": "manual",
@@ -320,7 +320,7 @@ class TestProcessFalsePositives:
                      {
                          "Category": "resident",
                          "NodeName": "rpi_test",
-                         "Timestamp": "2025_01_01_04_00_02_PST",
+                         "StartTimestamp": "2025_01_01_04_00_02_PST",
                          "URI": "https://example.com/new",
                          "Description": "desc",
                          "Notes": "manual",
@@ -329,7 +329,7 @@ class TestProcessFalsePositives:
                      {
                          "Category": "water",
                          "NodeName": "rpi_test",
-                         "Timestamp": "2025_01_01_04_00_04_PST",
+                         "StartTimestamp": "2025_01_01_04_00_04_PST",
                          "URI": "https://example.com/water",
                          "Description": "desc",
                          "Notes": "manual",
@@ -382,7 +382,7 @@ class TestProcessFalsePositives:
                      {
                          "Category": "transient",
                          "NodeName": "rpi_test",
-                         "Timestamp": "2025_01_01_04_00_00_PST",
+                         "StartTimestamp": "2025_01_01_04_00_00_PST",
                          "URI": "https://example.com/correct",
                          "Description": "desc",
                          "Notes": "manual",
@@ -391,7 +391,7 @@ class TestProcessFalsePositives:
                      {
                          "Category": "resident",
                          "NodeName": "rpi_test",
-                         "Timestamp": "2025_01_01_04_00_02_PST",
+                         "StartTimestamp": "2025_01_01_04_00_02_PST",
                          "URI": "https://example.com/resident",
                          "Description": "desc",
                          "Notes": "manual",
@@ -400,7 +400,7 @@ class TestProcessFalsePositives:
                      {
                          "Category": "humpback",
                          "NodeName": "rpi_test",
-                         "Timestamp": "2025_01_01_04_00_04_PST",
+                         "StartTimestamp": "2025_01_01_04_00_04_PST",
                          "URI": "https://example.com/humpback",
                          "Description": "desc",
                          "Notes": "manual",
@@ -409,7 +409,7 @@ class TestProcessFalsePositives:
                      {
                          "Category": "water",
                          "NodeName": "rpi_test",
-                         "Timestamp": "2025_01_01_04_00_06_PST",
+                         "StartTimestamp": "2025_01_01_04_00_06_PST",
                          "URI": "https://example.com/water",
                          "Description": "desc",
                          "Notes": "manual",
@@ -475,7 +475,7 @@ class TestProcessFalsePositives:
                          {
                              "Category": "resident",
                              "NodeName": "rpi_test",
-                             "Timestamp": "2025_01_01_04_05_02_PST",
+                             "StartTimestamp": "2025_01_01_04_05_02_PST",
                              "URI": "https://example.com/new",
                              "Description": "desc",
                              "Notes": "manual",
@@ -539,7 +539,7 @@ class TestProcessFalsePositives:
                      {
                          "Category": "resident",
                          "NodeName": "rpi_test",
-                         "Timestamp": "2025_01_01_04_05_02_PST",
+                         "StartTimestamp": "2025_01_01_04_05_02_PST",
                          "URI": "https://example.com/new",
                          "Description": "desc",
                          "Notes": "manual",

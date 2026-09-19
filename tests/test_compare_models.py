@@ -29,7 +29,7 @@ import pytest
 def _write_csv(path, rows, fieldnames=None):
     """Write a CSV file with the given rows."""
     if not fieldnames:
-        fieldnames = ["Category", "NodeName", "Timestamp", "URI", "Description", "Notes", "Confidence"]
+        fieldnames = ["Category", "NodeName", "StartTimestamp", "URI", "Description", "Notes", "Confidence"]
     with open(path, "w", newline="", encoding="utf-8") as f:
         import csv as _csv
         writer = _csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
@@ -43,7 +43,7 @@ def _make_testing_rows():
         {
             "Category": "resident",
             "NodeName": "rpi_orcasound_lab",
-            "Timestamp": "2023_08_18_00_59_53_PST",
+            "StartTimestamp": "2023_08_18_00_59_53_PST",
             "URI": "https://example.com/1",
             "Description": "J pod calls",
             "Notes": "tp_human_only",
@@ -52,7 +52,7 @@ def _make_testing_rows():
         {
             "Category": "human",
             "NodeName": "rpi_sunset_bay",
-            "Timestamp": "2024_08_07_11_23_23_PST",
+            "StartTimestamp": "2024_08_07_11_23_23_PST",
             "URI": "https://example.com/2",
             "Description": "Human voices",
             "Notes": "fp_machine_only",
@@ -61,7 +61,7 @@ def _make_testing_rows():
         {
             "Category": "humpback",
             "NodeName": "rpi_orcasound_lab",
-            "Timestamp": "2023_10_28_07_33_52_PST",
+            "StartTimestamp": "2023_10_28_07_33_52_PST",
             "URI": "https://example.com/3",
             "Description": "Humpback",
             "Notes": "tp_human_only",
@@ -162,11 +162,11 @@ class TestLoadTestSamples:
         from compare_models import load_test_samples
 
         rows = [
-            {"Category": "humpback", "NodeName": "rpi_a", "Timestamp": "2024_01_01_00_00_00_PST",
+            {"Category": "humpback", "NodeName": "rpi_a", "StartTimestamp": "2024_01_01_00_00_00_PST",
              "URI": "https://example.com/1", "Description": "", "Notes": "tp_machine_only", "Confidence": ""},
-            {"Category": "humpback", "NodeName": "rpi_b", "Timestamp": "2024_01_01_00_01_00_PST",
+            {"Category": "humpback", "NodeName": "rpi_b", "StartTimestamp": "2024_01_01_00_01_00_PST",
              "URI": "https://example.com/2", "Description": "", "Notes": "tp_machine_only", "Confidence": ""},
-            {"Category": "humpback", "NodeName": "rpi_c", "Timestamp": "2024_01_01_00_02_00_PST",
+            {"Category": "humpback", "NodeName": "rpi_c", "StartTimestamp": "2024_01_01_00_02_00_PST",
              "URI": "https://example.com/3", "Description": "", "Notes": "tp_machine_only", "Confidence": ""},
         ]
         testing_csv = tmp_path / "testing_60s_samples.csv"
@@ -888,7 +888,7 @@ class TestMainCLI:
         wav_dir = tmp_path / "testing-wav"
         row = rows[0]
         node = row["NodeName"].replace("_", "-")
-        wav = wav_dir / row["Category"] / f"{node}_{row['Timestamp']}.wav"
+        wav = wav_dir / row["Category"] / f"{node}_{row['StartTimestamp']}.wav"
         wav.parent.mkdir(parents=True, exist_ok=True)
         wav.touch()
 
@@ -948,7 +948,7 @@ class TestMainCLI:
         wav_dir = tmp_path / "testing-wav"
         for row in rows:
             node = row["NodeName"].replace("_", "-")
-            wav = wav_dir / row["Category"] / f"{node}_{row['Timestamp']}.wav"
+            wav = wav_dir / row["Category"] / f"{node}_{row['StartTimestamp']}.wav"
             wav.parent.mkdir(parents=True, exist_ok=True)
             wav.touch()
 
@@ -992,7 +992,7 @@ class TestMainCLI:
         wav_dir = tmp_path / "testing-wav"
         for row in rows[:2]:  # Only create WAVs for first 2
             node = row["NodeName"].replace("_", "-")
-            wav = wav_dir / row["Category"] / f"{node}_{row['Timestamp']}.wav"
+            wav = wav_dir / row["Category"] / f"{node}_{row['StartTimestamp']}.wav"
             wav.parent.mkdir(parents=True, exist_ok=True)
             wav.touch()
 
@@ -1040,7 +1040,7 @@ class TestMainCLI:
         # Only create WAV for the resident sample.
         resident_row = rows[0]
         node = resident_row["NodeName"].replace("_", "-")
-        wav = wav_dir / resident_row["Category"] / f"{node}_{resident_row['Timestamp']}.wav"
+        wav = wav_dir / resident_row["Category"] / f"{node}_{resident_row['StartTimestamp']}.wav"
         wav.parent.mkdir(parents=True, exist_ok=True)
         wav.touch()
 

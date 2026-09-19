@@ -391,7 +391,7 @@ def download_60s_audio(node_name: str, min_end_timestamp_pst_str: str, tmp_dir: 
             print("  ERROR: No segments were successfully downloaded")
             return None
 
-        clipname = f"temp_60s_{node_name}_{min_end_timestamp_str}"
+        clipname = f"temp_60s_{node_name}_{min_end_timestamp_pst_str}"
         if len(file_names) > 1:
             hls_file = os.path.join(tmp_dir, clipname + ".ts")
             with open(hls_file, "wb") as wfd:

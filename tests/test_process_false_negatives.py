@@ -324,4 +324,4 @@ class TestProcessFalseNegatives:
         assert podsai_model.predict.call_count == 2
         assert orcahello_model.predict.call_count == 1
         assert mock_add_samples.call_count == 1
-        assert mock_add_samples.call_args.kwargs["base_timestamp"] == "2025_01_01_04_05_00_PST"
+        assert mock_add_samples.call_args.kwargs["start_timestamp"] == "2025_01_01_04_05_00_PST"

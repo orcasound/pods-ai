@@ -414,7 +414,7 @@ class TestAddSamples:
             assert isinstance(row, dict)
             assert row["Category"] == "water"
             assert row["NodeName"] == "rpi_orcasound_lab"
-            assert row["Timestamp"] in ["2025_01_15_12_30_00_PST", "2025_01_15_12_30_02_PST"]
+            assert row["StartTimestamp"] in ["2025_01_15_12_30_00_PST", "2025_01_15_12_30_02_PST"]
             assert row["URI"] == "https://example.com/test"
             assert row["Description"] == ""
             assert row["Notes"] == "manual"
@@ -547,7 +547,7 @@ class TestAddSamples:
         header_row = [
             "Category",
             "NodeName",
-            "Timestamp",
+            "StartTimestamp",
             "URI",
             "Description",
             "Notes",

@@ -27,7 +27,7 @@ def _write_testing_csv(path, rows, fieldnames=None):
     """Write a minimal testing CSV and return its Path."""
     if fieldnames is None:
         fieldnames = [
-            "Category", "NodeName", "Timestamp",
+            "Category", "NodeName", "StartTimestamp",
             "URI", "Description", "Notes",
         ]
     with open(path, "w", newline="", encoding="utf-8") as f:
@@ -44,7 +44,7 @@ def _make_rows():
         {
             "Category": "resident",
             "NodeName": "rpi_orcasound_lab",
-            "Timestamp": "2023_08_18_00_59_53_PST",
+            "StartTimestamp": "2023_08_18_00_59_53_PST",
             "URI": "https://example.com/1",
             "Description": "J pod calls",
             "Notes": "tp_human_only",
@@ -52,7 +52,7 @@ def _make_rows():
         {
             "Category": "humpback",
             "NodeName": "rpi_sunset_bay",
-            "Timestamp": "2024_01_01_00_00_00_PST",
+            "StartTimestamp": "2024_01_01_00_00_00_PST",
             "URI": "https://example.com/2",
             "Description": "Humpback calls",
             "Notes": "tp_human_only",
@@ -60,7 +60,7 @@ def _make_rows():
         {
             "Category": "other",
             "NodeName": "rpi_bush_point",
-            "Timestamp": "2024_02_01_12_00_00_PST",
+            "StartTimestamp": "2024_02_01_12_00_00_PST",
             "URI": "https://example.com/3",
             "Description": "Vessel noise",
             "Notes": "fp_machine_only",
@@ -72,7 +72,7 @@ def _make_sample(
     row_index=0,
     category="resident",
     node_name="rpi_orcasound_lab",
-    start_imestamp="2023_08_18_00_59_53_PST",
+    start_timestamp="2023_08_18_00_59_53_PST",
     uri="https://example.com/1",
     description="J pod calls",
     notes="tp_human_only",
@@ -192,7 +192,7 @@ class TestLoadTestSamples:
             {
                 "Category": "resident",
                 "NodeName": f"rpi_{i}",
-                "Timestamp": f"2024_01_0{i}_00_00_00_PST",
+                "StartTimestamp": f"2024_01_0{i}_00_00_00_PST",
                 "URI": f"https://example.com/{i}",
                 "Description": "",
                 "Notes": "",

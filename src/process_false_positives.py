@@ -199,9 +199,7 @@ def process_false_positives(
 
             with TemporaryDirectory() as temp_dir:
                 if not for_training:
-                    testing_start_timestamp = format_timestamp_pst(
-                        detection.timestamp - timedelta(seconds=60)
-                    )
+                    testing_start_timestamp = format_timestamp_pst(detection.timestamp)
                     segment_row = add_testing_60s_sample(
                         node_name=feed.node_name,
                         start_timestamp=testing_start_timestamp,
@@ -216,7 +214,8 @@ def process_false_positives(
                     # For the training set, we need to run PODS-AI inference on the 60-second WAV to find mismatched whale-class segments.
                     print(f"Checking rejected OrcaHello detection at {timestamp_str}")
 
-                    wav_path = download_60s_audio(node_name=feed.node_name, min_end_timestamp_pst_str=timestamp_str, tmp_dir=temp_dir)
+                    min_end_timestamp_pst_str = format_timestamp_pst(detection.timestamp + timedelta(seconds=60))
+                    wav_path = download_60s_audio(node_name=feed.node_name, min_end_timestamp_pst_str=min_end_timestamp_pst_str, tmp_dir=temp_dir)
                     if wav_path is None:
                         print(f"Skipping {feed.node_name} {timestamp_str}: failed to download audio.")
                         summary["download_failed"] += 1
