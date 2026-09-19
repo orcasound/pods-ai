@@ -32,6 +32,8 @@ if str(REPO_ROOT) not in sys.path:
 
 from src.audio_utils import (
     download_60s_audio,
+    format_timestamp_pst,
+    parse_timestamp_pst,
 )
 
 # Offset, in seconds, between the detection end time and the start of the downloaded audio.
@@ -540,8 +542,11 @@ def compute_correct_timestamp_for_tp_human_only(
 
         # max_confidence_idx represents a position in the downloaded 60-second WAV
         # We need to calculate what clock time that corresponds to
-        # The WAV starts at (aligned_end - 60 - AUDIO_OFFSET_SECONDS) due to the 2-second offset in download.
-        end_time = get_aligned_end_time(timestamp_str)
+        # The WAV start must be computed from the same minimum-end timestamp
+        # that was requested from the downloader. Reuse min_end_timestamp_pst_str
+        # (which is timestamp + 60s) so the aligned end matches the downloaded file
+        # and reconstructed call times are correct.
+        end_time = get_aligned_end_time(min_end_timestamp_pst_str)
         wav_start_time = end_time - timedelta(seconds=60 + AUDIO_OFFSET_SECONDS)
 
         # The detected call is at wav_start_time + timedelta(seconds=time_offset_seconds).

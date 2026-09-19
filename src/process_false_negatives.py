@@ -15,7 +15,7 @@ For each confirmed OrcaHello detection in the selected timeframe, this script:
 """
 
 import argparse
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Optional

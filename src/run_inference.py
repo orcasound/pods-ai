@@ -36,6 +36,8 @@ from audio_utils import (
     get_difference_between_times_in_seconds,
     get_folders_between_timestamp,
     load_m3u8_with_retry,
+    PACIFIC_TZ
+    UTC_TZ
 )
 from model_inference import get_model_inference
 
@@ -47,8 +49,6 @@ PODSAI_WAV2VEC2_MODEL_REVISION = "cef82c6e9ee661646ea0c583aeb68f4f7ec6d9d8"
 PODSAI_MODEL_REVISION = PODSAI_AST_MODEL_REVISION
 PROPOSED_DESCRIPTION_EXTRA_CLASSES = {"vessel", "human", "jingle", "bird"}
 NEGATIVE_LABELS = {"other", "water", "vessel", "jingle", "human", "bird"}
-PACIFIC_TZ = pytz_tz("US/Pacific")
-UTC_TZ = timezone.utc
 
 
 def parse_pst_end_timestamp(timestamp_str: str) -> datetime:

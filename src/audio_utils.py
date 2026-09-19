@@ -41,6 +41,7 @@ MAX_DOWNLOAD_RETRIES = 3
 # Seconds to wait between download retry attempts.
 DOWNLOAD_RETRY_DELAY_SECONDS = 2
 PACIFIC_TZ = timezone('US/Pacific')
+UTC_TZ = timezone.utc
 COSMOS_URL = os.environ.get("COSMOS_URL", "").strip() or "https://aifororcasmetadatastore.documents.azure.com:443/"
 COSMOS_KEY = os.environ.get("COSMOS_KEY", "").strip()
 COSMOS_DB = os.environ.get("COSMOS_DB", "predictions")
