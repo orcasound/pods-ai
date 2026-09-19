@@ -41,7 +41,7 @@ MAX_DOWNLOAD_RETRIES = 3
 # Seconds to wait between download retry attempts.
 DOWNLOAD_RETRY_DELAY_SECONDS = 2
 PACIFIC_TZ = timezone('US/Pacific')
-UTC_TZ = timezone.utc
+UTC_TZ = timezone('UTC')
 COSMOS_URL = os.environ.get("COSMOS_URL", "").strip() or "https://aifororcasmetadatastore.documents.azure.com:443/"
 COSMOS_KEY = os.environ.get("COSMOS_KEY", "").strip()
 COSMOS_DB = os.environ.get("COSMOS_DB", "predictions")
@@ -203,11 +203,6 @@ def load_m3u8_with_retry(stream_url: str) -> m3u8.M3U8:
     raise last_exception
 
 
-def _parse_timestamp_pst(timestamp_pst_str: str) -> datetime:
-    dt = datetime.strptime(timestamp_pst_str, '%Y_%m_%d_%H_%M_%S_PST')
-    return PACIFIC_TZ.localize(dt)
-
-
 def format_timestamp_pst(dt: datetime) -> str:
     """
     Format a datetime object as PST timestamp string in the format YYYY_MM_DD_HH_MM_SS_PST.
@@ -216,7 +211,7 @@ def format_timestamp_pst(dt: datetime) -> str:
     return dt_pst.strftime("%Y_%m_%d_%H_%M_%S_PST")
 
 
-def parse_pst_timestamp(ts_str: str) -> datetime:
+def parse_timestamp_pst(ts_str: str) -> datetime:
     """
     Parse a PST timestamp string in the format YYYY_MM_DD_HH_MM_SS_PST into a timezone-aware datetime.
     """
@@ -308,7 +303,7 @@ def get_orcahello_detections(
 
 
 def _get_aligned_end_time(timestamp_pst_str: str) -> datetime:
-    raw_end = _parse_timestamp_pst(timestamp_pst_str)
+    raw_end = parse_timestamp_pst(timestamp_pst_str)
     snapped_sec = ((raw_end.second + 9) // 10) * 10
     if snapped_sec == 60:
         # roll over to next minute.

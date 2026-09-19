@@ -63,7 +63,10 @@ from pytz import timezone
 
 from model_inference import get_model_inference
 from orcasite_feeds import get_orcasite_feeds, OrcasiteFeed
-from audio_utils import download_60s_audio
+from audio_utils import (
+    download_60s_audio,
+    format_timestamp_pst,
+)
 
 SEGMENT_DURATION = 3  # Duration of each segment in seconds.
 HOP_DURATION = 2  # Hop size between segments in seconds.
@@ -141,19 +144,6 @@ def parse_timestamp_pst(timestamp_str: str) -> datetime:
     timestamp_str = timestamp_str.replace("_PST", "")
     dt_naive = datetime.strptime(timestamp_str, "%Y_%m_%d_%H_%M_%S")
     return PACIFIC_TZ.localize(dt_naive)
-
-
-def format_timestamp_pst(dt: datetime) -> str:
-    """
-    Format a datetime as a PST timestamp string.
-
-    Args:
-        dt: Datetime object (should already be localized to Pacific timezone).
-
-    Returns:
-        Timestamp string in the format YYYY_MM_DD_HH_MM_SS_PST.
-    """
-    return dt.strftime("%Y_%m_%d_%H_%M_%S_PST")
 
 
 def get_node_slug(node_name: str) -> str:

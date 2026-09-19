@@ -27,7 +27,7 @@ from audio_utils import (
     download_60s_audio,
     format_timestamp_pst,
     get_orcahello_detections,
-    parse_pst_timestamp,
+    parse_timestamp_pst,
 )
 from manual_samples_utils import append_manual_samples, load_existing_uris
 from model_inference import get_model_inference
@@ -353,8 +353,8 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    start_time = parse_pst_timestamp(args.start) if args.start else None
-    end_time = None if (args.end or "").lower() == "now" else parse_pst_timestamp(args.end)
+    start_time = parse_timestamp_pst(args.start) if args.start else None
+    end_time = None if (args.end or "").lower() == "now" else parse_timestamp_pst(args.end)
     result_set = args.set.lower()
     if result_set not in ("training", "testing"):
         print(f"Invalid set value: {args.set}. Must be 'training' or 'testing'.")

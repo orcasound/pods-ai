@@ -36,8 +36,8 @@ from audio_utils import (
     get_difference_between_times_in_seconds,
     get_folders_between_timestamp,
     load_m3u8_with_retry,
-    PACIFIC_TZ
-    UTC_TZ
+    PACIFIC_TZ,
+    UTC_TZ,
 )
 from model_inference import get_model_inference
 
