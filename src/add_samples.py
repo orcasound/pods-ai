@@ -545,7 +545,11 @@ def add_training_3s_samples(
 
         # Download the 60-second WAV file.
         temp_dir = TemporaryDirectory()
-        wav_path = download_60s_audio(node_name=node_name, min_end_timestamp_pst_str=start_timestamp, tmp_dir=temp_dir.name)
+        min_end_timestamp_pst_str=format_timestamp_pst(parse_timestamp_pst(start_timestamp) + timedelta(seconds=60))
+        wav_path = download_60s_audio(
+            node_name=node_name,
+            min_end_timestamp_pst_str=min_end_timestamp_pst_str,
+            tmp_dir=temp_dir.name)
 
         if wav_path is None:
             temp_dir.cleanup()
