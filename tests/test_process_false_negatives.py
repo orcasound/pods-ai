@@ -112,6 +112,7 @@ class TestProcessFalseNegatives:
             timestamp=datetime(2025, 1, 1, 12, 0, 0, tzinfo=timezone.utc),
             status="confirmed",
             comments="",
+            tags=""
         )
         wav_path = tmp_path / "input.wav"
         wav_path.write_bytes(b"wav")
@@ -128,6 +129,7 @@ class TestProcessFalseNegatives:
                 "Description": "desc",
                 "Notes": "manual",
                 "Confidence": "95.0",
+                "Tags": "resident",
             },
             {
                 "Category": "transient",
@@ -137,6 +139,7 @@ class TestProcessFalseNegatives:
                 "Description": "desc",
                 "Notes": "manual",
                 "Confidence": "90.0",
+                "Tags": "transient",
             },
             {
                 "Category": "water",
@@ -146,6 +149,7 @@ class TestProcessFalseNegatives:
                 "Description": "desc",
                 "Notes": "manual",
                 "Confidence": "10.0",
+                "Tags": "water",
             },
         ]
 
@@ -179,7 +183,7 @@ class TestProcessFalseNegatives:
              patch("process_false_negatives.get_orcasite_feeds_with_retry", return_value=[feed]), \
              patch("process_false_negatives.get_orcahello_detections", return_value=[detection]), \
              patch("process_false_negatives.download_60s_audio", return_value=str(wav_path)), \
-             patch("process_false_negatives.add_samples", return_value=segment_rows) as mock_add_samples:
+             patch("process_false_negatives.add_training_3s_samples", return_value=segment_rows) as mock_add_samples:
             summary = process_false_negatives(
                 manual_samples_path=manual_samples_path,
                 output_dir=segment_dir,
@@ -233,7 +237,7 @@ class TestProcessFalseNegatives:
              patch("process_false_negatives.get_orcasite_feeds_with_retry", return_value=[feed]), \
              patch("process_false_negatives.get_orcahello_detections", return_value=[detection]), \
              patch("process_false_negatives.download_60s_audio", return_value=str(wav_path)), \
-             patch("process_false_negatives.add_samples") as mock_add_samples:
+             patch("process_false_negatives.add_training_3s_samples") as mock_add_samples:
             summary = process_false_negatives(
                 manual_samples_path=tmp_path / "manual_samples.csv",
                 output_dir=tmp_path / "segments",
@@ -295,7 +299,7 @@ class TestProcessFalseNegatives:
              ), \
              patch("process_false_negatives.download_60s_audio", return_value=str(wav_path)), \
              patch(
-                 "process_false_negatives.add_samples",
+                 "process_false_negatives.add_training_3s_samples",
                  return_value=[
                      {
                          "Category": "transient",

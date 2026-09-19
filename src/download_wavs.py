@@ -300,7 +300,7 @@ def download_audio_segment(
     clipname = wav_filename.removesuffix(".wav")
     expected_path = label_dir / wav_filename
     if expected_path.exists():
-        print(f"Skipping (already exists): {expected_path}")
+        print(f"  Skipping (already exists): {expected_path}")
         return
     if _copy_wav_from_cache_if_exists(expected_path, output_root, cache_root):
         return
@@ -481,7 +481,7 @@ def download_testing_sample(row: CSVRow, output_root: Path, cache_root: Path | N
     wav_filename = _get_wav_filename(row.node_name, row.timestamp_pst)
     expected_path = label_dir / wav_filename
     if expected_path.exists():
-        print(f"Skipping (already exists): {expected_path}")
+        print(f"  Skipping (already exists): {expected_path}")
         return
     if _copy_wav_from_cache_if_exists(expected_path, output_root, cache_root):
         return
@@ -491,12 +491,14 @@ def download_testing_sample(row: CSVRow, output_root: Path, cache_root: Path | N
     if row.notes != "tp_human_only":
         download_timestamp = add_seconds_to_timestamp_pst(row.timestamp_pst, 30)
 
+    print(f"  Downloading audio ending shortly after {download_timestamp}...")
+
     with TemporaryDirectory() as tmp_dir:
         wav_path = download_60s_audio(row.node_name, download_timestamp, tmp_dir)
         if wav_path is None:
             raise AssertionError(f"Error: Failed to download 60-second clip for {row.node_name} at {row.timestamp_pst}")
         shutil.move(wav_path, expected_path)
-        print(f"Downloaded: {expected_path}")
+        print(f"  Downloaded: {expected_path}")
 
 
 def process_testing_csv(csv_path: Path, output_root: Path, cache_root: Path | None = None):

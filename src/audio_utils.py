@@ -53,6 +53,7 @@ class OrcaHelloDetection:
     timestamp: Optional[datetime]
     status: str
     confidence: Optional[float] = None
+    tags: str = ""
     comments: str = ""
 
 
@@ -229,7 +230,11 @@ def get_node_name_for_feed(feed: OrcasiteFeed) -> str:
     return feed.node_name
 
 
-def get_orcahello_detections(feed: OrcasiteFeed) -> List[OrcaHelloDetection]:
+def get_orcahello_detections(
+    feed: OrcasiteFeed,
+    start_time: Optional[datetime] = None,
+    end_time: Optional[datetime] = None
+) -> List[OrcaHelloDetection]:
     """
     Retrieve OrcaHello detections and return those whose audio URI contains the given feed's node_name.
     """
@@ -244,10 +249,17 @@ def get_orcahello_detections(feed: OrcasiteFeed) -> List[OrcaHelloDetection]:
 
     query = """
         SELECT * FROM c
-        WHERE CONTAINS(c.audioUri, @node_name)
-        ORDER BY c.timestamp DESC
+        WHERE c.location.id = @node_name
     """
     params = [{"name": "@node_name", "value": node_name}]
+    if start_time:
+        query += " AND c.timestamp >= @start_time"
+        params.append({"name": "@start_time", "value": start_time.isoformat()})
+    if end_time:
+        query += " AND c.timestamp <= @end_time"
+        params.append({"name": "@end_time", "value": end_time.isoformat()})
+    query += " ORDER BY c.timestamp DESC"
+
     items = container.query_items(
         query=query,
         parameters=params,
@@ -285,7 +297,8 @@ def get_orcahello_detections(feed: OrcasiteFeed) -> List[OrcaHelloDetection]:
                 timestamp=ts,
                 status=status,
                 confidence=confidence,
-                comments=(item.get("comments") or "").strip(),
+                tags=(item.get("tags") or "").strip(),
+                comments=(item.get("comments") or "").strip()
             )
         )
 

@@ -20,7 +20,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Optional
 
-from add_samples import DEFAULT_DETECTIONS_CSV, DEFAULT_MODEL_PATH, DEFAULT_OUTPUT_DIR, add_samples
+from add_samples import DEFAULT_DETECTIONS_CSV, DEFAULT_MODEL_PATH, DEFAULT_OUTPUT_DIR, add_training_3s_samples
 from audio_utils import (
     download_60s_audio,
     format_timestamp_pst,
@@ -87,7 +87,7 @@ def process_false_negatives(
 
     for feed in feeds:
         print(f"Processing feed {feed.node_name}")
-        for detection in get_orcahello_detections(feed):
+        for detection in get_orcahello_detections(feed, start_time, end_time):
             if detection.status.lower() != "confirmed" or detection.timestamp is None:
                 continue
             # OrcaHello detections are returned in descending timestamp order.
@@ -127,7 +127,7 @@ def process_false_negatives(
                         f"Running add_samples.py for {feed.node_name} {timestamp_str} "
                         "with corrected class 'resident'."
                     )
-                    podsai_segment_rows = add_samples(
+                    podsai_segment_rows = add_training_3s_samples(
                         wav_file=wav_path,
                         node_name=feed.node_name,
                         base_timestamp=timestamp_str,
@@ -138,6 +138,7 @@ def process_false_negatives(
                         corrected_class="resident",
                         fallback_description=detection.comments,
                         fallback_notes="tp_machine",
+                        fallback_tags=detection.tags,
                     )
                 except Exception as exc:
                     print(f"Skipping {feed.node_name} {timestamp_str}: processing failed ({exc}).")
