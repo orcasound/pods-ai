@@ -480,15 +480,15 @@ def download_testing_sample(row: CSVRow, output_root: Path, cache_root: Path | N
     if _copy_wav_from_cache_if_exists(expected_path, output_root, cache_root):
         return
 
-    min_end_timestamp = add_seconds_to_timestamp_pst(
+    min_end_timestamp_pst_str = add_seconds_to_timestamp_pst(
         row.timestamp_pst,
         TESTING_WINDOW_SECONDS,
     )
 
-    print(f"  Downloading audio ending shortly after {min_end_timestamp}...")
+    print(f"  Downloading audio ending shortly after {min_end_timestamp_pst_str}...")
 
     with TemporaryDirectory() as tmp_dir:
-        wav_path = download_60s_audio(row.node_name, min_end_timestamp, tmp_dir)
+        wav_path = download_60s_audio(node_name=row.node_name, min_end_timestamp_pst_str=min_end_timestamp_pst_str, tmp_dir=tmp_dir)
         if wav_path is None:
             raise AssertionError(f"Error: Failed to download 60-second clip for {row.node_name} at {row.timestamp_pst}")
         shutil.move(wav_path, expected_path)

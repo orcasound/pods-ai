@@ -201,8 +201,8 @@ def load_m3u8_with_retry(stream_url: str) -> m3u8.M3U8:
     raise last_exception
 
 
-def _parse_timestamp_pst(timestamp_str: str) -> datetime:
-    dt = datetime.strptime(timestamp_str, '%Y_%m_%d_%H_%M_%S_PST')
+def _parse_timestamp_pst(timestamp_pst_str: str) -> datetime:
+    dt = datetime.strptime(timestamp_pst_str, '%Y_%m_%d_%H_%M_%S_PST')
     return PACIFIC_TZ.localize(dt)
 
 
@@ -305,8 +305,8 @@ def get_orcahello_detections(
     return results
 
 
-def _get_aligned_end_time(timestamp_str: str) -> datetime:
-    raw_end = _parse_timestamp_pst(timestamp_str)
+def _get_aligned_end_time(timestamp_pst_str: str) -> datetime:
+    raw_end = _parse_timestamp_pst(timestamp_pst_str)
     snapped_sec = ((raw_end.second + 9) // 10) * 10
     if snapped_sec == 60:
         # roll over to next minute.
@@ -315,11 +315,11 @@ def _get_aligned_end_time(timestamp_str: str) -> datetime:
     return raw_end.replace(second=snapped_sec, microsecond=0)
 
 
-def download_60s_audio(node_name: str, min_end_timestamp_str: str, tmp_dir: str) -> Optional[str]:
+def download_60s_audio(node_name: str, min_end_timestamp_pst_str: str, tmp_dir: str) -> Optional[str]:
     """
     Download 60 seconds of audio ending at the next 10-second boundary after min_end_timestamp_str.
     """
-    end_time = _get_aligned_end_time(min_end_timestamp_str)
+    end_time = _get_aligned_end_time(min_end_timestamp_pst_str)
     start_time = end_time - timedelta(seconds=60)
 
     hydrophone_stream_url = 'https://s3-us-west-2.amazonaws.com/audio-orcasound-net/' + node_name
@@ -417,6 +417,118 @@ def download_60s_audio(node_name: str, min_end_timestamp_str: str, tmp_dir: str)
             ac=1
         )
         ffmpeg.run(stream, overwrite_output=True, quiet=True)
+        return wav_file_path
+    except Exception as e:
+        print(f"  Warning: Unable to retrieve audio clip: {e}")
+        return None
+
+
+def download_60s_audio_from_start_utc(
+    node_name: str,
+    start_time_utc: datetime,
+    tmp_dir: str,
+) -> Optional[str]:
+    """Download a 60-second clip beginning at start_time_utc."""
+    duration_seconds = 60.0
+    end_time_utc = start_time_utc + timedelta(seconds=duration_seconds)
+    start_unix_time = int(start_time_utc.timestamp())
+    end_unix_time = int(end_time_utc.timestamp())
+
+    hydrophone_stream_url = f"https://s3-us-west-2.amazonaws.com/audio-orcasound-net/{node_name}"
+    bucket_folder = hydrophone_stream_url.split("https://s3-us-west-2.amazonaws.com/")[1]
+    tokens = bucket_folder.split("/")
+    s3_bucket = tokens[0]
+    folder_name = tokens[1]
+    prefix = folder_name + "/hls/"
+
+    try:
+        all_hydrophone_folders = get_cached_folders(s3_bucket, prefix=prefix)
+        print(f"  Found {len(all_hydrophone_folders)} folders in total for {node_name}")
+        valid_folders = get_folders_between_timestamp(all_hydrophone_folders, start_unix_time, end_unix_time)
+        print(f"  Found {len(valid_folders)} folders in date range")
+        if not valid_folders:
+            print(f"  Warning: No folders found for timestamp {start_time_utc}")
+            return None
+        current_folder = int(valid_folders[0])
+    except Exception as e:
+        print(f"  ERROR: Failed to query S3 bucket: {e}")
+        return None
+
+    stream_url = f"{hydrophone_stream_url}/hls/{current_folder}/live.m3u8"
+    try:
+        stream_obj = load_m3u8_with_retry(stream_url)
+    except Exception as e:
+        print(f"  ERROR: Failed to load m3u8 file: {e}")
+        return None
+
+    num_total_segments = len(stream_obj.segments)
+    if num_total_segments == 0:
+        print("  ERROR: No segments found in m3u8 file")
+        return None
+
+    target_duration_exact = sum(item.duration for item in stream_obj.segments) / num_total_segments
+    target_duration = max(target_duration_exact, MIN_SEGMENT_DURATION)
+
+    time_since_folder_start_for_start = get_difference_between_times_in_seconds(start_unix_time, current_folder)
+    time_since_folder_start_for_end = get_difference_between_times_in_seconds(end_unix_time, current_folder)
+
+    segment_start_index = max(
+        0,
+        math.floor((time_since_folder_start_for_start + FLOAT_TOLERANCE) / target_duration),
+    )
+    segment_end_index = min(
+        num_total_segments,
+        math.ceil((time_since_folder_start_for_end - FLOAT_TOLERANCE) / target_duration),
+    )
+    if segment_end_index <= segment_start_index:
+        segment_end_index = min(num_total_segments, segment_start_index + 1)
+
+    print(
+        f"Segment: folder={current_folder}, indices=[{segment_start_index}:{segment_end_index}), "
+        f"start={_format_utc_iso_z(start_time_utc)}, duration={duration_seconds:.1f}s"
+    )
+
+    try:
+        file_names = []
+        for i in range(segment_start_index, segment_end_index):
+            audio_segment = stream_obj.segments[i]
+            base_path = audio_segment.base_uri
+            file_name = audio_segment.uri
+            audio_url = base_path + file_name
+            download_from_url(audio_url, tmp_dir)
+            file_names.append(file_name)
+
+        if not file_names:
+            print("  ERROR: No segments were successfully downloaded")
+            return None
+
+        clip_id = _build_clip_id(start_time_utc)
+        clipname = f"temp_60s_{node_name}_{clip_id}"
+        if len(file_names) > 1:
+            hls_file = str(Path(tmp_dir) / f"{clipname}.ts")
+            with open(hls_file, "wb") as wfd:
+                for f in file_names:
+                    with open(Path(tmp_dir) / f, "rb") as fd:
+                        shutil.copyfileobj(fd, wfd)
+        else:
+            hls_file = str(Path(tmp_dir) / file_names[0])
+
+        wav_file_path = str(Path(tmp_dir) / f"{clipname}.wav")
+        ss_offset = time_since_folder_start_for_start - (segment_start_index * target_duration)
+        if ss_offset < 0:
+            ss_offset = 0.0
+
+        stream = ffmpeg.input(hls_file, ss=ss_offset)
+        stream = ffmpeg.output(
+            stream,
+            wav_file_path,
+            t=duration_seconds,
+            acodec="pcm_s16le",
+            ar=44100,
+            ac=1,
+        )
+        ffmpeg.run(stream, overwrite_output=True, quiet=True)
+        print(f"  Downloaded 60s audio: {wav_file_path}")
         return wav_file_path
     except Exception as e:
         print(f"  Warning: Unable to retrieve audio clip: {e}")
