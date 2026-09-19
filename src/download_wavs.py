@@ -461,7 +461,7 @@ def download_testing_sample(row: CSVRow, output_root: Path, cache_root: Path | N
     """
     Download audio for a testing sample.
 
-    The testing CSV timestamp is interpreted as the 60-second clip start time.
+    The testing CSV StartTimestamp is the 60-second clip start time.
 
     Args:
         row: Parsed CSV row describing one testing sample.

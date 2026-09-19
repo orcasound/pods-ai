@@ -102,7 +102,7 @@ def process_false_negatives(
             print(f"Checking confirmed OrcaHello detection at {timestamp_str}")
 
             with TemporaryDirectory() as temp_dir:
-                wav_path = download_60s_audio(feed.node_name, timestamp_str, temp_dir)
+                wav_path = download_60s_audio(node_name: feed.node_name, min_end_timestamp_str: timestamp_str, tmp_dir: temp_dir)
                 if wav_path is None:
                     print(f"Skipping {feed.node_name} {timestamp_str}: failed to download audio.")
                     summary["download_failed"] += 1
@@ -130,7 +130,7 @@ def process_false_negatives(
                     podsai_segment_rows = add_training_3s_samples(
                         wav_file=wav_path,
                         node_name=feed.node_name,
-                        base_timestamp=timestamp_str,
+                        start_timestamp=timestamp_str,
                         output_dir=str(output_dir),
                         model_path=model_path,
                         detections_csv=detections_csv,
