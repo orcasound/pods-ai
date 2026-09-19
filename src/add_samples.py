@@ -28,14 +28,14 @@ label for each segment.  The default model is davethaler/whale-call-detector on
 HuggingFace Hub; override with --model-path.
 
 Output is printed in manual_samples.csv format (can be copy-pasted directly):
-Category,NodeName,Timestamp,URI,Description,Notes,Confidence
+Category,NodeName,StartTimestamp,URI,Description,Notes,Confidence
 
 If a corrected class is provided, rows whose predicted class already matches the
 corrected class are omitted from the printed output.
 
 URI/Description/Notes Lookup:
 - The script looks up the detection in detections.csv (default: bootstrap/csv/detections.csv)
-  by matching NodeName and Timestamp, and uses the URI, Description, and Notes from that row
+  by matching NodeName and StartTimestamp, and uses the URI, Description, and Notes from that row
 - If not found in detections.csv, generates a URI from the timestamp and uses
   fallback_description when provided (otherwise empty Description), with Notes="manual"
 
@@ -308,7 +308,7 @@ def generate_uri(node_name: str, timestamp_str: str) -> str:
 
 def lookup_detection_in_csv(node_name: str, timestamp_str: str, detections_csv: str) -> Optional[DetectionInfo]:
     """
-    Look up detection info in detections.csv by matching NodeName and Timestamp.
+    Look up detection info in detections.csv by matching NodeName and StartTimestamp.
 
     Args:
         node_name: Hydrophone node name (e.g., "rpi_orcasound_lab").
@@ -327,8 +327,8 @@ def lookup_detection_in_csv(node_name: str, timestamp_str: str, detections_csv: 
         with open(detections_path, 'r', encoding='utf-8') as f:
             reader = csv.DictReader(f)
             for row in reader:
-                # Match both NodeName and Timestamp
-                if row.get('NodeName', '') == node_name and row.get('Timestamp', '') == timestamp_str:
+                # Match both NodeName and StartTimestamp.
+                if row.get('NodeName', '') == node_name and row.get('StartTimestamp', '') == timestamp_str:
                     uri = row.get('URI', '').strip()
                     description = row.get('Description', '').strip()
                     notes = row.get('Notes', '').strip()
@@ -516,7 +516,7 @@ def add_training_3s_samples(
 
     Returns:
         List of dictionaries with keys matching manual_samples.csv format:
-        Category, NodeName, Timestamp, URI, Description, Notes, Confidence, Tags.
+        Category, NodeName, StartTimestamp, URI, Description, Notes, Confidence, Tags.
 
     Raises:
         ValueError: If neither wav_file nor uri is provided, or if node_name or
@@ -541,7 +541,7 @@ def add_training_3s_samples(
 
         print(f"Downloading 60-second audio from URI...")
         print(f"  Node: {node_name}")
-        print(f"  Timestamp: {base_timestamp}")
+        print(f"  StartTimestamp: {base_timestamp}")
 
         # Download the 60-second WAV file.
         temp_dir = TemporaryDirectory()
@@ -597,7 +597,7 @@ def add_training_3s_samples(
     print("\nSegments in manual_samples.csv format:")
     csv_writer = csv.writer(sys.stdout, lineterminator="\n")
     csv_writer.writerow(
-        ["Category", "NodeName", "Timestamp", "URI", "Description", "Notes", "Confidence", "Tags"]
+        ["Category", "NodeName", "StartTimestamp", "URI", "Description", "Notes", "Confidence", "Tags"]
     )
 
     for seg_path, timestamp_str in segments:
@@ -613,7 +613,7 @@ def add_training_3s_samples(
         row = {
             "Category": label,
             "NodeName": node_name,
-            "Timestamp": timestamp_str,
+            "StartTimestamp": timestamp_str,
             "URI": segment_uri,
             "Description": shared_description,
             "Notes": shared_notes,
@@ -673,7 +673,7 @@ def add_testing_60s_sample(
 
     Returns:
         Dictionary with keys matching testing_60s_samples.csv format:
-        Category, NodeName, Timestamp, URI, Description, Notes, Confidence, Tags.
+        Category, NodeName, StartTimestamp, URI, Description, Notes, Confidence, Tags.
 
     Raises:
         ValueError: If neither wav_file nor uri is provided, or if node_name or
@@ -699,7 +699,7 @@ def add_testing_60s_sample(
     row = {
             "Category": corrected_class,
             "NodeName": node_name,
-            "Timestamp": base_timestamp,
+            "StartTimestamp": base_timestamp,
             "URI": segment_uri,
             "Description": shared_description,
             "Notes": shared_notes,

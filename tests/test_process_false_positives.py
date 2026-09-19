@@ -101,7 +101,7 @@ class TestAppendManualSamples:
         """Rows with URIs already in the file should not be appended again."""
         manual_samples_path = tmp_path / "manual_samples.csv"
         manual_samples_path.write_text(
-            "Category,NodeName,Timestamp,URI,Description,Notes,Confidence\n"
+            "Category,NodeName,StartTimestamp,URI,Description,Notes,Confidence\n"
             "vessel,rpi_test,2025_01_01_00_00_00_PST,https://example.com/existing,desc,notes,90.0\n",
             encoding="utf-8",
         )
@@ -226,7 +226,7 @@ class TestProcessFalsePositives:
         wav_path.write_bytes(b"wav")
         manual_samples_path = tmp_path / "manual_samples.csv"
         manual_samples_path.write_text(
-            "Category,NodeName,Timestamp,URI,Description,Notes,Confidence\n"
+            "Category,NodeName,StartTimestamp,URI,Description,Notes,Confidence\n"
             "vessel,rpi_test,2025_01_01_04_00_00_PST,https://example.com/existing,desc,manual,90.0\n",
             encoding="utf-8",
         )

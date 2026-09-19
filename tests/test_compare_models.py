@@ -183,7 +183,7 @@ class TestLoadTestSamples:
         from compare_models import load_test_samples
 
         testing_csv = tmp_path / "testing_60s_samples.csv"
-        testing_csv.write_text("Category,NodeName,Timestamp,URI,Description,Notes\n")
+        testing_csv.write_text("Category,NodeName,StartTimestamp,URI,Description,Notes\n")
 
         # Patch DictReader iteration to raise csv.Error mid-read.
         with patch("compare_models.csv.DictReader") as mock_reader_cls:
@@ -201,7 +201,7 @@ class TestLoadTestSamples:
         testing_csv = tmp_path / "testing_60s_samples.csv"
         # Write file with invalid UTF-8
         with open(testing_csv, "wb") as f:
-            f.write(b"Category,NodeName,Timestamp,URI,Description,Notes\n")
+            f.write(b"Category,NodeName,StartTimestamp,URI,Description,Notes\n")
             f.write(b"resident,rpi_lab,2023_01_01_00_00_00_PST,http://example.com,test\x8f,notes\n")
         
         samples = load_test_samples(testing_csv)

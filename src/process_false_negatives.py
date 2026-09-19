@@ -148,7 +148,7 @@ def process_false_negatives(
             mismatched_rows: list[dict] = []
             node_name_in_filename = feed.node_name.replace("_", "-")
             for row in podsai_segment_rows:
-                segment_timestamp = (row.get("Timestamp") or "").strip()
+                segment_timestamp = (row.get("StartTimestamp") or "").strip()
                 if not segment_timestamp:
                     continue
 

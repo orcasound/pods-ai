@@ -575,7 +575,7 @@ def process_all_feeds(
     with open(csv_path, 'w', newline='', encoding='utf-8') as csvfile:
         csv_writer = csv.writer(csvfile, lineterminator='\n')
         # Write header.
-        csv_writer.writerow(['Category', 'NodeName', 'Timestamp', 'URI', 'Description', 'Notes', 'Confidence'])
+        csv_writer.writerow(['Category', 'NodeName', 'StartTimestamp', 'URI', 'Description', 'Notes', 'Confidence'])
 
         # Write sorted unique rows (exclude the timestamp used for sorting).
         for row in unique_rows:

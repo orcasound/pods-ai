@@ -165,7 +165,7 @@ def process_false_positives(
         print(f"Processing feed {feed.node_name}")
         csv_writer = csv.writer(sys.stdout, lineterminator="\n")
         csv_writer.writerow(
-            ["Category", "NodeName", "Timestamp", "URI", "Description", "Notes", "Confidence", "Tags"]
+            ["Category", "NodeName", "StartTimestamp", "URI", "Description", "Notes", "Confidence", "Tags"]
         )
         for detection in get_orcahello_detections(feed, start_time, end_time):
             if detection.timestamp is None:
