@@ -2,14 +2,34 @@
 # SPDX-License-Identifier: MIT
 """Unit tests for PODS-AI LiveInferenceOrchestrator helpers."""
 
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import LiveInferenceOrchestrator as orchestrator
 
 
-def test_orcasound_attributes_pulled_from_feed() -> None:
+@patch("LiveInferenceOrchestrator.requests.get")
+def test_orcasound_attributes_pulled_from_feed(mock_get) -> None:
+    mock_response = Mock()
+    mock_response.raise_for_status.return_value = None
+    mock_response.json.return_value = {
+        "data": [
+            {
+                "id": "feed_02u8r4EPgmlYQmh6gzlGIL",
+                "attributes": {
+                    "name": "Andrews Bay",
+                    "node_name": "rpi_andrews_bay",
+                    "location_point": {
+                        "coordinates": [-123.166408, 48.546653]
+                    }
+                }
+            }
+        ]
+    }
+    mock_get.return_value = mock_response
+
     result_dict = orchestrator.get_hydro_attributes_from_feed()
-    assert (result_dict.get("rpi_andrews_bay").get("name") == "Andrews Bay")
+    assert result_dict["rpi_andrews_bay"]["name"] == "Andrews Bay"
+
 
 def test_is_positive_label_uses_multiclass_negative_set() -> None:
     """Negative classes should be non-detections, whale classes should be detections."""
