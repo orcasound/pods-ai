@@ -82,7 +82,7 @@ def _make_sample(
         row_index=row_index,
         category=category,
         node_name=node_name,
-        start_imestamp=start_timestamp,
+        start_timestamp=start_timestamp,
         uri=uri,
         description=description,
         notes=notes,
