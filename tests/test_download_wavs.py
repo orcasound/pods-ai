@@ -78,7 +78,9 @@ class TestDownloadTestingSample:
                 download_testing_sample(row, output_root)
 
             mock_download_60s.assert_called_once_with(
-                "rpi_orcasound_lab", "2025_01_01_00_01_03_PST", ANY
+                node_name="rpi_orcasound_lab",
+                min_end_timestamp_pst_str="2025_01_01_00_01_03_PST",
+                tmp_dir=ANY
             )
             expected = output_root / "humpback" / "rpi-orcasound-lab_2025_01_01_00_00_03_PST.wav"
             assert expected.exists()
