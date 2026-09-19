@@ -72,7 +72,7 @@ def _make_sample(
     row_index=0,
     category="resident",
     node_name="rpi_orcasound_lab",
-    timestamp="2023_08_18_00_59_53_PST",
+    start_imestamp="2023_08_18_00_59_53_PST",
     uri="https://example.com/1",
     description="J pod calls",
     notes="tp_human_only",
@@ -82,7 +82,7 @@ def _make_sample(
         row_index=row_index,
         category=category,
         node_name=node_name,
-        timestamp=timestamp,
+        start_imestamp=start_timestamp,
         uri=uri,
         description=description,
         notes=notes,
@@ -142,7 +142,7 @@ class TestLoadTestSamples:
         assert first.row_index == 0
         assert first.category == "resident"
         assert first.node_name == "rpi_orcasound_lab"
-        assert first.timestamp == "2023_08_18_00_59_53_PST"
+        assert first.start_timestamp == "2023_08_18_00_59_53_PST"
         assert first.uri == "https://example.com/1"
         assert first.description == "J pod calls"
         assert first.notes == "tp_human_only"
@@ -231,7 +231,7 @@ class TestFindWavFile:
         sample = _make_sample(
             category="resident",
             node_name="rpi_orcasound_lab",
-            timestamp="2023_08_18_00_59_53_PST",
+            start_timestamp="2023_08_18_00_59_53_PST",
         )
 
         wav_dir = tmp_path / "wav"
@@ -259,7 +259,7 @@ class TestFindWavFile:
         sample = _make_sample(
             category="humpback",
             node_name="rpi_bush_point",
-            timestamp="2024_01_01_00_00_00_PST",
+            start_timestamp="2024_01_01_00_00_00_PST",
         )
 
         wav_dir = tmp_path / "wav"
@@ -278,7 +278,7 @@ class TestFindWavFile:
         sample = _make_sample(
             category="transient",
             node_name="rpi_port_townsend",
-            timestamp="2024_03_01_06_00_00_PST",
+            start_timestamp="2024_03_01_06_00_00_PST",
         )
 
         wav_dir = tmp_path / "wav"
@@ -546,7 +546,7 @@ class TestWriteEmbeddingRows:
             row_index=7,
             category="resident",
             node_name="rpi_orcasound_lab",
-            timestamp="2023_08_18_00_59_53_PST",
+            start_timestamp="2023_08_18_00_59_53_PST",
             uri="https://example.com/1",
             description="J pod calls",
             notes="tp_human_only",
@@ -574,7 +574,7 @@ class TestWriteEmbeddingRows:
         assert row["manifest_row_index"] == "7"
         assert row["category"] == "resident"
         assert row["node_name"] == "rpi_orcasound_lab"
-        assert row["timestamp"] == "2023_08_18_00_59_53_PST"
+        assert row["start_timestamp"] == "2023_08_18_00_59_53_PST"
         assert row["uri"] == "https://example.com/1"
         assert row["description"] == "J pod calls"
         assert row["notes"] == "tp_human_only"

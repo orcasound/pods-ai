@@ -55,7 +55,7 @@ class TestAppendManualSamples:
             {
                 "Category": "resident",
                 "NodeName": "rpi_test",
-                "Timestamp": "2025_01_01_00_00_00_PST",
+                "StartTimestamp": "2025_01_01_00_00_00_PST",
                 "URI": "https://example.com/existing",
                 "Description": "desc",
                 "Notes": "notes",
@@ -64,7 +64,7 @@ class TestAppendManualSamples:
             {
                 "Category": "resident",
                 "NodeName": "rpi_test",
-                "Timestamp": "2025_01_01_00_00_02_PST",
+                "StartTimestamp": "2025_01_01_00_00_02_PST",
                 "URI": "https://example.com/new",
                 "Description": "desc",
                 "Notes": "notes",
@@ -124,7 +124,7 @@ class TestProcessFalseNegatives:
             {
                 "Category": "resident",
                 "NodeName": "rpi_test",
-                "Timestamp": "2025_01_01_04_00_00_PST",
+                "StartTimestamp": "2025_01_01_04_00_00_PST",
                 "URI": "https://example.com/resident",
                 "Description": "desc",
                 "Notes": "manual",
@@ -134,7 +134,7 @@ class TestProcessFalseNegatives:
             {
                 "Category": "transient",
                 "NodeName": "rpi_test",
-                "Timestamp": "2025_01_01_04_00_02_PST",
+                "StartTimestamp": "2025_01_01_04_00_02_PST",
                 "URI": "https://example.com/transient",
                 "Description": "desc",
                 "Notes": "manual",
@@ -144,7 +144,7 @@ class TestProcessFalseNegatives:
             {
                 "Category": "water",
                 "NodeName": "rpi_test",
-                "Timestamp": "2025_01_01_04_00_04_PST",
+                "StartTimestamp": "2025_01_01_04_00_04_PST",
                 "URI": "https://example.com/water",
                 "Description": "desc",
                 "Notes": "manual",
@@ -154,7 +154,7 @@ class TestProcessFalseNegatives:
         ]
 
         for row in segment_rows:
-            seg_name = f"rpi-test_{row['Timestamp']}.wav"
+            seg_name = f"rpi-test_{row['StartTimestamp']}.wav"
             (segment_dir / seg_name).write_bytes(b"segment")
 
         podsai_model = Mock()
@@ -304,7 +304,7 @@ class TestProcessFalseNegatives:
                      {
                          "Category": "transient",
                          "NodeName": "rpi_test",
-                         "Timestamp": segment_timestamp,
+                         "StartTimestamp": segment_timestamp,
                          "URI": "https://example.com/new",
                          "Description": "desc",
                          "Notes": "manual",

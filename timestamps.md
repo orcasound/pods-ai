@@ -38,7 +38,7 @@ and the incorrect time for other audio.
 
 Currently the URIs in the csv files in this repository go to the Orcasite bouts interface and so
 are intentionally off by 2 seconds.  That is, the URIs do not use the detection time, they show "Orcasite" time.
-And the Timestamp column of `training_3s_samples.csv` is similarly the Orcasite start time, not the correct time.
+And the `StartTimestamp` column of `training_3s_samples.csv` is similarly the Orcasite start time, not the correct time.
 In this repository, `download_audio_segment()` in `download_wavs.py` thus uses the Orcasite time to find the
 audio to download.  If the csv file is changed to use real time, this will need to change.
 

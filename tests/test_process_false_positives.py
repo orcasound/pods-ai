@@ -197,7 +197,7 @@ class TestProcessFalsePositives:
         mock_add_training.assert_not_called()
         assert mock_add_testing.call_count == 1
         assert mock_add_testing.call_args.kwargs["corrected_class"] == "vessel"
-        assert mock_add_testing.call_args.kwargs["base_timestamp"] == "2025_01_01_03_59_00_PST"
+        assert mock_add_testing.call_args.kwargs["start_timestamp"] == "2025_01_01_03_59_00_PST"
         assert mock_add_testing.call_args.kwargs["fallback_description"] == detection.comments
         assert mock_add_testing.call_args.kwargs["fallback_notes"] == "fp_machine"
         assert mock_add_testing.call_args.kwargs["fallback_tags"] == detection.tags
