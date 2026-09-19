@@ -13,7 +13,13 @@ import argparse
 import requests
 from azure.cosmos import CosmosClient
 import os
-from audio_utils import (
+import sys
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from src.audio_utils import (
     format_timestamp_pst,
     parse_timestamp_pst,
 )
