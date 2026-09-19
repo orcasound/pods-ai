@@ -9,6 +9,7 @@ and download_wavs.py to avoid code duplication.
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import List, Optional
 import math
 import http.client
@@ -423,6 +424,17 @@ def download_60s_audio(node_name: str, min_end_timestamp_pst_str: str, tmp_dir: 
         return None
 
 
+MIN_SEGMENT_DURATION = 0.001
+FLOAT_TOLERANCE = 1e-9
+
+def _build_clip_id(start_time_utc: datetime) -> str:
+    return start_time_utc.astimezone(PACIFIC_TZ).strftime("%Y_%m_%d_%H_%M_%S_PST")
+
+
+def format_utc_iso_z(dt: datetime) -> str:
+    return dt.astimezone(UTC_TZ).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
 def download_60s_audio_from_start_utc(
     node_name: str,
     start_time_utc: datetime,
@@ -485,7 +497,7 @@ def download_60s_audio_from_start_utc(
 
     print(
         f"Segment: folder={current_folder}, indices=[{segment_start_index}:{segment_end_index}), "
-        f"start={_format_utc_iso_z(start_time_utc)}, duration={duration_seconds:.1f}s"
+        f"start={format_utc_iso_z(start_time_utc)}, duration={duration_seconds:.1f}s"
     )
 
     try:

@@ -460,7 +460,8 @@ def compute_correct_timestamp_for_tp_human_only(
     print(f"Computing correct timestamp for tp_human_only: {node_name} - {timestamp_str}")
 
     # Download 60 seconds of audio.
-    wav_path = download_60s_audio(node_name, timestamp_str, tmp_dir)
+    min_end_timestamp_pst_str=format_timestamp_pst(parse_timestamp_pst(timestamp_str) + timedelta(seconds=60))
+    wav_path = download_60s_audio(node_name, min_end_timestamp_pst_str, tmp_dir)
 
     if wav_path is None:
         print(f"  Failed to download audio, falling back to {segment_duration}-second offset")

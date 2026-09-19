@@ -29,6 +29,7 @@ import ffmpeg
 from pytz import timezone as pytz_tz
 
 from audio_utils import (
+    format_utc_iso_z,
     download_60s_audio_from_start_utc,
     download_from_url,
     get_cached_folders,
@@ -48,8 +49,6 @@ PROPOSED_DESCRIPTION_EXTRA_CLASSES = {"vessel", "human", "jingle", "bird"}
 NEGATIVE_LABELS = {"other", "water", "vessel", "jingle", "human", "bird"}
 PACIFIC_TZ = pytz_tz("US/Pacific")
 UTC_TZ = timezone.utc
-MIN_SEGMENT_DURATION = 0.001
-FLOAT_TOLERANCE = 1e-9
 
 
 def parse_pst_end_timestamp(timestamp_str: str) -> datetime:
@@ -61,14 +60,6 @@ def parse_pst_end_timestamp(timestamp_str: str) -> datetime:
 def parse_utc_start_timestamp(timestamp_str: str) -> datetime:
     """Parse UTC start timestamp format YYYY-MM-DDTHH:MM:SSZ."""
     return datetime.strptime(timestamp_str, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=UTC_TZ)
-
-
-def _format_utc_iso_z(dt: datetime) -> str:
-    return dt.astimezone(UTC_TZ).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-
-def _build_clip_id(start_time_utc: datetime) -> str:
-    return start_time_utc.astimezone(PACIFIC_TZ).strftime("%Y_%m_%d_%H_%M_%S_PST")
 
 
 def _format_pacific_timestamp(dt: datetime) -> str:
@@ -186,7 +177,7 @@ def calculate_positive_segments(
         }
         if start_time_utc is not None:
             segment_start_time_utc = start_time_utc + timedelta(seconds=start_seconds)
-            segment_info["start_time_utc"] = _format_utc_iso_z(segment_start_time_utc)
+            segment_info["start_time_utc"] = format_utc_iso_z(segment_start_time_utc)
             segment_info["start_time_pacific"] = _format_pacific_timestamp(
                 segment_start_time_utc
             )
