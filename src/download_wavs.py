@@ -35,6 +35,8 @@ DETECTIONS_PAGE_SIZE = 50
 LEGACY_ORCAHELLO_CLIP_SECONDS = 11
 CURRENT_HLS_CLIP_SECONDS = 10
 AUDIO_OFFSET_SECONDS = 2
+_DETECTIONS_WINDOW_CACHE: dict[tuple[str, str, str], list[dict]] = {}
+_CORRECTED_TIMESTAMP_CACHE: dict[tuple[str, str], datetime] = {}
 
 @dataclass
 class CSVRow:
@@ -348,6 +350,15 @@ def _fetch_detections_page(node_name: str, start_date: datetime, end_date: datet
 
 
 def _fetch_detections_for_window(node_name: str, start_date: datetime, end_date: datetime) -> list[dict]:
+    cache_key = (
+        node_name,
+        start_date.strftime("%m/%d/%Y"),
+        end_date.strftime("%m/%d/%Y"),
+    )
+    cached = _DETECTIONS_WINDOW_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+
     page = 1
     detections: list[dict] = []
     while True:
@@ -358,6 +369,7 @@ def _fetch_detections_for_window(node_name: str, start_date: datetime, end_date:
         if not has_next_page:
             break
         page += 1
+    _DETECTIONS_WINDOW_CACHE[cache_key] = detections
     return detections
 
 
@@ -372,7 +384,13 @@ def _parse_detection_timestamp(detection: dict) -> datetime | None:
 
 
 def _get_corrected_detection_timestamp(node_name: str, detection_timestamp: datetime) -> datetime:
+    cache_key = (node_name, detection_timestamp.isoformat())
+    cached = _CORRECTED_TIMESTAMP_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+
     if detection_timestamp >= CURRENT_EPOCH_START:
+        _CORRECTED_TIMESTAMP_CACHE[cache_key] = detection_timestamp
         return detection_timestamp
 
     folder_prefix = f"{node_name}/hls/"
@@ -398,7 +416,9 @@ def _get_corrected_detection_timestamp(node_name: str, detection_timestamp: date
     original_clip_index = original_seconds_into_folder // LEGACY_ORCAHELLO_CLIP_SECONDS
     corrected_seconds_into_folder = (original_clip_index * CURRENT_HLS_CLIP_SECONDS) + AUDIO_OFFSET_SECONDS
     corrected_unix_time_seconds = folder_time_seconds + corrected_seconds_into_folder
-    return datetime.fromtimestamp(corrected_unix_time_seconds, tz=dt_timezone.utc)
+    corrected_timestamp = datetime.fromtimestamp(corrected_unix_time_seconds, tz=dt_timezone.utc)
+    _CORRECTED_TIMESTAMP_CACHE[cache_key] = corrected_timestamp
+    return corrected_timestamp
 
 
 def _find_matching_detection(row: CSVRow) -> tuple[dict, str]:
