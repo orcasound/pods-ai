@@ -9,6 +9,7 @@ from unittest.mock import ANY, Mock, patch
 import os
 
 import pytest
+import download_wavs
 
 from download_wavs import (
     CSVRow,
@@ -133,6 +134,11 @@ class TestOverlapValidation:
 
 class TestAlignedEntryValidation:
     @staticmethod
+    def _clear_validation_caches():
+        download_wavs._DETECTIONS_WINDOW_CACHE.clear()
+        download_wavs._CORRECTED_TIMESTAMP_CACHE.clear()
+
+    @staticmethod
     def _mock_detection_response(payload, total_pages: int | None = None):
         response = Mock()
         response.text = "[]"
@@ -146,6 +152,7 @@ class TestAlignedEntryValidation:
         return response
 
     def test_validate_aligned_entries_handles_paginated_items_payload(self):
+        self._clear_validation_caches()
         testing_rows = [
             CSVRow(
                 "human",
@@ -188,7 +195,35 @@ class TestAlignedEntryValidation:
 
         assert mock_get.call_count == 2
 
+    def test_validate_aligned_entries_allows_current_epoch_false_positive_without_s3_lookup(self):
+        self._clear_validation_caches()
+        testing_rows = [
+            CSVRow(
+                "human",
+                "rpi_sunset_bay",
+                "2025_12_01_00_00_00_PST",
+                "https://live.orcasound.net/bouts/new/sunset-bay?time=2025-12-01T08%3A00%3A00.000Z",
+                "Radio",
+                "fp_machine_only",
+            ),
+        ]
+        detections = [
+            {
+                "timestamp": "2025-12-01T08:00:00Z",
+                "comments": "Radio",
+                "found": "No",
+                "reviewed": True,
+            },
+        ]
+
+        with patch("download_wavs.requests.get", return_value=self._mock_detection_response(detections)) as mock_get, \
+                patch("download_wavs.get_cached_folders", side_effect=AssertionError("should not query S3 for current epoch")):
+            validate_aligned_entries(testing_rows)
+
+        mock_get.assert_called_once()
+
     def test_validate_aligned_entries_rejects_old_epoch_misalignment(self):
+        self._clear_validation_caches()
         testing_rows = [
             CSVRow(
                 "human",

@@ -428,6 +428,9 @@ def _find_matching_detection(row: CSVRow) -> tuple[dict, str]:
     last_candidate_count = 0
     last_start_date = row_timestamp
     last_end_date = row_timestamp
+    closest_reviewed_timestamp_pst = None
+    closest_reviewed_comments = None
+    closest_reviewed_delta_seconds = None
 
     for days in search_windows:
         start_date = row_timestamp - timedelta(days=days)
@@ -453,6 +456,10 @@ def _find_matching_detection(row: CSVRow) -> tuple[dict, str]:
 
             corrected_timestamp = _get_corrected_detection_timestamp(row.node_name, detection_timestamp)
             delta_seconds = abs((corrected_timestamp.astimezone(PACIFIC_TZ) - row_timestamp).total_seconds())
+            if closest_reviewed_delta_seconds is None or delta_seconds < closest_reviewed_delta_seconds:
+                closest_reviewed_delta_seconds = delta_seconds
+                closest_reviewed_timestamp_pst = _format_timestamp_pst(corrected_timestamp)
+                closest_reviewed_comments = comments
             candidates.append((delta_seconds, corrected_timestamp, detection))
 
         last_candidate_count = len(candidates)
@@ -464,7 +471,8 @@ def _find_matching_detection(row: CSVRow) -> tuple[dict, str]:
         f"Could not find matching OrcaHello false-positive detection for testing row {row!r} "
         f"(timestamp={row.timestamp_pst}, description={row.description!r}, "
         f"search_window={last_start_date.strftime('%m/%d/%Y')}..{last_end_date.strftime('%m/%d/%Y')}, "
-        f"candidates={last_candidate_count})."
+        f"candidates={last_candidate_count}, closest_corrected_timestamp={closest_reviewed_timestamp_pst!r}, "
+        f"closest_comments={closest_reviewed_comments!r})."
     )
 
 
