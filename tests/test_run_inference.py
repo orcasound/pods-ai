@@ -738,7 +738,7 @@ class TestBuildTagsList:
         }
         
         tags = build_tags_list(result, id2label)
-        assert set(tags) == {"resident"}
+        assert set(tags) == {"SRKW"}
 
     def test_tags_append_context_class_when_most_common_segment(self):
         """Tags should include vessel when vessel is most common and differs from global label."""
@@ -755,7 +755,7 @@ class TestBuildTagsList:
         }
         
         tags = build_tags_list(result, id2label)
-        assert set(tags) == {"resident", "vessel"}
+        assert set(tags) == {"SRKW", "vessel"}
 
     def test_tags_include_all_global_positive_labels_without_duplicates(self):
         """Multi-label global predictions are preserved before local context."""
@@ -768,7 +768,7 @@ class TestBuildTagsList:
         }
         id2label = {1: "resident", 2: "transient"}
 
-        assert build_tags_list(result, id2label) == ["resident", "transient"]
+        assert build_tags_list(result, id2label) == ["SRKW", "transient"]
 
     def test_tags_do_not_add_secondary_local_whale_context(self):
         """Local whale labels below the global threshold remain out of context tags."""
@@ -779,7 +779,7 @@ class TestBuildTagsList:
             "local_predictions": ["resident", "humpback", "resident"],
         }
 
-        assert build_tags_list(result) == ["resident"]
+        assert build_tags_list(result) == ["SRKW"]
 
     def test_tags_deduplicate_global_and_local_positive_labels(self):
         """Global positives are emitted once even when repeated locally."""
@@ -791,7 +791,7 @@ class TestBuildTagsList:
             "local_predictions": ["resident", "resident", "water"],
         }
 
-        assert build_tags_list(result) == ["resident", "transient", "water"]
+        assert build_tags_list(result) == ["SRKW", "transient", "water"]
 
 # ---------------------------------------------------------------------------
 # Tests for main() CLI
