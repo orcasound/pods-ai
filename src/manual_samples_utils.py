@@ -9,7 +9,7 @@ from pathlib import Path
 CSV_FIELDNAMES = [
     "Category",
     "NodeName",
-    "Timestamp",
+    "StartTimestamp",
     "URI",
     "Description",
     "Notes",

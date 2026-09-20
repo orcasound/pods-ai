@@ -1,4 +1,4 @@
-Category,NodeName,Timestamp,URI,Description,Notes,Confidence
+Category,NodeName,StartTimestamp,URI,Description,Notes,Confidence
 bird,rpi_andrews_bay,2026_07_09_07_13_36_PST,https://live.orcasound.net/bouts/new/andrews-bay?time=2026-07-09T14%3A13%3A36.000Z,"Bird, wake noise",fp_machine_only,66.7
 bird,rpi_andrews_bay,2026_07_11_12_41_51_PST,https://live.orcasound.net/bouts/new/andrews-bay?time=2026-07-11T19%3A41%3A51.000Z,"Bird, moderate vessel noise",fp_machine_only,66.7
 bird,rpi_andrews_bay,2026_07_12_11_10_13_PST,https://live.orcasound.net/bouts/new/andrews-bay?time=2026-07-12T18%3A10%3A13.000Z,"Bird, moderate ship noise",fp_machine_only,66.7

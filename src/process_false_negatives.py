@@ -15,17 +15,17 @@ For each confirmed OrcaHello detection in the selected timeframe, this script:
 """
 
 import argparse
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Optional
 
-from add_samples import DEFAULT_DETECTIONS_CSV, DEFAULT_MODEL_PATH, DEFAULT_OUTPUT_DIR, add_samples
+from add_samples import DEFAULT_DETECTIONS_CSV, DEFAULT_MODEL_PATH, DEFAULT_OUTPUT_DIR, add_training_3s_samples
 from audio_utils import (
     download_60s_audio,
     format_timestamp_pst,
     get_orcahello_detections,
-    parse_pst_timestamp,
+    parse_timestamp_pst,
 )
 from manual_samples_utils import append_manual_samples, load_existing_uris
 from model_inference import get_model_inference
@@ -87,7 +87,7 @@ def process_false_negatives(
 
     for feed in feeds:
         print(f"Processing feed {feed.node_name}")
-        for detection in get_orcahello_detections(feed):
+        for detection in get_orcahello_detections(feed, start_time, end_time):
             if detection.status.lower() != "confirmed" or detection.timestamp is None:
                 continue
             # OrcaHello detections are returned in descending timestamp order.
@@ -102,7 +102,8 @@ def process_false_negatives(
             print(f"Checking confirmed OrcaHello detection at {timestamp_str}")
 
             with TemporaryDirectory() as temp_dir:
-                wav_path = download_60s_audio(feed.node_name, timestamp_str, temp_dir)
+                min_end_timestamp_pst_str = format_timestamp_pst(detection.timestamp + timedelta(seconds=60))
+                wav_path = download_60s_audio(node_name=feed.node_name, min_end_timestamp_pst_str=min_end_timestamp_pst_str, tmp_dir=temp_dir)
                 if wav_path is None:
                     print(f"Skipping {feed.node_name} {timestamp_str}: failed to download audio.")
                     summary["download_failed"] += 1
@@ -127,10 +128,10 @@ def process_false_negatives(
                         f"Running add_samples.py for {feed.node_name} {timestamp_str} "
                         "with corrected class 'resident'."
                     )
-                    podsai_segment_rows = add_samples(
+                    podsai_segment_rows = add_training_3s_samples(
                         wav_file=wav_path,
                         node_name=feed.node_name,
-                        base_timestamp=timestamp_str,
+                        start_timestamp=timestamp_str,
                         output_dir=str(output_dir),
                         model_path=model_path,
                         detections_csv=detections_csv,
@@ -138,6 +139,7 @@ def process_false_negatives(
                         corrected_class="resident",
                         fallback_description=detection.comments,
                         fallback_notes="tp_machine",
+                        fallback_tags=detection.tags,
                     )
                 except Exception as exc:
                     print(f"Skipping {feed.node_name} {timestamp_str}: processing failed ({exc}).")
@@ -147,7 +149,7 @@ def process_false_negatives(
             mismatched_rows: list[dict] = []
             node_name_in_filename = feed.node_name.replace("_", "-")
             for row in podsai_segment_rows:
-                segment_timestamp = (row.get("Timestamp") or "").strip()
+                segment_timestamp = (row.get("StartTimestamp") or "").strip()
                 if not segment_timestamp:
                     continue
 
@@ -256,8 +258,8 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    start_time = parse_pst_timestamp(args.start) if args.start else None
-    end_time = None if (args.end or "").lower() == "now" else parse_pst_timestamp(args.end)
+    start_time = parse_timestamp_pst(args.start) if args.start else None
+    end_time = None if (args.end or "").lower() == "now" else parse_timestamp_pst(args.end)
 
     summary = process_false_negatives(
         manual_samples_path=Path(args.manual_samples_csv),

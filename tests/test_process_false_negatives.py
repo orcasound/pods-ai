@@ -46,7 +46,7 @@ class TestAppendManualSamples:
         """Rows with URIs already in the file should not be appended again."""
         manual_samples_path = tmp_path / "manual_samples.csv"
         manual_samples_path.write_text(
-            "Category,NodeName,Timestamp,URI,Description,Notes,Confidence\n"
+            "Category,NodeName,StartTimestamp,URI,Description,Notes,Confidence\n"
             "resident,rpi_test,2025_01_01_00_00_00_PST,https://example.com/existing,desc,notes,90.0\n",
             encoding="utf-8",
         )
@@ -55,7 +55,7 @@ class TestAppendManualSamples:
             {
                 "Category": "resident",
                 "NodeName": "rpi_test",
-                "Timestamp": "2025_01_01_00_00_00_PST",
+                "StartTimestamp": "2025_01_01_00_00_00_PST",
                 "URI": "https://example.com/existing",
                 "Description": "desc",
                 "Notes": "notes",
@@ -64,7 +64,7 @@ class TestAppendManualSamples:
             {
                 "Category": "resident",
                 "NodeName": "rpi_test",
-                "Timestamp": "2025_01_01_00_00_02_PST",
+                "StartTimestamp": "2025_01_01_00_00_02_PST",
                 "URI": "https://example.com/new",
                 "Description": "desc",
                 "Notes": "notes",
@@ -112,6 +112,7 @@ class TestProcessFalseNegatives:
             timestamp=datetime(2025, 1, 1, 12, 0, 0, tzinfo=timezone.utc),
             status="confirmed",
             comments="",
+            tags=""
         )
         wav_path = tmp_path / "input.wav"
         wav_path.write_bytes(b"wav")
@@ -123,34 +124,37 @@ class TestProcessFalseNegatives:
             {
                 "Category": "resident",
                 "NodeName": "rpi_test",
-                "Timestamp": "2025_01_01_04_00_00_PST",
+                "StartTimestamp": "2025_01_01_04_00_00_PST",
                 "URI": "https://example.com/resident",
                 "Description": "desc",
                 "Notes": "manual",
                 "Confidence": "95.0",
+                "Tags": "resident",
             },
             {
                 "Category": "transient",
                 "NodeName": "rpi_test",
-                "Timestamp": "2025_01_01_04_00_02_PST",
+                "StartTimestamp": "2025_01_01_04_00_02_PST",
                 "URI": "https://example.com/transient",
                 "Description": "desc",
                 "Notes": "manual",
                 "Confidence": "90.0",
+                "Tags": "transient",
             },
             {
                 "Category": "water",
                 "NodeName": "rpi_test",
-                "Timestamp": "2025_01_01_04_00_04_PST",
+                "StartTimestamp": "2025_01_01_04_00_04_PST",
                 "URI": "https://example.com/water",
                 "Description": "desc",
                 "Notes": "manual",
                 "Confidence": "10.0",
+                "Tags": "water",
             },
         ]
 
         for row in segment_rows:
-            seg_name = f"rpi-test_{row['Timestamp']}.wav"
+            seg_name = f"rpi-test_{row['StartTimestamp']}.wav"
             (segment_dir / seg_name).write_bytes(b"segment")
 
         podsai_model = Mock()
@@ -179,7 +183,7 @@ class TestProcessFalseNegatives:
              patch("process_false_negatives.get_orcasite_feeds_with_retry", return_value=[feed]), \
              patch("process_false_negatives.get_orcahello_detections", return_value=[detection]), \
              patch("process_false_negatives.download_60s_audio", return_value=str(wav_path)), \
-             patch("process_false_negatives.add_samples", return_value=segment_rows) as mock_add_samples:
+             patch("process_false_negatives.add_training_3s_samples", return_value=segment_rows) as mock_add_samples:
             summary = process_false_negatives(
                 manual_samples_path=manual_samples_path,
                 output_dir=segment_dir,
@@ -233,7 +237,7 @@ class TestProcessFalseNegatives:
              patch("process_false_negatives.get_orcasite_feeds_with_retry", return_value=[feed]), \
              patch("process_false_negatives.get_orcahello_detections", return_value=[detection]), \
              patch("process_false_negatives.download_60s_audio", return_value=str(wav_path)), \
-             patch("process_false_negatives.add_samples") as mock_add_samples:
+             patch("process_false_negatives.add_training_3s_samples") as mock_add_samples:
             summary = process_false_negatives(
                 manual_samples_path=tmp_path / "manual_samples.csv",
                 output_dir=tmp_path / "segments",
@@ -295,12 +299,12 @@ class TestProcessFalseNegatives:
              ), \
              patch("process_false_negatives.download_60s_audio", return_value=str(wav_path)), \
              patch(
-                 "process_false_negatives.add_samples",
+                 "process_false_negatives.add_training_3s_samples",
                  return_value=[
                      {
                          "Category": "transient",
                          "NodeName": "rpi_test",
-                         "Timestamp": segment_timestamp,
+                         "StartTimestamp": segment_timestamp,
                          "URI": "https://example.com/new",
                          "Description": "desc",
                          "Notes": "manual",
@@ -320,4 +324,4 @@ class TestProcessFalseNegatives:
         assert podsai_model.predict.call_count == 2
         assert orcahello_model.predict.call_count == 1
         assert mock_add_samples.call_count == 1
-        assert mock_add_samples.call_args.kwargs["base_timestamp"] == "2025_01_01_04_05_00_PST"
+        assert mock_add_samples.call_args.kwargs["start_timestamp"] == "2025_01_01_04_05_00_PST"

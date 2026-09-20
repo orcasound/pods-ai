@@ -14,39 +14,46 @@ For each rejected OrcaHello detection in the selected timeframe, this script:
 """
 
 import argparse
-from datetime import datetime
+import csv
+import sys
+from datetime import datetime, timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Optional
 
-from add_samples import DEFAULT_DETECTIONS_CSV, DEFAULT_MODEL_PATH, DEFAULT_OUTPUT_DIR, add_samples
+from add_samples import DEFAULT_DETECTIONS_CSV, DEFAULT_MODEL_PATH, DEFAULT_OUTPUT_DIR, add_training_3s_samples, add_testing_60s_sample
 from audio_utils import (
     SKIP_TERMS,
     download_60s_audio,
     format_timestamp_pst,
     get_orcahello_detections,
-    parse_pst_timestamp,
+    parse_timestamp_pst,
 )
 from manual_samples_utils import append_manual_samples, load_existing_uris
 from model_inference import get_model_inference
 from orcasite_feeds import get_orcasite_feeds_with_retry
 
-DEFAULT_MANUAL_SAMPLES_CSV = "output/csv/new_manual_samples.csv"
+DEFAULT_MANUAL_TRAINING_SAMPLES_CSV = "output/csv/new_manual_training_samples.csv"
+DEFAULT_MANUAL_TESTING_SAMPLES_CSV = "output/csv/new_manual_testing_samples.csv"
 BIRD_TERMS = ("bird", "pigu", "keir")
 RESIDENT_TERMS = ("resident", "pod")
 TRANSIENT_TERMS = ("bigg", "transient")
 HUMAN_TERMS = ("human", "radio")
 VESSEL_TERMS = ("vessel", "ship", "boat", "train")
+OTHER_TERMS = ("seal","sea lion")
 WHALE_CLASSES = {"resident", "transient", "humpback"}
+OTHER_CLASSES = {"bird", "human", "vessel", "jingle", "water", "other"}
 # Phrases that negate "humpback" or "vessel" labels (e.g. human-written "No humpback nor vessel").
 NO_HUMPBACK_TERMS = ("no humpback", "not humpback")
 NO_VESSEL_TERMS = ("no vessel", "nor vessel", "no boat", "nor boat", "no ship", "nor ship", "no train", "nor train")
 
 
-def get_corrected_class(comments: str) -> Optional[str]:
-    """Infer the corrected class from OrcaHello moderation comments.
+def get_corrected_class(comments: str, tags: Optional[str]) -> Optional[str]:
+    """Infer the corrected class from OrcaHello moderation tags and comments.
 
-    Auto-generated "AI: …" prefix lines are stripped before parsing so that
+    Use tags if available, otherwise infer from comments.  Return None if no class can be inferred.
+
+    Auto-generated "AI: …" prefix comment lines are stripped before parsing so that
     phrases like "AI: humpback" do not influence the result.  Explicit negations
     ("No humpback", "No humpback nor vessel") are recognised:
 
@@ -54,6 +61,14 @@ def get_corrected_class(comments: str) -> Optional[str]:
     * "No humpback nor vessel" (and no other positive signal) – returns
       ``"water"``.
     """
+    if tags:
+        # Use the first tag matching a class as the corrected class if available.
+        for tag in tags.split(";"):
+            normalized_tag = tag.strip().lower()
+            if normalized_tag in WHALE_CLASSES or normalized_tag in OTHER_CLASSES:
+                return normalized_tag
+        return "water"
+
     # Drop auto-generated "AI: …" lines so they do not influence class inference.
     human_lines = [
         line for line in (comments or "").splitlines()
@@ -82,6 +97,8 @@ def get_corrected_class(comments: str) -> Optional[str]:
         return "vessel"
     if "jingl" in text:
         return "jingle"
+    if any(term in text for term in OTHER_TERMS):
+        return "other"
     if "water" in text:
         return "water"
     # No positive signal found: the sound is ambient noise.
@@ -103,6 +120,7 @@ def process_false_positives(
     model_path: str = DEFAULT_MODEL_PATH,
     detections_csv: str = DEFAULT_DETECTIONS_CSV,
     feed_filter: Optional[str] = None,
+    for_training: bool = True,
     actual_category_filter: Optional[str] = None,
     start_time: Optional[datetime] = None,
     end_time: Optional[datetime] = None,
@@ -111,7 +129,7 @@ def process_false_positives(
 
     The returned summary includes ``confirmed`` and ``unreviewed`` counters for
     in-range detections that were not rejected, giving diagnostic context when
-    ``rejected`` is zero (e.g. because human review is still pending).
+    ``rejected`` is zero (e.g., because human review is still pending).
     """
     summary = {
         "confirmed": 0,
@@ -139,12 +157,17 @@ def process_false_positives(
             return summary
 
     existing_uris = load_existing_uris(manual_samples_path)
-    print(f"Loading podsai model from {model_path}...")
-    model = get_model_inference(model_type="podsai", model_path=model_path)
+    if for_training:
+        print(f"Loading podsai model from {model_path}...")
+        model = get_model_inference(model_type="podsai", model_path=model_path)
 
     for feed in feeds:
         print(f"Processing feed {feed.node_name}")
-        for detection in get_orcahello_detections(feed):
+        csv_writer = csv.writer(sys.stdout, lineterminator="\n")
+        csv_writer.writerow(
+            ["Category", "NodeName", "StartTimestamp", "URI", "Description", "Notes", "Confidence", "Tags"]
+        )
+        for detection in get_orcahello_detections(feed, start_time, end_time):
             if detection.timestamp is None:
                 continue
             status = detection.status.lower()
@@ -164,69 +187,97 @@ def process_false_positives(
             if end_time is not None and detection.timestamp > end_time:
                 continue
 
-            timestamp_str = format_timestamp_pst(detection.timestamp)
+            timestamp_str_pst = format_timestamp_pst(detection.timestamp)
             summary["rejected"] += 1
-            corrected_class = get_corrected_class(detection.comments)
+            corrected_class = get_corrected_class(detection.comments, detection.tags)
             if corrected_class is None:
-                print(f"Skipping {feed.node_name} {timestamp_str}: could not determine corrected class from comments.")
+                print(f"Skipping {feed.node_name} {timestamp_str_pst}: could not determine corrected class from comment '{detection.comments}' and tags '{detection.tags}'.")
                 summary["unknown_class"] += 1
                 continue
             if normalized_category_filter and corrected_class != normalized_category_filter:
                 continue
 
-            print(f"Checking rejected OrcaHello detection at {timestamp_str}")
-
             with TemporaryDirectory() as temp_dir:
-                wav_path = download_60s_audio(feed.node_name, timestamp_str, temp_dir)
-                if wav_path is None:
-                    print(f"Skipping {feed.node_name} {timestamp_str}: failed to download audio.")
-                    summary["download_failed"] += 1
-                    continue
-
-                try:
-                    inference = model.predict(wav_path)
-                    if inference.get("global_prediction_label") != "resident":
-                        print(
-                            f"Continuing with {feed.node_name} {timestamp_str}: "
-                            "PODS-AI global prediction is not resident."
-                        )
-                        summary["not_false_positive"] += 1
-
-                    print(
-                        f"Running add_samples.py for {feed.node_name} {timestamp_str} "
-                        f"with corrected class '{corrected_class}'."
-                    )
-
-                    segment_rows = add_samples(
-                        wav_file=wav_path,
+                if not for_training:
+                    testing_start_timestamp = format_timestamp_pst(detection.timestamp)
+                    segment_row = add_testing_60s_sample(
                         node_name=feed.node_name,
-                        base_timestamp=timestamp_str,
-                        output_dir=str(output_dir),
-                        model_path=model_path,
+                        start_timestamp=testing_start_timestamp,
                         detections_csv=detections_csv,
-                        model=model,
                         corrected_class=corrected_class,
                         fallback_description=detection.comments,
                         fallback_notes="fp_machine",
+                        fallback_tags=detection.tags,
                     )
-                except Exception as exc:
-                    print(f"Skipping {feed.node_name} {timestamp_str}: processing failed ({exc}).")
-                    summary["processing_failed"] += 1
-                    continue
+                    segment_rows = [segment_row]
+                else:
+                    # For the training set, we need to run PODS-AI inference on the 60-second WAV to find mismatched whale-class segments.
+                    print(f"Checking rejected OrcaHello detection at {timestamp_str_pst}")
 
-            mismatched_whale_rows = []
-            for row in segment_rows:
-                row_category = row.get("Category")
-                if row_category not in WHALE_CLASSES or row_category == corrected_class:
-                    continue
-                updated_row = dict(row)
-                updated_row["Category"] = corrected_class
-                mismatched_whale_rows.append(updated_row)
+                    min_end_timestamp_pst_str = format_timestamp_pst(detection.timestamp + timedelta(seconds=60))
+                    wav_path = download_60s_audio(node_name=feed.node_name, min_end_timestamp_pst_str=min_end_timestamp_pst_str, tmp_dir=temp_dir)
+                    if wav_path is None:
+                        print(f"Skipping {feed.node_name} {timestamp_str_pst}: failed to download audio.")
+                        summary["download_failed"] += 1
+                        continue
 
-            summary["whale_mismatch_segments"] += len(mismatched_whale_rows)
+                    try:
+                        inference = model.predict(wav_path)
+                        if inference.get("global_prediction_label") != "resident":
+                            print(
+                                f"Continuing with {feed.node_name} {timestamp_str_pst}: "
+                                "PODS-AI global prediction is not resident."
+                            )
+                            summary["not_false_positive"] += 1
+
+                        print(
+                            f"Running add_samples.py for {feed.node_name} {timestamp_str_pst} "
+                            f"with corrected class '{corrected_class}'."
+                        )
+
+                        segment_rows = add_training_3s_samples(
+                            wav_file=wav_path,
+                            node_name=feed.node_name,
+                            start_timestamp=timestamp_str_pst,
+                            output_dir=str(output_dir),
+                            model_path=model_path,
+                            detections_csv=detections_csv,
+                            model=model,
+                            corrected_class=corrected_class,
+                            fallback_description=detection.comments,
+                            fallback_notes="fp_machine",
+                            fallback_tags=detection.tags,
+                        )
+                    except Exception as exc:
+                        print(f"Skipping {feed.node_name} {timestamp_str_pst}: processing failed ({exc}).")
+                        summary["processing_failed"] += 1
+                        continue
+
+            # For training, only append whale-class subsegments whose predicted
+            # category differs from the corrected class (mismatches). For testing,
+            # add_testing_60s_sample already returns a single row with Category set
+            # to the corrected_class; include that row directly in the append set
+            # so testing samples are written.
+            if not for_training:
+                append_rows = list(segment_rows)
+                # Count testing rows as processed segments for diagnostics.
+                summary["whale_mismatch_segments"] += len(append_rows)
+            else:
+                mismatched_whale_rows = []
+                for row in segment_rows:
+                    row_category = row.get("Category")
+                    if row_category not in WHALE_CLASSES or row_category == corrected_class:
+                        continue
+                    updated_row = dict(row)
+                    updated_row["Category"] = corrected_class
+                    mismatched_whale_rows.append(updated_row)
+
+                append_rows = mismatched_whale_rows
+                summary["whale_mismatch_segments"] += len(mismatched_whale_rows)
+
             appended, duplicates = append_manual_samples(
                 manual_samples_path,
-                mismatched_whale_rows,
+                append_rows,
                 existing_uris,
             )
             summary["appended"] += appended
@@ -239,10 +290,18 @@ def main() -> int:
     """Run the false-positive processing CLI."""
     parser = argparse.ArgumentParser(
         description=(
-            "Process rejected OrcaHello resident detections, re-run PODS-AI on the "
+            "Process rejected OrcaHello resident detections looking for new training "
+            "or testing samples.  For training samples, re-run PODS-AI on the "
             "60-second WAV, and append mismatched whale-class sub-segments to "
-            "new_manual_samples.csv with a corrected class."
+            "new_manual_training_samples.csv with a corrected class.  For testing "
+            "append mismatched whale-class segments to new_manual_testing_samples.csv."
         )
+    )
+    parser.add_argument(
+        "--set",
+        type=str,
+        default="training",
+        help="training or testing",
     )
     parser.add_argument(
         "--feed",
@@ -268,8 +327,7 @@ def main() -> int:
     )
     parser.add_argument(
         "--manual-samples-csv",
-        default=DEFAULT_MANUAL_SAMPLES_CSV,
-        help="Path to new_manual_samples.csv.",
+        help="Path to new manual samples csv.",
     )
     parser.add_argument(
         "--output-dir",
@@ -295,18 +353,31 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    start_time = parse_pst_timestamp(args.start) if args.start else None
-    end_time = None if (args.end or "").lower() == "now" else parse_pst_timestamp(args.end)
+    start_time = parse_timestamp_pst(args.start) if args.start else None
+    end_time = None if (args.end or "").lower() == "now" else parse_timestamp_pst(args.end)
+    result_set = args.set.lower()
+    if result_set not in ("training", "testing"):
+        print(f"Invalid set value: {args.set}. Must be 'training' or 'testing'.")
+        return 1
+
+    manual_samples_csv = args.manual_samples_csv
+    if not manual_samples_csv:
+        manual_samples_csv = (
+            DEFAULT_MANUAL_TRAINING_SAMPLES_CSV
+            if result_set == "training"
+            else DEFAULT_MANUAL_TESTING_SAMPLES_CSV
+        )
 
     summary = process_false_positives(
-        manual_samples_path=Path(args.manual_samples_csv),
+        manual_samples_path=Path(manual_samples_csv),
         output_dir=Path(args.output_dir),
         model_path=args.model_path,
         detections_csv=args.detections_csv,
         feed_filter=args.feed,
+        for_training=(result_set == "training"),
         actual_category_filter=args.category,
         start_time=start_time,
-        end_time=end_time,
+        end_time=end_time
     )
 
     print("\nSummary:")

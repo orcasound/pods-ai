@@ -30,7 +30,7 @@ N_SECONDS = 3  # Create 3-second wav files.
 TESTING_WINDOW_SECONDS = 60
 TESTING_CENTER_OFFSET_SECONDS = 30
 DEFAULT_DCLDE_MANIFEST = Path("output/csv/dclde_60s_samples.csv")
-DEFAULT_DCLDE_WAV_ROOT = Path("output/dclde-wav")
+DEFAULT_DCLDE_WAV_ROOT = Path("output/dclde-wavs")
 
 @dataclass
 class CSVRow:
@@ -592,7 +592,7 @@ def print_usage():
     print("And saves wav files to:")
     print("  - output/wav/ (training samples)")
     print("  - output/testing-wav/ (testing samples)")
-    print("  - output/dclde-wav/ (DCLDE Orcasound recordings)")
+    print("  - output/dclde-wavs/ (DCLDE Orcasound recordings)")
     print()
     print("Optional argument:")
     print("  --validate-only: validate CSV overlap rules without downloading WAV files")
@@ -690,7 +690,7 @@ def parse_args() -> argparse.Namespace:
         "--dclde-wav-root",
         type=Path,
         default=None,
-        help="Override DCLDE WAV output root (default: output/dclde-wav).",
+        help="Override DCLDE WAV output root (default: output/dclde-wavs).",
     )
     return parser.parse_args()
 

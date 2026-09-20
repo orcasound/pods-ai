@@ -34,48 +34,64 @@ class TestGetCorrectedClass:
 
     def test_detects_transient_keywords(self):
         """Transient-related comments should map to transient."""
-        assert get_corrected_class("Likely transient calls from Bigg's whales.") == "transient"
+        assert get_corrected_class("Likely transient calls from Bigg's whales.", None) == "transient"
 
     def test_detects_vessel_keywords(self):
         """Boat-like comments should map to vessel."""
-        assert get_corrected_class("This is boat noise, not whales.") == "vessel"
+        assert get_corrected_class("This is boat noise, not whales.", None) == "vessel"
 
     def test_returns_none_for_unsure_comments(self):
         """Ambiguous comments should be skipped."""
-        assert get_corrected_class("Not sure what this is.") is None
+        assert get_corrected_class("Not sure what this is.", None) is None
 
     def test_strips_ai_prefix_line_before_inferring_class(self):
         """An 'AI: humpback' prefix line should be ignored so it does not produce 'humpback'."""
         # Only the auto-generated line is present; nothing else to infer from → None.
-        assert get_corrected_class("AI: humpback") is None
+        assert get_corrected_class("AI: humpback", None) is None
 
     def test_no_humpback_alone_returns_water(self):
         """'No humpback' alone gives no positive signal → water."""
-        assert get_corrected_class("No humpback") == "water"
+        assert get_corrected_class("No humpback", None) == "water"
 
     def test_ai_prefix_plus_no_humpback_returns_water(self):
         """'AI: humpback\\nNo humpback' is a false humpback with no other signal → water."""
-        assert get_corrected_class("AI: humpback\nNo humpback") == "water"
+        assert get_corrected_class("AI: humpback\nNo humpback", None) == "water"
 
     def test_no_humpback_nor_vessel_returns_water(self):
         """'No humpback nor vessel' with no other signal should resolve to water."""
-        assert get_corrected_class("No humpback nor vessel") == "water"
+        assert get_corrected_class("No humpback nor vessel", None) == "water"
 
     def test_ai_prefix_plus_no_humpback_nor_vessel_returns_water(self):
         """Full 'AI: humpback\\nNo humpback nor vessel' comment should resolve to water."""
-        assert get_corrected_class("AI: humpback\nNo humpback nor vessel") == "water"
+        assert get_corrected_class("AI: humpback\nNo humpback nor vessel", None) == "water"
 
     def test_no_humpback_with_vessel_positive_returns_vessel(self):
         """'No humpback' with an unambiguous vessel keyword should still resolve to vessel."""
-        assert get_corrected_class("No humpback. Boat noise.") == "vessel"
+        assert get_corrected_class("No humpback. Boat noise.", None) == "vessel"
 
     def test_humpback_positive_without_negation_still_returns_humpback(self):
         """A plain 'humpback' mention (no negation) should still map to humpback."""
-        assert get_corrected_class("Humpback whale song") == "humpback"
+        assert get_corrected_class("Humpback whale song", None  ) == "humpback"
 
     def test_no_vessel_prevents_vessel_match(self):
         """'No vessel' should suppress the vessel keyword match → water."""
-        assert get_corrected_class("No vessel here") == "water"
+        assert get_corrected_class("No vessel here", None) == "water"
+
+    def test_tags_override_comments(self):
+        """Tags should take precedence over comments."""
+        assert get_corrected_class("Humpback whale song", "vessel") == "vessel"
+
+    def test_tags_case_and_whitespace_and_multiple(self):
+        """Tags are split on ';', stripped, and matched case-insensitively; first matching tag returned."""
+        assert get_corrected_class("", "  Humpback  ; other") == "humpback"
+
+    def test_tags_unknown_returns_water(self):
+        """If tags contain no known classes, return 'water'."""
+        assert get_corrected_class("Boat noise", "unknown;maybe") == "water"
+
+    def test_tags_first_match_returned(self):
+        """First matching tag should be returned when multiple known tags present."""
+        assert get_corrected_class("", "resident;vessel") == "resident"
 
 
 class TestAppendManualSamples:
@@ -85,7 +101,7 @@ class TestAppendManualSamples:
         """Rows with URIs already in the file should not be appended again."""
         manual_samples_path = tmp_path / "manual_samples.csv"
         manual_samples_path.write_text(
-            "Category,NodeName,Timestamp,URI,Description,Notes,Confidence\n"
+            "Category,NodeName,StartTimestamp,URI,Description,Notes,Confidence\n"
             "vessel,rpi_test,2025_01_01_00_00_00_PST,https://example.com/existing,desc,notes,90.0\n",
             encoding="utf-8",
         )
@@ -94,7 +110,7 @@ class TestAppendManualSamples:
             {
                 "Category": "vessel",
                 "NodeName": "rpi_test",
-                "Timestamp": "2025_01_01_00_00_00_PST",
+                "StartTimestamp": "2025_01_01_00_00_00_PST",
                 "URI": "https://example.com/existing",
                 "Description": "desc",
                 "Notes": "notes",
@@ -103,7 +119,7 @@ class TestAppendManualSamples:
             {
                 "Category": "vessel",
                 "NodeName": "rpi_test",
-                "Timestamp": "2025_01_01_00_00_02_PST",
+                "StartTimestamp": "2025_01_01_00_00_02_PST",
                 "URI": "https://example.com/new",
                 "Description": "desc",
                 "Notes": "notes",
@@ -141,6 +157,61 @@ class TestProcessFalsePositives:
         assert summary["rejected"] == 0
         mock_get_feeds.assert_called_once_with()
 
+    def test_testing_mode_appends_row_from_add_testing_60s_sample(self, tmp_path):
+        """Testing mode should append the single corrected 60-second row."""
+        feed = _make_feed()
+        detection = OrcaHelloDetection(
+            id="det_1",
+            feed=feed,
+            timestamp=datetime(2025, 1, 1, 12, 0, 0, tzinfo=timezone.utc),
+            status="rejected",
+            comments="Boat noise from a nearby vessel.",
+            tags="vessel",
+        )
+        manual_samples_path = tmp_path / "manual_testing_samples.csv"
+
+        with patch("process_false_positives.get_model_inference") as mock_get_model, \
+             patch("process_false_positives.get_orcasite_feeds_with_retry", return_value=[feed]), \
+             patch("process_false_positives.get_orcahello_detections", return_value=[detection]), \
+             patch("process_false_positives.add_training_3s_samples") as mock_add_training, \
+             patch(
+                 "process_false_positives.add_testing_60s_sample",
+                 return_value={
+                     "Category": "vessel",
+                     "NodeName": "rpi_test",
+                     "StartTimestamp": "2025_01_01_04_00_00_PST",
+                     "URI": "https://example.com/testing",
+                     "Description": "Boat noise from a nearby vessel.",
+                     "Notes": "fp_machine",
+                     "Confidence": 100,
+                     "Tags": "vessel",
+                 },
+             ) as mock_add_testing:
+            summary = process_false_positives(
+                manual_samples_path=manual_samples_path,
+                output_dir=tmp_path / "segments",
+                for_training=False,
+            )
+
+        mock_get_model.assert_not_called()
+        mock_add_training.assert_not_called()
+        assert mock_add_testing.call_count == 1
+        assert mock_add_testing.call_args.kwargs["corrected_class"] == "vessel"
+        assert mock_add_testing.call_args.kwargs["start_timestamp"] == "2025_01_01_04_00_00_PST"
+        assert mock_add_testing.call_args.kwargs["fallback_description"] == detection.comments
+        assert mock_add_testing.call_args.kwargs["fallback_notes"] == "fp_machine"
+        assert mock_add_testing.call_args.kwargs["fallback_tags"] == detection.tags
+        assert summary["rejected"] == 1
+        assert summary["whale_mismatch_segments"] == 1
+        assert summary["appended"] == 1
+        assert summary["duplicates"] == 0
+
+        with open(manual_samples_path, "r", encoding="utf-8") as handle:
+            rows = list(csv.DictReader(handle))
+        assert len(rows) == 1
+        assert rows[0]["Category"] == "vessel"
+        assert rows[0]["URI"] == "https://example.com/testing"
+
     def test_appends_only_mismatched_whale_segments_with_corrected_class(self, tmp_path):
         """Whale-class segments should be rewritten unless they already match the corrected class."""
         feed = _make_feed()
@@ -155,7 +226,7 @@ class TestProcessFalsePositives:
         wav_path.write_bytes(b"wav")
         manual_samples_path = tmp_path / "manual_samples.csv"
         manual_samples_path.write_text(
-            "Category,NodeName,Timestamp,URI,Description,Notes,Confidence\n"
+            "Category,NodeName,StartTimestamp,URI,Description,Notes,Confidence\n"
             "vessel,rpi_test,2025_01_01_04_00_00_PST,https://example.com/existing,desc,manual,90.0\n",
             encoding="utf-8",
         )
@@ -165,12 +236,12 @@ class TestProcessFalsePositives:
              patch("process_false_positives.get_orcahello_detections", return_value=[detection]), \
              patch("process_false_positives.download_60s_audio", return_value=str(wav_path)), \
              patch(
-                 "process_false_positives.add_samples",
+                 "process_false_positives.add_training_3s_samples",
                  return_value=[
                      {
                          "Category": "resident",
                          "NodeName": "rpi_test",
-                         "Timestamp": "2025_01_01_04_00_00_PST",
+                         "StartTimestamp": "2025_01_01_04_00_00_PST",
                          "URI": "https://example.com/existing",
                          "Description": "desc",
                          "Notes": "manual",
@@ -179,7 +250,7 @@ class TestProcessFalsePositives:
                      {
                          "Category": "resident",
                          "NodeName": "rpi_test",
-                         "Timestamp": "2025_01_01_04_00_02_PST",
+                         "StartTimestamp": "2025_01_01_04_00_02_PST",
                          "URI": "https://example.com/new",
                          "Description": "desc",
                          "Notes": "manual",
@@ -188,7 +259,7 @@ class TestProcessFalsePositives:
                      {
                          "Category": "water",
                          "NodeName": "rpi_test",
-                         "Timestamp": "2025_01_01_04_00_04_PST",
+                         "StartTimestamp": "2025_01_01_04_00_04_PST",
                          "URI": "https://example.com/water",
                          "Description": "desc",
                          "Notes": "manual",
@@ -244,12 +315,12 @@ class TestProcessFalsePositives:
              patch("process_false_positives.get_orcahello_detections", return_value=[detection]), \
              patch("process_false_positives.download_60s_audio", return_value=str(wav_path)), \
              patch(
-                 "process_false_positives.add_samples",
+                 "process_false_positives.add_training_3s_samples",
                  return_value=[
                      {
                          "Category": "resident",
                          "NodeName": "rpi_test",
-                         "Timestamp": "2025_01_01_04_00_02_PST",
+                         "StartTimestamp": "2025_01_01_04_00_02_PST",
                          "URI": "https://example.com/new",
                          "Description": "desc",
                          "Notes": "manual",
@@ -258,7 +329,7 @@ class TestProcessFalsePositives:
                      {
                          "Category": "water",
                          "NodeName": "rpi_test",
-                         "Timestamp": "2025_01_01_04_00_04_PST",
+                         "StartTimestamp": "2025_01_01_04_00_04_PST",
                          "URI": "https://example.com/water",
                          "Description": "desc",
                          "Notes": "manual",
@@ -306,12 +377,12 @@ class TestProcessFalsePositives:
              patch("process_false_positives.get_orcahello_detections", return_value=[detection]), \
              patch("process_false_positives.download_60s_audio", return_value=str(wav_path)), \
              patch(
-                 "process_false_positives.add_samples",
+                 "process_false_positives.add_training_3s_samples",
                  return_value=[
                      {
                          "Category": "transient",
                          "NodeName": "rpi_test",
-                         "Timestamp": "2025_01_01_04_00_00_PST",
+                         "StartTimestamp": "2025_01_01_04_00_00_PST",
                          "URI": "https://example.com/correct",
                          "Description": "desc",
                          "Notes": "manual",
@@ -320,7 +391,7 @@ class TestProcessFalsePositives:
                      {
                          "Category": "resident",
                          "NodeName": "rpi_test",
-                         "Timestamp": "2025_01_01_04_00_02_PST",
+                         "StartTimestamp": "2025_01_01_04_00_02_PST",
                          "URI": "https://example.com/resident",
                          "Description": "desc",
                          "Notes": "manual",
@@ -329,7 +400,7 @@ class TestProcessFalsePositives:
                      {
                          "Category": "humpback",
                          "NodeName": "rpi_test",
-                         "Timestamp": "2025_01_01_04_00_04_PST",
+                         "StartTimestamp": "2025_01_01_04_00_04_PST",
                          "URI": "https://example.com/humpback",
                          "Description": "desc",
                          "Notes": "manual",
@@ -338,7 +409,7 @@ class TestProcessFalsePositives:
                      {
                          "Category": "water",
                          "NodeName": "rpi_test",
-                         "Timestamp": "2025_01_01_04_00_06_PST",
+                         "StartTimestamp": "2025_01_01_04_00_06_PST",
                          "URI": "https://example.com/water",
                          "Description": "desc",
                          "Notes": "manual",
@@ -397,14 +468,14 @@ class TestProcessFalsePositives:
              ), \
              patch("process_false_positives.download_60s_audio", return_value=str(wav_path)), \
              patch(
-                 "process_false_positives.add_samples",
+                 "process_false_positives.add_training_3s_samples",
                  side_effect=[
                      RuntimeError("decode error"),
                      [
                          {
                              "Category": "resident",
                              "NodeName": "rpi_test",
-                             "Timestamp": "2025_01_01_04_05_02_PST",
+                             "StartTimestamp": "2025_01_01_04_05_02_PST",
                              "URI": "https://example.com/new",
                              "Description": "desc",
                              "Notes": "manual",
@@ -463,12 +534,12 @@ class TestProcessFalsePositives:
              ), \
              patch("process_false_positives.download_60s_audio", return_value=str(wav_path)), \
              patch(
-                 "process_false_positives.add_samples",
+                 "process_false_positives.add_training_3s_samples",
                  return_value=[
                      {
                          "Category": "resident",
                          "NodeName": "rpi_test",
-                         "Timestamp": "2025_01_01_04_05_02_PST",
+                         "StartTimestamp": "2025_01_01_04_05_02_PST",
                          "URI": "https://example.com/new",
                          "Description": "desc",
                          "Notes": "manual",
