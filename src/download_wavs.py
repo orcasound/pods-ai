@@ -309,7 +309,7 @@ def _build_corrected_testing_row(row: CSVRow, timestamp_pst: str) -> CSVRow:
     )
 
 
-def _fetch_detections_page(node_name: str, start_date: datetime, end_date: datetime, page: int) -> list[dict]:
+def _fetch_detections_page(node_name: str, start_date: datetime, end_date: datetime, page: int) -> tuple[list[dict], bool]:
     params = {
         "Page": page,
         "SortBy": "timestamp",
@@ -325,25 +325,37 @@ def _fetch_detections_page(node_name: str, start_date: datetime, end_date: datet
     response = requests.get(DETECTIONS_API_URL, params=params, timeout=30)
     response.raise_for_status()
     if not response.text.strip():
-        return []
+        return [], False
     payload = response.json()
     if isinstance(payload, list):
-        return payload
-    if isinstance(payload, dict):
+        items = payload
+    elif isinstance(payload, dict):
         items = payload.get("items")
-        return items if isinstance(items, list) else []
-    return []
+        items = items if isinstance(items, list) else []
+    else:
+        items = []
+
+    total_pages_header = response.headers.get("totalAmountPages")
+    if total_pages_header is not None:
+        try:
+            total_pages = int(total_pages_header)
+        except ValueError:
+            total_pages = None
+        else:
+            return items, page < total_pages
+
+    return items, len(items) == DETECTIONS_PAGE_SIZE
 
 
 def _fetch_detections_for_window(node_name: str, start_date: datetime, end_date: datetime) -> list[dict]:
     page = 1
     detections: list[dict] = []
     while True:
-        items = _fetch_detections_page(node_name, start_date, end_date, page)
+        items, has_next_page = _fetch_detections_page(node_name, start_date, end_date, page)
         if not items:
             break
         detections.extend(items)
-        if len(items) < DETECTIONS_PAGE_SIZE:
+        if not has_next_page:
             break
         page += 1
     return detections

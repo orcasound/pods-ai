@@ -133,13 +133,16 @@ class TestOverlapValidation:
 
 class TestAlignedEntryValidation:
     @staticmethod
-    def _mock_detection_response(payload):
+    def _mock_detection_response(payload, total_pages: int | None = None):
         response = Mock()
         response.text = "[]"
         response.json.return_value = payload
         response.raise_for_status.return_value = None
+        response.headers = {}
         if payload:
             response.text = "[{\"id\":\"1\"}]"
+        if total_pages is not None:
+            response.headers["totalAmountPages"] = str(total_pages)
         return response
 
     def test_validate_aligned_entries_handles_paginated_items_payload(self):
@@ -176,8 +179,8 @@ class TestAlignedEntryValidation:
         with patch(
             "download_wavs.requests.get",
             side_effect=[
-                self._mock_detection_response(first_page_payload),
-                self._mock_detection_response(second_page_payload),
+                self._mock_detection_response(first_page_payload, total_pages=2),
+                self._mock_detection_response(second_page_payload, total_pages=2),
             ],
         ) as mock_get, \
                 patch("download_wavs.get_cached_folders", side_effect=AssertionError("should not query S3 for current epoch")):
