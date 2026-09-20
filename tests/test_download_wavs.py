@@ -133,16 +133,16 @@ class TestOverlapValidation:
 
 class TestAlignedEntryValidation:
     @staticmethod
-    def _mock_detection_response(items):
+    def _mock_detection_response(payload):
         response = Mock()
         response.text = "[]"
-        response.json.return_value = items
+        response.json.return_value = payload
         response.raise_for_status.return_value = None
-        if items:
+        if payload:
             response.text = "[{\"id\":\"1\"}]"
         return response
 
-    def test_validate_aligned_entries_allows_current_epoch_false_positive(self):
+    def test_validate_aligned_entries_handles_paginated_items_payload(self):
         testing_rows = [
             CSVRow(
                 "human",
@@ -153,7 +153,18 @@ class TestAlignedEntryValidation:
                 "fp_machine_only",
             ),
         ]
-        detections = [
+        first_page_payload = {
+            "items": [
+                {
+                    "timestamp": "2025-12-01T07:00:00Z",
+                    "comments": "not a match",
+                    "found": "No",
+                    "reviewed": False,
+                }
+                for _ in range(50)
+            ],
+        }
+        second_page_payload = [
             {
                 "timestamp": "2025-12-01T08:00:00Z",
                 "comments": "Radio",
@@ -162,11 +173,17 @@ class TestAlignedEntryValidation:
             },
         ]
 
-        with patch("download_wavs.requests.get", return_value=self._mock_detection_response(detections)) as mock_get, \
+        with patch(
+            "download_wavs.requests.get",
+            side_effect=[
+                self._mock_detection_response(first_page_payload),
+                self._mock_detection_response(second_page_payload),
+            ],
+        ) as mock_get, \
                 patch("download_wavs.get_cached_folders", side_effect=AssertionError("should not query S3 for current epoch")):
             validate_aligned_entries(testing_rows)
 
-        mock_get.assert_called_once()
+        assert mock_get.call_count == 2
 
     def test_validate_aligned_entries_rejects_old_epoch_misalignment(self):
         testing_rows = [

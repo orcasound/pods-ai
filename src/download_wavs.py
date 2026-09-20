@@ -394,10 +394,14 @@ def _find_matching_detection(row: CSVRow) -> tuple[dict, str]:
     normalized_description = _normalize_text(row.description)
     search_windows = (1, 7)
     last_candidate_count = 0
+    last_start_date = row_timestamp
+    last_end_date = row_timestamp
 
     for days in search_windows:
         start_date = row_timestamp - timedelta(days=days)
         end_date = row_timestamp + timedelta(days=days)
+        last_start_date = start_date
+        last_end_date = end_date
         detections = _fetch_detections_for_window(row.node_name, start_date, end_date)
         candidates = []
 
@@ -426,7 +430,9 @@ def _find_matching_detection(row: CSVRow) -> tuple[dict, str]:
 
     raise ValueError(
         f"Could not find matching OrcaHello false-positive detection for testing row {row!r} "
-        f"(description={row.description!r}, candidates={last_candidate_count})."
+        f"(timestamp={row.timestamp_pst}, description={row.description!r}, "
+        f"search_window={last_start_date.strftime('%m/%d/%Y')}..{last_end_date.strftime('%m/%d/%Y')}, "
+        f"candidates={last_candidate_count})."
     )
 
 
