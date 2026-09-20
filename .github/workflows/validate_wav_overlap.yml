@@ -37,7 +37,7 @@ jobs:
         uses: fkirc/skip-duplicate-actions@b974a9395958c231af965b70070979a577efa578  # v5.3.2
         with:
           cancel_others: 'false'
-          paths: '["requirements.txt", "output/csv/training_3s_samples.csv", "output/csv/testing_60s_samples.csv", "src/download_wavs.py", ".github/workflows/validate_wav_overlap.yml"]'
+          paths: '["requirements.txt", "output/csv/training_3s_samples.csv", "output/csv/testing_60s_samples.csv", "output/csv/dclde_60s_samples.csv", "src/download_wavs.py", ".github/workflows/validate_wav_overlap.yml"]'
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         if: steps.skip_check.outputs.should_skip != 'true'
