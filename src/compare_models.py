@@ -60,7 +60,7 @@ class TestSample:
 
     category: str
     node_name: str
-    timestamp: str
+    start_timestamp: str
     uri: str
     description: str
     notes: str
@@ -234,7 +234,7 @@ def load_test_samples(testing_csv: Path, max_samples: Optional[int] = None,
                 samples.append(TestSample(
                     category=category,
                     node_name=row.get("NodeName", ""),
-                    timestamp=row.get("Timestamp", ""),
+                    start_timestamp=row.get("StartTimestamp", ""),
                     uri=row.get("URI", ""),
                     description=row.get("Description", ""),
                     notes=row.get("Notes", ""),
@@ -254,7 +254,7 @@ def find_wav_file(sample: TestSample, wav_dir: Path) -> Optional[Path]:
     Find the 60-second WAV file for a testing sample.
 
     WAV files are saved by download_wavs.py as:
-        <wav_dir>/<category>/<node_name_with_dashes>_<timestamp>.wav
+        <wav_dir>/<category>/<node_name_with_dashes>_<start_timestamp>.wav
 
     Args:
         sample: The testing sample.
@@ -264,7 +264,7 @@ def find_wav_file(sample: TestSample, wav_dir: Path) -> Optional[Path]:
         Path to the WAV file, or None if not found.
     """
     node_name_in_filename = sample.node_name.replace("_", "-")
-    wav_filename = f"{node_name_in_filename}_{sample.timestamp}.wav"
+    wav_filename = f"{node_name_in_filename}_{sample.start_timestamp}.wav"
     wav_path = wav_dir / sample.category / wav_filename
     if wav_path.exists():
         return wav_path
@@ -369,7 +369,7 @@ def evaluate_model(
         if wav_path is None:
             print(
                 f"  [{model_type}] Skipping {sample.category}/{sample.node_name}"
-                f"/{sample.timestamp}: WAV not found"
+                f"/{sample.start_timestamp}: WAV not found"
             )
             result.skipped += 1
             continue
@@ -416,7 +416,7 @@ def evaluate_model(
         preds[predicted_label] = preds.get(predicted_label, 0) + 1
 
         print(
-            f"  [{model_type}] {sample.category}/{sample.node_name}/{sample.timestamp}: "
+            f"  [{model_type}] {sample.category}/{sample.node_name}/{sample.start_timestamp}: "
             f"predicted={predicted_label!r} -> {status} ({predict_time:.2f}s)"
         )
 

@@ -13,6 +13,16 @@ import argparse
 import requests
 from azure.cosmos import CosmosClient
 import os
+import sys
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from src.audio_utils import (
+    format_timestamp_pst,
+    parse_timestamp_pst,
+)
 
 import importlib.util
 
@@ -408,38 +418,6 @@ def get_orcahello_detections(feed: OrcasiteFeed) -> List[OrcaHelloDetection]:
 
     return results
 
-def format_timestamp_pst(dt: datetime) -> str:
-    """
-    Format a datetime object as PST timestamp string in the format YYYY_MM_DD_HH_MM_SS_PST.
-
-    Parameters:
-        dt (datetime): The datetime to format (should be timezone-aware).
-
-    Returns:
-        str: Formatted timestamp string (e.g., "2025_12_24_17_51_23_PST").
-    """
-    dt_pst = dt.astimezone(PACIFIC_TZ)
-    return dt_pst.strftime("%Y_%m_%d_%H_%M_%S_PST")
-
-def parse_pst_timestamp(ts_str: str) -> datetime:
-    """
-    Parse a PST timestamp string in the format YYYY_MM_DD_HH_MM_SS_PST into a timezone-aware datetime.
-
-    Parameters:
-        ts_str (str): Timestamp string in the format ``YYYY_MM_DD_HH_MM_SS_PST``
-            (e.g., ``"2026_03_17_00_00_00_PST"``).
-
-    Returns:
-        datetime: A timezone-aware datetime object in the US/Pacific timezone.
-
-    Raises:
-        ValueError: If ``ts_str`` does not end with ``_PST`` or cannot be parsed.
-    """
-    if not ts_str.endswith("_PST"):
-        raise ValueError(f"Timestamp '{ts_str}' must end with '_PST'")
-    body = ts_str[:-4]  # strip trailing "_PST"
-    dt_naive = datetime.strptime(body, "%Y_%m_%d_%H_%M_%S")
-    return PACIFIC_TZ.localize(dt_naive)
 
 def generate_uri(node: str, dt: datetime) -> str:
     """
@@ -575,7 +553,7 @@ def process_all_feeds(
     with open(csv_path, 'w', newline='', encoding='utf-8') as csvfile:
         csv_writer = csv.writer(csvfile, lineterminator='\n')
         # Write header.
-        csv_writer.writerow(['Category', 'NodeName', 'Timestamp', 'URI', 'Description', 'Notes', 'Confidence'])
+        csv_writer.writerow(['Category', 'NodeName', 'StartTimestamp', 'URI', 'Description', 'Notes', 'Confidence'])
 
         # Write sorted unique rows (exclude the timestamp used for sorting).
         for row in unique_rows:
@@ -611,8 +589,8 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    start_time = parse_pst_timestamp(args.start) if args.start else None
-    end_time = None if (args.end or "").lower() == "now" else parse_pst_timestamp(args.end)
+    start_time = parse_timestamp_pst(args.start) if args.start else None
+    end_time = None if (args.end or "").lower() == "now" else parse_timestamp_pst(args.end)
 
     output_root = Path("bootstrap/csv")
     process_all_feeds(output_root, feed_filter=args.feed, start_time=start_time, end_time=end_time)

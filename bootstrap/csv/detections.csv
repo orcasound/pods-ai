@@ -1,4 +1,4 @@
-Category,NodeName,Timestamp,URI,Description,Notes,Confidence
+Category,NodeName,StartTimestamp,URI,Description,Notes,Confidence
 resident,rpi_orcasound_lab,2023_08_18_00_59_53_PST,https://live.orcasound.net/bouts/new/orcasound-lab?time=2023-08-18T07%3A59%3A53.000Z,[orca] JKL pods vocalized today during two transits. Tug noise now.,tp_human_only,
 resident,rpi_orcasound_lab,2023_09_11_13_21_56_PST,https://live.orcasound.net/bouts/new/orcasound-lab?time=2023-09-11T20%3A21%3A56.000Z,Faint J pod calls 15 secs ago...,tp_human_only,
 resident,rpi_sunset_bay,2023_10_26_07_37_24_PST,https://live.orcasound.net/bouts/new/sunset-bay?time=2023-10-26T14%3A37%3A24.000Z,07:25-07:35 J pod calls,tp_human_only,

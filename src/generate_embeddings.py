@@ -20,7 +20,7 @@ EMBEDDING_CSV_BASE_FIELDS = [
     "category",
     "ground_truth_label",
     "node_name",
-    "timestamp",
+    "start_timestamp",
     "uri",
     "description",
     "notes",
@@ -42,7 +42,7 @@ class TestSample:
     row_index: int
     category: str
     node_name: str
-    timestamp: str
+    start_timestamp: str
     uri: str
     description: str
     notes: str
@@ -70,7 +70,7 @@ def load_test_samples(
                     row_index=row_index,
                     category=category,
                     node_name=row.get("NodeName", ""),
-                    timestamp=row.get("Timestamp", ""),
+                    start_timestamp=row.get("StartTimestamp", ""),
                     uri=row.get("URI", ""),
                     description=row.get("Description", ""),
                     notes=row.get("Notes", ""),
@@ -87,7 +87,7 @@ def find_wav_file(sample: TestSample, wav_dir: Path) -> Optional[Path]:
     node_name_in_filename = sample.node_name.replace("_", "-")
 
     wav_filename = (
-        f"{node_name_in_filename}_{sample.timestamp}.wav"
+        f"{node_name_in_filename}_{sample.start_timestamp}.wav"
     )
 
     wav_path = wav_dir / sample.category / wav_filename
@@ -249,7 +249,7 @@ def write_embedding_rows(
                 "ground_truth_label": wav_path.parent.name,
 
                 "node_name": sample.node_name,
-                "timestamp": sample.timestamp,
+                "start_timestamp": sample.start_timestamp,
                 "uri": sample.uri,
                 "description": sample.description,
                 "notes": sample.notes,
@@ -448,7 +448,7 @@ def main():
                 f"Missing WAV: "
                 f"{sample.category}/"
                 f"{sample.node_name}/"
-                f"{sample.timestamp}"
+                f"{sample.start_timestamp}"
             )
             continue
 

@@ -27,7 +27,6 @@ from audio_utils import (
 PACIFIC_TZ = timezone('US/Pacific')
 N_SECONDS = 3  # Create 3-second wav files.
 TESTING_WINDOW_SECONDS = 60
-TESTING_CENTER_OFFSET_SECONDS = 30
 
 @dataclass
 class CSVRow:
@@ -114,19 +113,15 @@ def _training_window(row: CSVRow) -> tuple[datetime, datetime]:
 
 
 def _testing_window(row: CSVRow) -> tuple[datetime, datetime]:
-    sample_time = parse_timestamp_pst(row.timestamp_pst)
-    download_time = (
-        sample_time
-        if row.notes == "tp_human_only"
-        else sample_time + timedelta(seconds=TESTING_CENTER_OFFSET_SECONDS)
-    )
+    sample_start = parse_timestamp_pst(row.timestamp_pst)
+    min_end_time = sample_start + timedelta(seconds=TESTING_WINDOW_SECONDS)
 
     # Mirror audio_utils.download_60s_audio() behavior: snap end time to the next 10-second boundary.
-    snapped_sec = ((download_time.second + 9) // 10) * 10
+    snapped_sec = ((min_end_time.second + 9) // 10) * 10
     if snapped_sec == 60:
-        download_time = download_time + timedelta(minutes=1)
+        min_end_time = min_end_time + timedelta(minutes=1)
         snapped_sec = 0
-    end_time = download_time.replace(second=snapped_sec, microsecond=0)
+    end_time = min_end_time.replace(second=snapped_sec, microsecond=0)
 
     return end_time - timedelta(seconds=TESTING_WINDOW_SECONDS), end_time
 
@@ -466,8 +461,7 @@ def download_testing_sample(row: CSVRow, output_root: Path, cache_root: Path | N
     """
     Download audio for a testing sample.
 
-    tp_human_only samples download a full 60-second clip.
-    Other samples use the machine-detection segment logic.
+    The testing CSV StartTimestamp is the 60-second clip start time.
 
     Args:
         row: Parsed CSV row describing one testing sample.
@@ -486,15 +480,15 @@ def download_testing_sample(row: CSVRow, output_root: Path, cache_root: Path | N
     if _copy_wav_from_cache_if_exists(expected_path, output_root, cache_root):
         return
 
-    # For non-tp_human_only rows, shift by +30s so downloaded 60s clip is centered on row timestamp.
-    download_timestamp = row.timestamp_pst
-    if row.notes != "tp_human_only":
-        download_timestamp = add_seconds_to_timestamp_pst(row.timestamp_pst, 30)
+    min_end_timestamp_pst_str = add_seconds_to_timestamp_pst(
+        row.timestamp_pst,
+        TESTING_WINDOW_SECONDS,
+    )
 
-    print(f"  Downloading audio ending shortly after {download_timestamp}...")
+    print(f"  Downloading audio ending shortly after {min_end_timestamp_pst_str}...")
 
     with TemporaryDirectory() as tmp_dir:
-        wav_path = download_60s_audio(row.node_name, download_timestamp, tmp_dir)
+        wav_path = download_60s_audio(node_name=row.node_name, min_end_timestamp_pst_str=min_end_timestamp_pst_str, tmp_dir=tmp_dir)
         if wav_path is None:
             raise AssertionError(f"Error: Failed to download 60-second clip for {row.node_name} at {row.timestamp_pst}")
         shutil.move(wav_path, expected_path)

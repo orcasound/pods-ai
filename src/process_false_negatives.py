@@ -15,7 +15,7 @@ For each confirmed OrcaHello detection in the selected timeframe, this script:
 """
 
 import argparse
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Optional
@@ -25,7 +25,7 @@ from audio_utils import (
     download_60s_audio,
     format_timestamp_pst,
     get_orcahello_detections,
-    parse_pst_timestamp,
+    parse_timestamp_pst,
 )
 from manual_samples_utils import append_manual_samples, load_existing_uris
 from model_inference import get_model_inference
@@ -102,7 +102,8 @@ def process_false_negatives(
             print(f"Checking confirmed OrcaHello detection at {timestamp_str}")
 
             with TemporaryDirectory() as temp_dir:
-                wav_path = download_60s_audio(feed.node_name, timestamp_str, temp_dir)
+                min_end_timestamp_pst_str = format_timestamp_pst(detection.timestamp + timedelta(seconds=60))
+                wav_path = download_60s_audio(node_name=feed.node_name, min_end_timestamp_pst_str=min_end_timestamp_pst_str, tmp_dir=temp_dir)
                 if wav_path is None:
                     print(f"Skipping {feed.node_name} {timestamp_str}: failed to download audio.")
                     summary["download_failed"] += 1
@@ -130,7 +131,7 @@ def process_false_negatives(
                     podsai_segment_rows = add_training_3s_samples(
                         wav_file=wav_path,
                         node_name=feed.node_name,
-                        base_timestamp=timestamp_str,
+                        start_timestamp=timestamp_str,
                         output_dir=str(output_dir),
                         model_path=model_path,
                         detections_csv=detections_csv,
@@ -148,7 +149,7 @@ def process_false_negatives(
             mismatched_rows: list[dict] = []
             node_name_in_filename = feed.node_name.replace("_", "-")
             for row in podsai_segment_rows:
-                segment_timestamp = (row.get("Timestamp") or "").strip()
+                segment_timestamp = (row.get("StartTimestamp") or "").strip()
                 if not segment_timestamp:
                     continue
 
@@ -257,8 +258,8 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    start_time = parse_pst_timestamp(args.start) if args.start else None
-    end_time = None if (args.end or "").lower() == "now" else parse_pst_timestamp(args.end)
+    start_time = parse_timestamp_pst(args.start) if args.start else None
+    end_time = None if (args.end or "").lower() == "now" else parse_timestamp_pst(args.end)
 
     summary = process_false_negatives(
         manual_samples_path=Path(args.manual_samples_csv),
