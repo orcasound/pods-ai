@@ -753,7 +753,7 @@ def run_download_wavs(validate_only: bool = False) -> None:
     validate_aligned_entries(testing_rows)
 
     if validate_only:
-        print("Overlap validation completed successfully.")
+        print("Overlap and aligned-entry validation completed successfully.")
         return
 
     process_csv(training_csv_path, training_output_root, cache_root=training_cache_root)
