@@ -2,9 +2,10 @@
 # SPDX-License-Identifier: MIT
 """Unit tests for testing sample download logic in download_wavs.py."""
 
+from datetime import datetime, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from unittest.mock import ANY, patch
+from unittest.mock import ANY, Mock, patch
 import os
 
 import pytest
@@ -17,6 +18,7 @@ from download_wavs import (
     process_csv,
     process_testing_csv,
     run_download_wavs,
+    validate_aligned_entries,
     validate_no_overlaps,
 )
 
@@ -127,6 +129,70 @@ class TestOverlapValidation:
         ]
         with pytest.raises(ValueError, match="cross-file overlap"):
             validate_no_overlaps(training_rows, testing_rows)
+
+
+class TestAlignedEntryValidation:
+    @staticmethod
+    def _mock_detection_response(items):
+        response = Mock()
+        response.text = "[]"
+        response.json.return_value = items
+        response.raise_for_status.return_value = None
+        if items:
+            response.text = "[{\"id\":\"1\"}]"
+        return response
+
+    def test_validate_aligned_entries_allows_current_epoch_false_positive(self):
+        testing_rows = [
+            CSVRow(
+                "human",
+                "rpi_sunset_bay",
+                "2025_12_01_00_00_00_PST",
+                "https://live.orcasound.net/bouts/new/sunset-bay?time=2025-12-01T08%3A00%3A00.000Z",
+                "Radio",
+                "fp_machine_only",
+            ),
+        ]
+        detections = [
+            {
+                "timestamp": "2025-12-01T08:00:00Z",
+                "comments": "Radio",
+                "found": "No",
+                "reviewed": True,
+            },
+        ]
+
+        with patch("download_wavs.requests.get", return_value=self._mock_detection_response(detections)) as mock_get, \
+                patch("download_wavs.get_cached_folders", side_effect=AssertionError("should not query S3 for current epoch")):
+            validate_aligned_entries(testing_rows)
+
+        mock_get.assert_called_once()
+
+    def test_validate_aligned_entries_rejects_old_epoch_misalignment(self):
+        testing_rows = [
+            CSVRow(
+                "human",
+                "rpi_sunset_bay",
+                "2025_01_01_00_11_05_PST",
+                "https://live.orcasound.net/bouts/new/sunset-bay?time=2025-01-01T08%3A11%3A05.000Z",
+                "Radio",
+                "fp_machine_only",
+            ),
+        ]
+        detections = [
+            {
+                "timestamp": "2025-01-01T08:11:05Z",
+                "comments": "Radio",
+                "found": "No",
+                "reviewed": True,
+            },
+        ]
+        folder_time = int(datetime(2025, 1, 1, 8, 0, 0, tzinfo=timezone.utc).timestamp())
+
+        with patch("download_wavs.requests.get", return_value=self._mock_detection_response(detections)), \
+                patch("download_wavs.get_cached_folders", return_value=[str(folder_time)]):
+            with pytest.raises(ValueError, match="corrected testing_row: CSVRow\\(category='human', node_name='rpi_sunset_bay', timestamp_pst='2025_01_01_00_10_02_PST'"):
+                validate_aligned_entries(testing_rows)
 
 
 class TestCacheAndCleanup:
@@ -264,9 +330,12 @@ class TestValidateOnly:
             original_cwd = Path.cwd()
             try:
                 os.chdir(tmp_path)
-                with patch("download_wavs.process_csv") as mock_process_csv, patch("download_wavs.process_testing_csv") as mock_process_testing_csv:
+                with patch("download_wavs.process_csv") as mock_process_csv, \
+                        patch("download_wavs.process_testing_csv") as mock_process_testing_csv, \
+                        patch("download_wavs.validate_aligned_entries") as mock_validate_aligned_entries:
                     run_download_wavs(validate_only=True)
                 mock_process_csv.assert_not_called()
                 mock_process_testing_csv.assert_not_called()
+                mock_validate_aligned_entries.assert_called_once()
             finally:
                 os.chdir(original_cwd)

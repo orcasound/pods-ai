@@ -1,7 +1,7 @@
 # Copyright (c) PODS-AI contributors
 # SPDX-License-Identifier: MIT
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone as dt_timezone
 from pathlib import Path
 from typing import List
 import csv
@@ -10,10 +10,12 @@ import os
 import shutil
 import sys
 from tempfile import TemporaryDirectory
+from urllib.parse import quote
 
 import ffmpeg
 import m3u8
 from pytz import timezone
+import requests
 
 from audio_utils import (
     download_60s_audio,
@@ -27,6 +29,12 @@ from audio_utils import (
 PACIFIC_TZ = timezone('US/Pacific')
 N_SECONDS = 3  # Create 3-second wav files.
 TESTING_WINDOW_SECONDS = 60
+DETECTIONS_API_URL = "https://aifororcasdetections.azurewebsites.net/api/detections"
+CURRENT_EPOCH_START = datetime.fromisoformat("2025-10-12T14:23:00+00:00")
+DETECTIONS_PAGE_SIZE = 50
+LEGACY_ORCAHELLO_CLIP_SECONDS = 11
+CURRENT_HLS_CLIP_SECONDS = 10
+AUDIO_OFFSET_SECONDS = 2
 
 @dataclass
 class CSVRow:
@@ -265,6 +273,181 @@ def validate_no_overlaps(training_rows: list[CSVRow], testing_rows: list[CSVRow]
     if overlaps:
         details = "\n".join(f"  - {overlap}" for overlap in overlaps)
         raise ValueError(f"Detected overlapping sample windows:\n{details}")
+
+
+def _is_false_positive_testing_row(row: CSVRow) -> bool:
+    return row.notes.startswith("fp_machine")
+
+
+def _normalize_text(value: str) -> str:
+    return " ".join(value.split()).strip().lower()
+
+
+def _format_timestamp_pst(dt: datetime) -> str:
+    return dt.astimezone(PACIFIC_TZ).strftime("%Y_%m_%d_%H_%M_%S_PST")
+
+
+def _generate_testing_uri(row: CSVRow, timestamp_pst: str) -> str:
+    if row.uri:
+        base_uri = row.uri.split("?", 1)[0]
+    else:
+        node_slug = row.node_name.removeprefix("rpi_").replace("_", "-")
+        base_uri = f"https://live.orcasound.net/bouts/new/{node_slug}"
+    timestamp_utc = parse_timestamp_pst(timestamp_pst).astimezone(dt_timezone.utc)
+    encoded_time = quote(timestamp_utc.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z", safe="")
+    return f"{base_uri}?time={encoded_time}"
+
+
+def _build_corrected_testing_row(row: CSVRow, timestamp_pst: str) -> CSVRow:
+    return CSVRow(
+        category=row.category,
+        node_name=row.node_name,
+        timestamp_pst=timestamp_pst,
+        uri=_generate_testing_uri(row, timestamp_pst),
+        description=row.description,
+        notes=row.notes,
+    )
+
+
+def _fetch_detections_page(node_name: str, start_date: datetime, end_date: datetime, page: int) -> list[dict]:
+    params = {
+        "Page": page,
+        "SortBy": "timestamp",
+        "SortOrder": "desc",
+        "Timeframe": "range",
+        "DateFrom": start_date.strftime("%m/%d/%Y"),
+        "DateTo": end_date.strftime("%m/%d/%Y"),
+        "Location": "all",
+        "HydrophoneId": node_name,
+        "RecordsPerPage": DETECTIONS_PAGE_SIZE,
+        "MinutesPerPage": 0,
+    }
+    response = requests.get(DETECTIONS_API_URL, params=params, timeout=30)
+    response.raise_for_status()
+    if not response.text.strip():
+        return []
+    payload = response.json()
+    if isinstance(payload, list):
+        return payload
+    if isinstance(payload, dict):
+        items = payload.get("items")
+        return items if isinstance(items, list) else []
+    return []
+
+
+def _fetch_detections_for_window(node_name: str, start_date: datetime, end_date: datetime) -> list[dict]:
+    page = 1
+    detections: list[dict] = []
+    while True:
+        items = _fetch_detections_page(node_name, start_date, end_date, page)
+        if not items:
+            break
+        detections.extend(items)
+        if len(items) < DETECTIONS_PAGE_SIZE:
+            break
+        page += 1
+    return detections
+
+
+def _parse_detection_timestamp(detection: dict) -> datetime | None:
+    timestamp = detection.get("timestamp")
+    if not isinstance(timestamp, str) or not timestamp:
+        return None
+    try:
+        return datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def _get_corrected_detection_timestamp(node_name: str, detection_timestamp: datetime) -> datetime:
+    if detection_timestamp >= CURRENT_EPOCH_START:
+        return detection_timestamp
+
+    folder_prefix = f"{node_name}/hls/"
+    folders = get_cached_folders("audio-orcasound-net", prefix=folder_prefix)
+    original_unix_time_seconds = int(detection_timestamp.timestamp())
+
+    folder_time_seconds = 0
+    for folder_name in folders:
+        try:
+            unix_time = int(folder_name)
+        except (TypeError, ValueError):
+            continue
+        if unix_time <= original_unix_time_seconds and unix_time > folder_time_seconds:
+            folder_time_seconds = unix_time
+
+    if folder_time_seconds == 0:
+        raise ValueError(
+            f"Unable to correct legacy detection timestamp for {node_name} at {detection_timestamp.isoformat()}: "
+            "no matching S3 HLS folder found."
+        )
+
+    original_seconds_into_folder = original_unix_time_seconds - folder_time_seconds
+    original_clip_index = original_seconds_into_folder // LEGACY_ORCAHELLO_CLIP_SECONDS
+    corrected_seconds_into_folder = (original_clip_index * CURRENT_HLS_CLIP_SECONDS) + AUDIO_OFFSET_SECONDS
+    corrected_unix_time_seconds = folder_time_seconds + corrected_seconds_into_folder
+    return datetime.fromtimestamp(corrected_unix_time_seconds, tz=dt_timezone.utc)
+
+
+def _find_matching_detection(row: CSVRow) -> tuple[dict, str]:
+    row_timestamp = parse_timestamp_pst(row.timestamp_pst)
+    normalized_description = _normalize_text(row.description)
+    search_windows = (1, 7)
+    last_candidate_count = 0
+
+    for days in search_windows:
+        start_date = row_timestamp - timedelta(days=days)
+        end_date = row_timestamp + timedelta(days=days)
+        detections = _fetch_detections_for_window(row.node_name, start_date, end_date)
+        candidates = []
+
+        for detection in detections:
+            if str(detection.get("found", "")).strip().lower() != "no":
+                continue
+            if not bool(detection.get("reviewed", False)):
+                continue
+
+            comments = str(detection.get("comments") or "").strip()
+            if normalized_description and _normalize_text(comments) != normalized_description:
+                continue
+
+            detection_timestamp = _parse_detection_timestamp(detection)
+            if detection_timestamp is None:
+                continue
+
+            corrected_timestamp = _get_corrected_detection_timestamp(row.node_name, detection_timestamp)
+            delta_seconds = abs((corrected_timestamp.astimezone(PACIFIC_TZ) - row_timestamp).total_seconds())
+            candidates.append((delta_seconds, corrected_timestamp, detection))
+
+        last_candidate_count = len(candidates)
+        if candidates:
+            _, corrected_timestamp, detection = min(candidates, key=lambda item: item[0])
+            return detection, _format_timestamp_pst(corrected_timestamp)
+
+    raise ValueError(
+        f"Could not find matching OrcaHello false-positive detection for testing row {row!r} "
+        f"(description={row.description!r}, candidates={last_candidate_count})."
+    )
+
+
+def validate_aligned_entries(testing_rows: list[CSVRow]) -> None:
+    mismatches = []
+
+    for row in testing_rows:
+        if not _is_false_positive_testing_row(row):
+            continue
+
+        _, corrected_timestamp_pst = _find_matching_detection(row)
+        if row.timestamp_pst != corrected_timestamp_pst:
+            corrected_row = _build_corrected_testing_row(row, corrected_timestamp_pst)
+            mismatches.append(
+                "Unaligned false-positive testing row:\n"
+                f"  old testing_row: {row}\n"
+                f"  corrected testing_row: {corrected_row}"
+            )
+
+    if mismatches:
+        raise ValueError("\n".join(mismatches))
 
 
 def download_audio_segment(
@@ -567,6 +750,7 @@ def run_download_wavs(validate_only: bool = False) -> None:
         testing_rows = parse_csv(testing_csv_path)
 
     validate_no_overlaps(training_rows, testing_rows)
+    validate_aligned_entries(testing_rows)
 
     if validate_only:
         print("Overlap validation completed successfully.")
