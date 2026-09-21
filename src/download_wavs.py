@@ -30,6 +30,7 @@ from audio_utils import (
 PACIFIC_TZ = timezone('US/Pacific')
 N_SECONDS = 3  # Create 3-second wav files.
 TESTING_WINDOW_SECONDS = 60
+ORCAHELLO_ORCASITE_WINDOW_SECONDS = TESTING_WINDOW_SECONDS + 1
 DETECTIONS_API_URL = "https://aifororcasdetections.azurewebsites.net/api/detections"
 CURRENT_EPOCH_START = datetime.fromisoformat("2025-10-12T14:23:00+00:00")
 DETECTIONS_PAGE_SIZE = 50
@@ -537,13 +538,12 @@ def _find_matching_detection(row: CSVRow) -> tuple[dict, str]:
         Tuple of ``(detection, orcasite_timestamp_pst)`` for the matching 60-second detection.
     """
     row_timestamp = parse_timestamp_pst(row.timestamp_pst)
-    row_corrected_timestamp = row_timestamp + timedelta(seconds=AUDIO_OFFSET_SECONDS)
     normalized_description = _normalize_text(row.description)
     search_windows = (1, 7)
     last_candidate_count = 0
     last_start_date = row_timestamp
     last_end_date = row_timestamp
-    closest_reviewed_timestamp_pst = None
+    closest_orcasite_timestamp_pst = None
     closest_reviewed_comments = None
     closest_reviewed_delta_seconds = None
 
@@ -570,32 +570,31 @@ def _find_matching_detection(row: CSVRow) -> tuple[dict, str]:
                 continue
 
             corrected_timestamp = _get_corrected_detection_timestamp(row.node_name, detection_timestamp)
-            corrected_end_timestamp = corrected_timestamp + timedelta(seconds=TESTING_WINDOW_SECONDS)
             orcasite_timestamp = corrected_timestamp - timedelta(seconds=AUDIO_OFFSET_SECONDS)
+            orcasite_end_timestamp = orcasite_timestamp + timedelta(seconds=ORCAHELLO_ORCASITE_WINDOW_SECONDS)
             delta_seconds = min(
-                abs((row_corrected_timestamp - corrected_timestamp).total_seconds()),
-                abs((row_corrected_timestamp - corrected_end_timestamp).total_seconds()),
+                abs((row_timestamp - orcasite_timestamp).total_seconds()),
+                abs((row_timestamp - orcasite_end_timestamp).total_seconds()),
             )
             if closest_reviewed_delta_seconds is None or delta_seconds < closest_reviewed_delta_seconds:
                 closest_reviewed_delta_seconds = delta_seconds
-                closest_reviewed_timestamp_pst = _format_timestamp_pst(orcasite_timestamp)
+                closest_orcasite_timestamp_pst = _format_timestamp_pst(orcasite_timestamp)
                 closest_reviewed_comments = comments
 
-            if corrected_timestamp <= row_corrected_timestamp < corrected_end_timestamp:
-                seconds_from_start = (row_corrected_timestamp - corrected_timestamp).total_seconds()
-                candidates.append((seconds_from_start, corrected_timestamp, detection))
+            if orcasite_timestamp <= row_timestamp <= orcasite_end_timestamp:
+                seconds_from_start = (row_timestamp - orcasite_timestamp).total_seconds()
+                candidates.append((seconds_from_start, orcasite_timestamp, detection))
 
         last_candidate_count = len(candidates)
         if candidates:
-            _, corrected_timestamp, detection = min(candidates, key=lambda item: item[0])
-            orcasite_timestamp = corrected_timestamp - timedelta(seconds=AUDIO_OFFSET_SECONDS)
+            _, orcasite_timestamp, detection = min(candidates, key=lambda item: item[0])
             return detection, _format_timestamp_pst(orcasite_timestamp)
 
     raise ValueError(
         f"Could not find matching OrcaHello false-positive detection for testing row {row!r} "
         f"(timestamp={row.timestamp_pst}, description={row.description!r}, "
         f"search_window={last_start_date.strftime('%m/%d/%Y')}..{last_end_date.strftime('%m/%d/%Y')}, "
-        f"candidates={last_candidate_count}, closest_corrected_timestamp={closest_reviewed_timestamp_pst!r}, "
+        f"candidates={last_candidate_count}, closest_orcasite_timestamp={closest_orcasite_timestamp_pst!r}, "
         f"closest_comments={closest_reviewed_comments!r})."
     )
 

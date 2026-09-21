@@ -295,6 +295,38 @@ class TestAlignedEntryValidation:
             ):
                 validate_aligned_entries(testing_rows)
 
+    def test_validate_aligned_entries_matches_reported_old_epoch_false_positive(self):
+        self._clear_validation_caches()
+        testing_rows = [
+            CSVRow(
+                "human",
+                "rpi_sunset_bay",
+                "2024_07_19_12_51_09_PST",
+                "https://live.orcasound.net/bouts/new/sunset-bay?time=2024-07-19T19%3A51%3A09.000Z",
+                "Human voices causing false positives despite significant noise from something contacting ladder and/or hydrophone.",
+                "fp_machine_only",
+                "54.4156",
+            ),
+        ]
+        detections = [
+            {
+                "timestamp": "2024-07-19T21:07:09.102135Z",
+                "comments": "Human voices causing false positives despite significant noise from something contacting ladder and/or hydrophone.",
+                "found": "No",
+                "reviewed": True,
+            },
+        ]
+        folder_time = int(datetime(2024, 7, 19, 7, 0, 48, tzinfo=timezone.utc).timestamp())
+
+        with patch("download_wavs.requests.get", return_value=self._mock_detection_response(detections)), \
+                patch("download_wavs.get_cached_folders", return_value=[str(folder_time)]):
+            with pytest.raises(
+                ValueError,
+                match=r"old testing_row: human,rpi_sunset_bay,2024_07_19_12_51_09_PST,https://live\.orcasound\.net/bouts/new/sunset-bay\?time=2024-07-19T19%3A51%3A09\.000Z,Human voices causing false positives despite significant noise from something contacting ladder and/or hydrophone\.,fp_machine_only,54\.4156\n"
+                r"  new testing_row: human,rpi_sunset_bay,2024_07_19_12_50_08_PST,https://live\.orcasound\.net/bouts/new/sunset-bay\?time=2024-07-19T19%3A50%3A08\.000Z,Human voices causing false positives despite significant noise from something contacting ladder and/or hydrophone\.,fp_machine_only,54\.4156",
+            ):
+                validate_aligned_entries(testing_rows)
+
 
 class TestCacheAndCleanup:
     def test_process_csv_copies_from_cache_without_downloading(self):
