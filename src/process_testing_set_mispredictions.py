@@ -195,11 +195,12 @@ def triage_testing_set_mispredictions(
         model_revision=model_revision,
     )
     id2label = getattr(model, "id2label", {}) or {}
+    total = len(rows)
 
     removal_keys: set[tuple[str, str, str]] = set()
     for testing_row in rows:
         summary["rows_seen"] += 1
-        print(f"Processing row {summary['rows_seen']}...")
+        print(f"Processing row {summary['rows_seen']} of {total}...")
         wav_path = find_wav_file(testing_row, wav_dir)
         if wav_path is None:
             summary["missing_wav"] += 1
