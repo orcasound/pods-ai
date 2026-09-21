@@ -926,8 +926,8 @@ def run_download_wavs(validate_only: bool = False) -> None:
     else:
         testing_rows = parse_csv(testing_csv_path)
 
-    validate_aligned_entries(testing_rows)
     validate_no_overlaps(training_rows, testing_rows)
+    validate_aligned_entries(testing_rows)
 
     if validate_only:
         print("Overlap and aligned-entry validation completed successfully.")
