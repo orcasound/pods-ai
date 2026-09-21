@@ -47,6 +47,7 @@ class CSVRow:
     uri: str
     description: str
     notes: str
+    confidence: str
 
 # ============================================================================
 # CSV Parsing
@@ -70,14 +71,15 @@ def parse_csv(csv_path: Path) -> List[CSVRow]:
         # Skip header
         next(csv_reader)
         for row in csv_reader:
-            if len(row) >= 6:
+            if len(row) >= 7:
                 rows.append(CSVRow(
                     category=row[0],
                     node_name=row[1],
                     timestamp_pst=row[2],
                     uri=row[3],
                     description=row[4],
-                    notes=row[5]
+                    notes=row[5],
+                    confidence=row[6]
                 ))
     return rows
 
@@ -314,6 +316,7 @@ def _build_corrected_testing_row(row: CSVRow, timestamp_pst: str) -> CSVRow:
         uri=_generate_testing_uri(row, timestamp_pst),
         description=row.description,
         notes=row.notes,
+        confidence=row.confidence
     )
 
 
@@ -327,6 +330,7 @@ def _format_testing_row_csv(row: CSVRow) -> str:
         row.uri,
         row.description,
         row.notes,
+        row.confidence
     ])
     return output.getvalue()
 
@@ -480,11 +484,10 @@ def _find_matching_detection(row: CSVRow) -> tuple[dict, str]:
                 continue
 
             corrected_timestamp = _get_corrected_detection_timestamp(row.node_name, detection_timestamp)
-            orcasite_timestamp = corrected_timestamp - timedelta(seconds=AUDIO_OFFSET_SECONDS)
-            delta_seconds = abs((orcasite_timestamp.astimezone(PACIFIC_TZ) - row_timestamp).total_seconds())
+            delta_seconds = abs((corrected_timestamp.astimezone(PACIFIC_TZ) - row_timestamp).total_seconds())
             if closest_reviewed_delta_seconds is None or delta_seconds < closest_reviewed_delta_seconds:
                 closest_reviewed_delta_seconds = delta_seconds
-                closest_reviewed_timestamp_pst = _format_timestamp_pst(orcasite_timestamp)
+                closest_reviewed_timestamp_pst = _format_timestamp_pst(corrected_timestamp)
                 closest_reviewed_comments = comments
             candidates.append((delta_seconds, corrected_timestamp, detection))
 
@@ -517,7 +520,7 @@ def validate_aligned_entries(testing_rows: list[CSVRow]) -> None:
             mismatches.append(
                 "Unaligned false-positive testing row:\n"
                 f"  old testing_row: {_format_testing_row_csv(row)}\n"
-                f"  corrected testing_row: {_format_testing_row_csv(corrected_row)}"
+                f"  new testing_row: {_format_testing_row_csv(corrected_row)}"
             )
 
     if mismatches:
@@ -823,8 +826,8 @@ def run_download_wavs(validate_only: bool = False) -> None:
     else:
         testing_rows = parse_csv(testing_csv_path)
 
-    validate_no_overlaps(training_rows, testing_rows)
     validate_aligned_entries(testing_rows)
+    validate_no_overlaps(training_rows, testing_rows)
 
     if validate_only:
         print("Overlap and aligned-entry validation completed successfully.")
