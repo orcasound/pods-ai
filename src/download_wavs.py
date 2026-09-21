@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone as dt_timezone
 from pathlib import Path
+from io import StringIO
 from typing import List
 import csv
 import math
@@ -311,6 +312,19 @@ def _build_corrected_testing_row(row: CSVRow, timestamp_pst: str) -> CSVRow:
     )
 
 
+def _format_testing_row_csv(row: CSVRow) -> str:
+    output = StringIO()
+    csv.writer(output, lineterminator="").writerow([
+        row.category,
+        row.node_name,
+        row.timestamp_pst,
+        row.uri,
+        row.description,
+        row.notes,
+    ])
+    return output.getvalue()
+
+
 def _fetch_detections_page(node_name: str, start_date: datetime, end_date: datetime, page: int) -> tuple[list[dict], bool]:
     params = {
         "Page": page,
@@ -488,8 +502,8 @@ def validate_aligned_entries(testing_rows: list[CSVRow]) -> None:
             corrected_row = _build_corrected_testing_row(row, corrected_timestamp_pst)
             mismatches.append(
                 "Unaligned false-positive testing row:\n"
-                f"  old testing_row: {row}\n"
-                f"  corrected testing_row: {corrected_row}"
+                f"  old testing_row: {_format_testing_row_csv(row)}\n"
+                f"  corrected testing_row: {_format_testing_row_csv(corrected_row)}"
             )
 
     if mismatches:

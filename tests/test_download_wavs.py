@@ -246,7 +246,11 @@ class TestAlignedEntryValidation:
 
         with patch("download_wavs.requests.get", return_value=self._mock_detection_response(detections)), \
                 patch("download_wavs.get_cached_folders", return_value=[str(folder_time)]):
-            with pytest.raises(ValueError, match="corrected testing_row: CSVRow\\(category='human', node_name='rpi_sunset_bay', timestamp_pst='2025_01_01_00_10_02_PST'"):
+            with pytest.raises(
+                ValueError,
+                match=r"old testing_row: human,rpi_sunset_bay,2025_01_01_00_11_05_PST,https://live\.orcasound\.net/bouts/new/sunset-bay\?time=2025-01-01T08%3A11%3A05\.000Z,Radio,fp_machine_only\n"
+                r"  corrected testing_row: human,rpi_sunset_bay,2025_01_01_00_10_02_PST,https://live\.orcasound\.net/bouts/new/sunset-bay\?time=2025-01-01T08%3A10%3A02\.000Z,Radio,fp_machine_only",
+            ):
                 validate_aligned_entries(testing_rows)
 
 
