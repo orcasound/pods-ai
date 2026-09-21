@@ -281,22 +281,51 @@ def validate_no_overlaps(training_rows: list[CSVRow], testing_rows: list[CSVRow]
 
 
 def _is_false_positive_testing_row(row: CSVRow) -> bool:
-    """Return True when a testing CSV row represents a false positive sample."""
+    """Return whether a testing CSV row represents a false positive sample.
+
+    Args:
+        row: Parsed testing CSV row.
+
+    Returns:
+        True when the row notes indicate an fp_machine* sample.
+    """
     return row.notes.startswith("fp_machine")
 
 
 def _normalize_text(value: str) -> str:
-    """Normalize text for case-insensitive detection-comment comparisons."""
+    """Normalize text for case-insensitive detection-comment comparisons.
+
+    Args:
+        value: Raw text value from CSV or detections API data.
+
+    Returns:
+        A lowercase, whitespace-normalized string.
+    """
     return " ".join(value.split()).strip().lower()
 
 
 def _format_timestamp_pst(dt: datetime) -> str:
-    """Format a timezone-aware datetime using the repository's PST-style CSV format."""
+    """Format a datetime using the repository's testing CSV timestamp convention.
+
+    Args:
+        dt: Timezone-aware datetime to format in the Pacific timezone.
+
+    Returns:
+        Timestamp string in ``YYYY_MM_DD_HH_MM_SS_PST`` format.
+    """
     return dt.astimezone(PACIFIC_TZ).strftime("%Y_%m_%d_%H_%M_%S_PST")
 
 
 def _generate_testing_uri(row: CSVRow, timestamp_pst: str) -> str:
-    """Build the Orcasound bouts URI for a testing row using the supplied CSV timestamp."""
+    """Build the Orcasound bouts URI for a testing row using the supplied CSV timestamp.
+
+    Args:
+        row: Parsed testing CSV row whose node or base URI is reused.
+        timestamp_pst: Testing-row timestamp in repository CSV format.
+
+    Returns:
+        Orcasound bouts URI pointing at the supplied timestamp.
+    """
     if row.uri:
         base_uri = row.uri.split("?", 1)[0]
     else:
@@ -308,7 +337,15 @@ def _generate_testing_uri(row: CSVRow, timestamp_pst: str) -> str:
 
 
 def _build_corrected_testing_row(row: CSVRow, timestamp_pst: str) -> CSVRow:
-    """Return a copy of a testing row with an updated timestamp and matching URI."""
+    """Return a copy of a testing row with an updated timestamp and matching URI.
+
+    Args:
+        row: Original parsed testing CSV row.
+        timestamp_pst: Replacement timestamp in repository CSV format.
+
+    Returns:
+        CSVRow with the updated timestamp and regenerated URI.
+    """
     return CSVRow(
         category=row.category,
         node_name=row.node_name,
@@ -321,7 +358,14 @@ def _build_corrected_testing_row(row: CSVRow, timestamp_pst: str) -> CSVRow:
 
 
 def _format_testing_row_csv(row: CSVRow) -> str:
-    """Serialize a testing row using the same column order as testing_60s_samples.csv."""
+    """Serialize a testing row using the same column order as testing_60s_samples.csv.
+
+    Args:
+        row: Parsed testing CSV row to serialize.
+
+    Returns:
+        One CSV data line with no trailing newline.
+    """
     output = StringIO()
     csv.writer(output, lineterminator="").writerow([
         row.category,
@@ -336,7 +380,17 @@ def _format_testing_row_csv(row: CSVRow) -> str:
 
 
 def _fetch_detections_page(node_name: str, start_date: datetime, end_date: datetime, page: int) -> tuple[list[dict], bool]:
-    """Fetch one detections API page and return its items plus whether another page exists."""
+    """Fetch one detections API page and return its items plus whether another page exists.
+
+    Args:
+        node_name: Hydrophone node name used in the API query.
+        start_date: Inclusive Pacific-local lower date bound.
+        end_date: Inclusive Pacific-local upper date bound.
+        page: 1-based detections API page number.
+
+    Returns:
+        Tuple of ``(items, has_next_page)`` for the requested page.
+    """
     params = {
         "Page": page,
         "SortBy": "timestamp",
@@ -375,7 +429,16 @@ def _fetch_detections_page(node_name: str, start_date: datetime, end_date: datet
 
 
 def _fetch_detections_for_window(node_name: str, start_date: datetime, end_date: datetime) -> list[dict]:
-    """Fetch and cache all detections for one hydrophone and inclusive date window."""
+    """Fetch and cache all detections for one hydrophone and inclusive date window.
+
+    Args:
+        node_name: Hydrophone node name used in the API query.
+        start_date: Inclusive Pacific-local lower date bound.
+        end_date: Inclusive Pacific-local upper date bound.
+
+    Returns:
+        All detections returned by the paginated API query for that window.
+    """
     cache_key = (
         node_name,
         start_date.strftime("%m/%d/%Y"),
@@ -400,7 +463,14 @@ def _fetch_detections_for_window(node_name: str, start_date: datetime, end_date:
 
 
 def _parse_detection_timestamp(detection: dict) -> datetime | None:
-    """Parse a detections API timestamp field into a timezone-aware datetime."""
+    """Parse a detections API timestamp field into a timezone-aware datetime.
+
+    Args:
+        detection: One detections API result object.
+
+    Returns:
+        Parsed UTC datetime, or None when the timestamp is absent or invalid.
+    """
     timestamp = detection.get("timestamp")
     if not isinstance(timestamp, str) or not timestamp:
         return None
@@ -411,7 +481,15 @@ def _parse_detection_timestamp(detection: dict) -> datetime | None:
 
 
 def _get_corrected_detection_timestamp(node_name: str, detection_timestamp: datetime) -> datetime:
-    """Return the corrected 60-second clip start for one detections API timestamp."""
+    """Return the corrected 60-second clip start for one detections API timestamp.
+
+    Args:
+        node_name: Hydrophone node name used to look up legacy HLS folders.
+        detection_timestamp: Timestamp reported by the detections API.
+
+    Returns:
+        Corrected clip-start datetime in UTC.
+    """
     cache_key = (node_name, detection_timestamp.isoformat())
     cached = _CORRECTED_TIMESTAMP_CACHE.get(cache_key)
     if cached is not None:
@@ -450,8 +528,16 @@ def _get_corrected_detection_timestamp(node_name: str, detection_timestamp: date
 
 
 def _find_matching_detection(row: CSVRow) -> tuple[dict, str]:
-    """Find the best matching false-positive detection and return it plus the Orcasite-aligned timestamp."""
+    """Find the best matching false-positive detection and return it plus the Orcasite-aligned timestamp.
+
+    Args:
+        row: False-positive testing CSV row being validated.
+
+    Returns:
+        Tuple of ``(detection, orcasite_timestamp_pst)`` for the matching 60-second detection.
+    """
     row_timestamp = parse_timestamp_pst(row.timestamp_pst)
+    row_corrected_timestamp = row_timestamp + timedelta(seconds=AUDIO_OFFSET_SECONDS)
     normalized_description = _normalize_text(row.description)
     search_windows = (1, 7)
     last_candidate_count = 0
@@ -484,12 +570,20 @@ def _find_matching_detection(row: CSVRow) -> tuple[dict, str]:
                 continue
 
             corrected_timestamp = _get_corrected_detection_timestamp(row.node_name, detection_timestamp)
-            delta_seconds = abs((corrected_timestamp.astimezone(PACIFIC_TZ) - row_timestamp).total_seconds())
+            corrected_end_timestamp = corrected_timestamp + timedelta(seconds=TESTING_WINDOW_SECONDS)
+            orcasite_timestamp = corrected_timestamp - timedelta(seconds=AUDIO_OFFSET_SECONDS)
+            delta_seconds = min(
+                abs((row_corrected_timestamp - corrected_timestamp).total_seconds()),
+                abs((row_corrected_timestamp - corrected_end_timestamp).total_seconds()),
+            )
             if closest_reviewed_delta_seconds is None or delta_seconds < closest_reviewed_delta_seconds:
                 closest_reviewed_delta_seconds = delta_seconds
-                closest_reviewed_timestamp_pst = _format_timestamp_pst(corrected_timestamp)
+                closest_reviewed_timestamp_pst = _format_timestamp_pst(orcasite_timestamp)
                 closest_reviewed_comments = comments
-            candidates.append((delta_seconds, corrected_timestamp, detection))
+
+            if corrected_timestamp <= row_corrected_timestamp < corrected_end_timestamp:
+                seconds_from_start = (row_corrected_timestamp - corrected_timestamp).total_seconds()
+                candidates.append((seconds_from_start, corrected_timestamp, detection))
 
         last_candidate_count = len(candidates)
         if candidates:
@@ -507,7 +601,14 @@ def _find_matching_detection(row: CSVRow) -> tuple[dict, str]:
 
 
 def validate_aligned_entries(testing_rows: list[CSVRow]) -> None:
-    """Verify false-positive testing rows match the timestamps reconstructed from OrcaHello detections."""
+    """Verify false-positive testing rows match the timestamps reconstructed from OrcaHello detections.
+
+    Args:
+        testing_rows: Parsed testing CSV rows to validate.
+
+    Raises:
+        ValueError: If any false-positive row does not align with its matching detection.
+    """
     mismatches = []
 
     for row in testing_rows:
