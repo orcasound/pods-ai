@@ -199,6 +199,7 @@ def triage_testing_set_mispredictions(
     removal_keys: set[tuple[str, str, str]] = set()
     for testing_row in rows:
         summary["rows_seen"] += 1
+        print(f"Processing row {summary['rows_seen']}...")
         wav_path = find_wav_file(testing_row, wav_dir)
         if wav_path is None:
             summary["missing_wav"] += 1
