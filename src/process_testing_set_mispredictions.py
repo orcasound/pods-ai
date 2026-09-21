@@ -145,7 +145,6 @@ def find_top_non_adjacent_segments(
 
 def build_training_row(
     testing_row: dict[str, str],
-    target_label: str,
     segment_index: int,
     segment_confidence: float,
     hop_duration: float,
@@ -156,7 +155,7 @@ def build_training_row(
         clip_start + timedelta(seconds=segment_index * float(hop_duration))
     )
     return {
-        "Category": target_label,
+        "Category": (testing_row.get("Category") or "").strip(),
         "NodeName": (testing_row.get("NodeName") or "").strip(),
         "StartTimestamp": segment_timestamp,
         "URI": build_segment_uri((testing_row.get("URI") or "").strip(), segment_timestamp),
@@ -254,7 +253,6 @@ def triage_testing_set_mispredictions(
                 proposals_for_training.append(
                     build_training_row(
                         testing_row=testing_row,
-                        target_label=target_label,
                         segment_index=segment_index,
                         segment_confidence=segment_confidence,
                         hop_duration=hop_duration,
