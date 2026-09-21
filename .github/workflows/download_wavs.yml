@@ -47,6 +47,8 @@ jobs:
             github.com:443
             pypi.org:443
             s3-us-west-2.amazonaws.com:443
+            aifororcasdetections.azurewebsites.net:443
+            audio-orcasound-net.s3.amazonaws.com:443
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
