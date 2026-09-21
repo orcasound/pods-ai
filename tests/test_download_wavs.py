@@ -2,12 +2,14 @@
 # SPDX-License-Identifier: MIT
 """Unit tests for testing sample download logic in download_wavs.py."""
 
+from datetime import datetime, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from unittest.mock import ANY, patch
+from unittest.mock import ANY, Mock, patch
 import os
 
 import pytest
+import download_wavs
 
 from download_wavs import (
     CSVRow,
@@ -17,6 +19,7 @@ from download_wavs import (
     process_csv,
     process_testing_csv,
     run_download_wavs,
+    validate_aligned_entries,
     validate_no_overlaps,
 )
 
@@ -33,6 +36,7 @@ class TestDownloadTestingSample:
             uri="https://example.org/sample",
             description="sample",
             notes="tp_human_only",
+            confidence="",
         )
 
         with TemporaryDirectory() as tmp:
@@ -64,6 +68,7 @@ class TestDownloadTestingSample:
             uri="https://example.org/sample",
             description="sample",
             notes="tp_machine_only",
+            confidence="",
         )
 
         with TemporaryDirectory() as tmp:
@@ -101,32 +106,226 @@ class TestTimestampHelpers:
 class TestOverlapValidation:
     def test_validate_no_overlaps_allows_non_overlapping_rows(self):
         training_rows = [
-            CSVRow("resident", "rpi_andrews_bay", "2025_01_01_01_00_00_PST", "", "", ""),
-            CSVRow("resident", "rpi_andrews_bay", "2025_01_01_01_00_03_PST", "", "", ""),
+            CSVRow("resident", "rpi_andrews_bay", "2025_01_01_01_00_00_PST", "", "", "", ""),
+            CSVRow("resident", "rpi_andrews_bay", "2025_01_01_01_00_03_PST", "", "", "", ""),
         ]
         testing_rows = [
-            CSVRow("resident", "rpi_andrews_bay", "2025_01_01_00_59_00_PST", "", "", "tp_human_only"),
-            CSVRow("resident", "rpi_andrews_bay", "2025_01_01_01_01_06_PST", "", "", "tp_human_only"),
+            CSVRow("resident", "rpi_andrews_bay", "2025_01_01_00_59_00_PST", "", "", "tp_human_only", ""),
+            CSVRow("resident", "rpi_andrews_bay", "2025_01_01_01_01_06_PST", "", "", "tp_human_only", ""),
         ]
         validate_no_overlaps(training_rows, testing_rows)
 
     def test_validate_no_overlaps_rejects_training_overlap(self):
         training_rows = [
-            CSVRow("resident", "rpi_andrews_bay", "2025_01_01_00_00_00_PST", "", "", ""),
-            CSVRow("resident", "rpi_andrews_bay", "2025_01_01_00_00_02_PST", "", "", ""),
+            CSVRow("resident", "rpi_andrews_bay", "2025_01_01_00_00_00_PST", "", "", "", ""),
+            CSVRow("resident", "rpi_andrews_bay", "2025_01_01_00_00_02_PST", "", "", "", ""),
         ]
         with pytest.raises(ValueError, match="training overlap"):
             validate_no_overlaps(training_rows, [])
 
     def test_validate_no_overlaps_rejects_cross_file_overlap(self):
         training_rows = [
-            CSVRow("resident", "rpi_andrews_bay", "2025_01_01_00_00_00_PST", "", "", ""),
+            CSVRow("resident", "rpi_andrews_bay", "2025_01_01_00_00_00_PST", "", "", "", ""),
         ]
         testing_rows = [
-            CSVRow("resident", "rpi_andrews_bay", "2024_12_31_23_59_58_PST", "", "", "tp_machine_only"),
+            CSVRow("resident", "rpi_andrews_bay", "2024_12_31_23_59_58_PST", "", "", "tp_machine_only", ""),
         ]
         with pytest.raises(ValueError, match="cross-file overlap"):
             validate_no_overlaps(training_rows, testing_rows)
+
+
+class TestAlignedEntryValidation:
+    @staticmethod
+    def _clear_validation_caches():
+        download_wavs._DETECTIONS_WINDOW_CACHE.clear()
+        download_wavs._CORRECTED_TIMESTAMP_CACHE.clear()
+
+    @staticmethod
+    def _mock_detection_response(payload, total_pages: int | None = None):
+        response = Mock()
+        response.text = "[]"
+        response.json.return_value = payload
+        response.raise_for_status.return_value = None
+        response.headers = {}
+        if payload:
+            response.text = "[{\"id\":\"1\"}]"
+        if total_pages is not None:
+            response.headers["totalAmountPages"] = str(total_pages)
+        return response
+
+    def test_validate_aligned_entries_handles_paginated_items_payload(self):
+        self._clear_validation_caches()
+        testing_rows = [
+            CSVRow(
+                "human",
+                "rpi_sunset_bay",
+                "2025_12_01_00_00_00_PST",
+                "https://live.orcasound.net/bouts/new/sunset-bay?time=2025-12-01T08%3A00%3A00.000Z",
+                "Radio",
+                "fp_machine_only",
+                "100",
+            ),
+        ]
+        first_page_payload = {
+            "items": [
+                {
+                    "timestamp": "2025-12-01T07:00:00Z",
+                    "comments": "not a match",
+                    "found": "No",
+                    "reviewed": False,
+                }
+                for _ in range(50)
+            ],
+        }
+        second_page_payload = [
+            {
+                "timestamp": "2025-12-01T08:00:02Z",
+                "comments": "Radio",
+                "found": "No",
+                "reviewed": True,
+            },
+        ]
+
+        with patch(
+            "download_wavs.requests.get",
+            side_effect=[
+                self._mock_detection_response(first_page_payload, total_pages=2),
+                self._mock_detection_response(second_page_payload, total_pages=2),
+            ],
+        ) as mock_get, \
+                patch("download_wavs.get_cached_folders", side_effect=AssertionError("should not query S3 for current epoch")):
+            validate_aligned_entries(testing_rows)
+
+        assert mock_get.call_count == 2
+
+    def test_validate_aligned_entries_allows_current_epoch_false_positive_without_s3_lookup(self):
+        self._clear_validation_caches()
+        testing_rows = [
+            CSVRow(
+                "human",
+                "rpi_sunset_bay",
+                "2025_12_01_00_00_00_PST",
+                "https://live.orcasound.net/bouts/new/sunset-bay?time=2025-12-01T08%3A00%3A00.000Z",
+                "Radio",
+                "fp_machine_only",
+                "100",
+            ),
+        ]
+        detections = [
+            {
+                "timestamp": "2025-12-01T08:00:02Z",
+                "comments": "Radio",
+                "found": "No",
+                "reviewed": True,
+            },
+        ]
+
+        with patch("download_wavs.requests.get", return_value=self._mock_detection_response(detections)) as mock_get, \
+                patch("download_wavs.get_cached_folders", side_effect=AssertionError("should not query S3 for current epoch")):
+            validate_aligned_entries(testing_rows)
+
+        mock_get.assert_called_once()
+
+    def test_validate_aligned_entries_rejects_current_epoch_misalignment_within_detection_window(self):
+        self._clear_validation_caches()
+        testing_rows = [
+            CSVRow(
+                "human",
+                "rpi_sunset_bay",
+                "2025_12_01_00_00_48_PST",
+                "https://live.orcasound.net/bouts/new/sunset-bay?time=2025-12-01T08%3A00%3A48.000Z",
+                "Radio",
+                "fp_machine_only",
+                "100",
+            ),
+        ]
+        detections = [
+            {
+                "timestamp": "2025-12-01T08:00:02Z",
+                "comments": "Radio",
+                "found": "No",
+                "reviewed": True,
+            },
+            {
+                "timestamp": "2025-11-30T08:00:02Z",
+                "comments": "Radio",
+                "found": "No",
+                "reviewed": True,
+            },
+        ]
+
+        with patch("download_wavs.requests.get", return_value=self._mock_detection_response(detections)), \
+                patch("download_wavs.get_cached_folders", side_effect=AssertionError("should not query S3 for current epoch")):
+            with pytest.raises(
+                ValueError,
+                match=r"old testing_row: human,rpi_sunset_bay,2025_12_01_00_00_48_PST,https://live\.orcasound\.net/bouts/new/sunset-bay\?time=2025-12-01T08%3A00%3A48\.000Z,Radio,fp_machine_only,100\n"
+                r"  new testing_row: human,rpi_sunset_bay,2025_12_01_00_00_00_PST,https://live\.orcasound\.net/bouts/new/sunset-bay\?time=2025-12-01T08%3A00%3A00\.000Z,Radio,fp_machine_only,100",
+            ):
+                validate_aligned_entries(testing_rows)
+
+    def test_validate_aligned_entries_rejects_old_epoch_misalignment(self):
+        self._clear_validation_caches()
+        testing_rows = [
+            CSVRow(
+                "human",
+                "rpi_sunset_bay",
+                "2025_01_01_00_10_48_PST",
+                "https://live.orcasound.net/bouts/new/sunset-bay?time=2025-01-01T08%3A10%3A48.000Z",
+                "Radio",
+                "fp_machine_only",
+                "100",
+            ),
+        ]
+        detections = [
+            {
+                "timestamp": "2025-01-01T08:11:05Z",
+                "comments": "Radio",
+                "found": "No",
+                "reviewed": True,
+            },
+        ]
+        folder_time = int(datetime(2025, 1, 1, 8, 0, 0, tzinfo=timezone.utc).timestamp())
+
+        with patch("download_wavs.requests.get", return_value=self._mock_detection_response(detections)), \
+                patch("download_wavs.get_cached_folders", return_value=[str(folder_time)]):
+            with pytest.raises(
+                ValueError,
+                match=r"old testing_row: human,rpi_sunset_bay,2025_01_01_00_10_48_PST,https://live\.orcasound\.net/bouts/new/sunset-bay\?time=2025-01-01T08%3A10%3A48\.000Z,Radio,fp_machine_only,100\n"
+                r"  new testing_row: human,rpi_sunset_bay,2025_01_01_00_10_00_PST,https://live\.orcasound\.net/bouts/new/sunset-bay\?time=2025-01-01T08%3A10%3A00\.000Z,Radio,fp_machine_only,100",
+            ):
+                validate_aligned_entries(testing_rows)
+
+    def test_validate_aligned_entries_matches_reported_old_epoch_false_positive(self):
+        self._clear_validation_caches()
+        testing_rows = [
+            CSVRow(
+                "human",
+                "rpi_sunset_bay",
+                "2024_07_19_12_51_09_PST",
+                "https://live.orcasound.net/bouts/new/sunset-bay?time=2024-07-19T19%3A51%3A09.000Z",
+                "Human voices causing false positives despite significant noise from something contacting ladder and/or hydrophone.",
+                "fp_machine_only",
+                "54.4156",
+            ),
+        ]
+        detections = [
+            {
+                "timestamp": "2024-07-19T21:07:09.102135Z",
+                "comments": "Human voices causing false positives despite significant noise from something contacting ladder and/or hydrophone.",
+                "found": "No",
+                "reviewed": True,
+            },
+        ]
+        folder_time = int(datetime(2024, 7, 19, 7, 0, 48, tzinfo=timezone.utc).timestamp())
+
+        with patch("download_wavs.requests.get", return_value=self._mock_detection_response(detections)), \
+                patch("download_wavs.get_cached_folders", return_value=[str(folder_time)]):
+            with pytest.raises(
+                ValueError,
+                match=r"old testing_row: human,rpi_sunset_bay,2024_07_19_12_51_09_PST,https://live\.orcasound\.net/bouts/new/sunset-bay\?time=2024-07-19T19%3A51%3A09\.000Z,Human voices causing false positives despite significant noise from something contacting ladder and/or hydrophone\.,fp_machine_only,54\.4156\n"
+                r"  new testing_row: human,rpi_sunset_bay,2024_07_19_12_50_08_PST,https://live\.orcasound\.net/bouts/new/sunset-bay\?time=2024-07-19T19%3A50%3A08\.000Z,Human voices causing false positives despite significant noise from something contacting ladder and/or hydrophone\.,fp_machine_only,54\.4156",
+            ):
+                validate_aligned_entries(testing_rows)
 
 
 class TestCacheAndCleanup:
@@ -135,8 +334,8 @@ class TestCacheAndCleanup:
             tmp_path = Path(tmp)
             csv_path = tmp_path / "training_3s_samples.csv"
             csv_path.write_text(
-                "category,node_name,timestamp_pst,uri,description,notes\n"
-                "resident,rpi_andrews_bay,2025_01_01_00_00_00_PST,uri,desc,note\n",
+                "category,node_name,timestamp_pst,uri,description,notes,confidence\n"
+                "resident,rpi_andrews_bay,2025_01_01_00_00_00_PST,uri,desc,note,100\n",
                 encoding="utf-8",
             )
 
@@ -158,8 +357,8 @@ class TestCacheAndCleanup:
             tmp_path = Path(tmp)
             csv_path = tmp_path / "training_3s_samples.csv"
             csv_path.write_text(
-                "category,node_name,timestamp_pst,uri,description,notes\n"
-                "resident,rpi_andrews_bay,2025_01_01_00_00_00_PST,uri,desc,note\n",
+                "category,node_name,timestamp_pst,uri,description,notes,confidence\n"
+                "resident,rpi_andrews_bay,2025_01_01_00_00_00_PST,uri,desc,note,100\n",
                 encoding="utf-8",
             )
 
@@ -181,8 +380,8 @@ class TestCacheAndCleanup:
             tmp_path = Path(tmp)
             csv_path = tmp_path / "training_3s_samples.csv"
             csv_path.write_text(
-                "category,node_name,timestamp_pst,uri,description,notes\n"
-                "resident,rpi_andrews_bay,2025_01_01_00_00_00_PST,uri,desc,note\n",
+                "category,node_name,timestamp_pst,uri,description,notes,confidence\n"
+                "resident,rpi_andrews_bay,2025_01_01_00_00_00_PST,uri,desc,note,100\n",
                 encoding="utf-8",
             )
 
@@ -220,8 +419,8 @@ class TestCacheAndCleanup:
             tmp_path = Path(tmp)
             csv_path = tmp_path / "testing_60s_samples.csv"
             csv_path.write_text(
-                "category,node_name,timestamp_pst,uri,description,notes\n"
-                "resident,rpi_andrews_bay,2025_01_01_00_00_00_PST,uri,desc,tp_human_only\n",
+                "category,node_name,timestamp_pst,uri,description,notes,confidence\n"
+                "resident,rpi_andrews_bay,2025_01_01_00_00_00_PST,uri,desc,tp_human_only,100\n",
                 encoding="utf-8",
             )
 
@@ -251,22 +450,25 @@ class TestValidateOnly:
             csv_dir = tmp_path / "output" / "csv"
             csv_dir.mkdir(parents=True, exist_ok=True)
             (csv_dir / "training_3s_samples.csv").write_text(
-                "category,node_name,timestamp_pst,uri,description,notes\n"
-                "resident,rpi_andrews_bay,2025_01_01_01_00_00_PST,uri,desc,note\n",
+                "category,node_name,timestamp_pst,uri,description,notes,confidence\n"
+                "resident,rpi_andrews_bay,2025_01_01_01_00_00_PST,uri,desc,note,100\n",
                 encoding="utf-8",
             )
             (csv_dir / "testing_60s_samples.csv").write_text(
-                "category,node_name,timestamp_pst,uri,description,notes\n"
-                "resident,rpi_andrews_bay,2025_01_01_01_01_06_PST,uri,desc,tp_human_only\n",
+                "category,node_name,timestamp_pst,uri,description,notes,confidence\n"
+                "resident,rpi_andrews_bay,2025_01_01_01_01_06_PST,uri,desc,tp_human_only,100\n",
                 encoding="utf-8",
             )
 
             original_cwd = Path.cwd()
             try:
                 os.chdir(tmp_path)
-                with patch("download_wavs.process_csv") as mock_process_csv, patch("download_wavs.process_testing_csv") as mock_process_testing_csv:
+                with patch("download_wavs.process_csv") as mock_process_csv, \
+                        patch("download_wavs.process_testing_csv") as mock_process_testing_csv, \
+                        patch("download_wavs.validate_aligned_entries") as mock_validate_aligned_entries:
                     run_download_wavs(validate_only=True)
                 mock_process_csv.assert_not_called()
                 mock_process_testing_csv.assert_not_called()
+                mock_validate_aligned_entries.assert_called_once()
             finally:
                 os.chdir(original_cwd)
