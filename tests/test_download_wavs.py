@@ -176,7 +176,7 @@ class TestAlignedEntryValidation:
         }
         second_page_payload = [
             {
-                "timestamp": "2025-12-01T08:00:00Z",
+                "timestamp": "2025-12-01T08:00:02Z",
                 "comments": "Radio",
                 "found": "No",
                 "reviewed": True,
@@ -209,7 +209,7 @@ class TestAlignedEntryValidation:
         ]
         detections = [
             {
-                "timestamp": "2025-12-01T08:00:00Z",
+                "timestamp": "2025-12-01T08:00:02Z",
                 "comments": "Radio",
                 "found": "No",
                 "reviewed": True,
@@ -249,7 +249,7 @@ class TestAlignedEntryValidation:
             with pytest.raises(
                 ValueError,
                 match=r"old testing_row: human,rpi_sunset_bay,2025_01_01_00_11_05_PST,https://live\.orcasound\.net/bouts/new/sunset-bay\?time=2025-01-01T08%3A11%3A05\.000Z,Radio,fp_machine_only\n"
-                r"  corrected testing_row: human,rpi_sunset_bay,2025_01_01_00_10_02_PST,https://live\.orcasound\.net/bouts/new/sunset-bay\?time=2025-01-01T08%3A10%3A02\.000Z,Radio,fp_machine_only",
+                r"  corrected testing_row: human,rpi_sunset_bay,2025_01_01_00_10_00_PST,https://live\.orcasound\.net/bouts/new/sunset-bay\?time=2025-01-01T08%3A10%3A00\.000Z,Radio,fp_machine_only",
             ):
                 validate_aligned_entries(testing_rows)
 
