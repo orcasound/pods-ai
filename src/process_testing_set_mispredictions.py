@@ -6,15 +6,14 @@
 import argparse
 import csv
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta, timezone
 from pathlib import Path
 from typing import Any, Optional
 from urllib.parse import parse_qs, quote, urlencode, urlparse, urlunparse
 
-from pytz import timezone as pytz_timezone
+from audio_utils import format_timestamp_pst, parse_timestamp_pst
 
 TARGET_LABELS = ("resident", "transient", "humpback")
-PACIFIC_TZ = pytz_timezone("US/Pacific")
 TRAINING_COLUMNS = [
     "Category",
     "NodeName",
@@ -39,16 +38,6 @@ def normalize_label(label: Any) -> str:
     """Normalize labels for consistent comparison."""
     normalized = str(label or "").strip().lower()
     return "resident" if normalized == "srkw" else normalized
-
-
-def parse_timestamp_pst(timestamp_str: str) -> datetime:
-    """Parse repository timestamp format YYYY_MM_DD_HH_MM_SS_PST."""
-    return PACIFIC_TZ.localize(datetime.strptime(timestamp_str, "%Y_%m_%d_%H_%M_%S_PST"))
-
-
-def format_timestamp_pst(timestamp: datetime) -> str:
-    """Format datetime as repository timestamp YYYY_MM_DD_HH_MM_SS_PST."""
-    return timestamp.astimezone(PACIFIC_TZ).strftime("%Y_%m_%d_%H_%M_%S_PST")
 
 
 def _to_utc_time_param(timestamp_pst: str) -> str:
@@ -217,7 +206,11 @@ def triage_testing_set_mispredictions(
 
         try:
             inference = model.predict(str(wav_path))
-        except Exception:
+        except Exception as exc:
+            print(
+                f"Warning: inference failed for {wav_path}: {exc}",
+                file=sys.stderr,
+            )
             summary["inference_errors"] += 1
             continue
 
@@ -231,6 +224,15 @@ def triage_testing_set_mispredictions(
             id2label,
         )
         local_confidences = inference.get("local_confidences", [])
+        if len(local_prediction_labels) != len(local_confidences):
+            print(
+                "Warning: skipping row due to mismatched inference lengths "
+                f"(predictions={len(local_prediction_labels)}, "
+                f"confidences={len(local_confidences)}) for {wav_path}",
+                file=sys.stderr,
+            )
+            summary["inference_errors"] += 1
+            continue
         hop_duration = float(inference.get("hop_duration", 2.0))
 
         proposed_for_row = False

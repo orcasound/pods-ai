@@ -116,7 +116,7 @@ Key dependencies:
 - **process_testing_set_mispredictions.py**: Scans `output/csv/testing_60s_samples.csv`,
   runs PODS-AI on each corresponding `output/testing-wav/<category>/...wav`, and
   proposes `training_3s_samples.csv` rows plus `testing_60s_samples.csv` rows to
-  remove when non-adjacent high-confidence (>\=0.80) whale segments are found.
+  remove when non-adjacent high-confidence (>0.80) whale segments are found.
 - **run_inference.py**: Runs a model on a wav file and prints the global prediction,
   confidence, and per-class probabilities.
 - **generate_embeddings.py**: Runs the PODS-AI AST model on a set of test WAV files and extracts the AST class token embeddings for each analyzed segment. Outputs a CSV containing embeddings, predictions, confidence scores, and metadata that can be used to generate UMAP visualizations of the model's learned audio representation. See [generate_embeddings.py](#generate_embeddingspy) below.
