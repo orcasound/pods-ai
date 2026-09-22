@@ -122,8 +122,8 @@ def test_build_cosmosdb_metadata_comments_appends_dominant_extra_class() -> None
         model_id="podsai-model",
     )
 
-    # Tags should only include resident (positive label) and negative local (vessel)
-    assert metadata["tags"] == "resident;vessel"
+    # Tags should only include srkw (positive label) and negative local (vessel)
+    assert metadata["tags"] == "srkw;vessel"
 
 
 def test_build_cosmosdb_metadata_tags_include_all_positive_predictions() -> None:
@@ -146,7 +146,7 @@ def test_build_cosmosdb_metadata_tags_include_all_positive_predictions() -> None
         model_id="podsai-model",
     )
 
-    assert metadata["tags"] == "resident"
+    assert metadata["tags"] == "srkw"
 
 
 def test_upload_detection_to_azure_skips_existing_blobs(tmp_path) -> None:

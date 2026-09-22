@@ -129,6 +129,9 @@ def build_tags_list(
             if label not in tags:
                 tags.append(label)
             break
+    # Map 'resident' to 'srkw' for AIForOrcas compatibility.
+    tags = ["srkw" if tag == "resident" else tag for tag in tags]
+
     return tags
 
 
