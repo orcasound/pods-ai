@@ -12,7 +12,7 @@ import os
 import shutil
 import sys
 from tempfile import TemporaryDirectory
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 
 import ffmpeg
 import m3u8
@@ -27,6 +27,7 @@ from audio_utils import (
     download_from_url,
     load_m3u8_with_retry
 )
+from add_samples import parse_uri, get_node_slug, get_orcasite_feeds
 
 PACIFIC_TZ = timezone('US/Pacific')
 N_SECONDS = 3  # Create 3-second wav files.
@@ -670,6 +671,94 @@ def validate_aligned_entries(testing_rows: list[CSVRow]) -> None:
         raise ValueError("\n".join(mismatches))
 
 
+def validate_uri_timestamps(rows: list[CSVRow]) -> None:
+    """Verify that the timestamp encoded in each row URI matches the CSV StartTimestamp.
+
+    Args:
+        rows: Parsed CSV rows to validate.
+
+    Raises:
+        ValueError: If any row's URI timestamp does not match the CSV timestamp or the URI cannot be parsed.
+    """
+    mismatches: list[str] = []
+
+    for row in rows:
+        if not row.uri:
+            continue
+        try:
+            uri_node, uri_timestamp_pst = parse_uri(row.uri)
+        except Exception as e:
+            mismatches.append(
+                f"Unable to parse URI for row {row.node_name} {row.timestamp_pst}: {row.uri} ({type(e).__name__}: {e})"
+            )
+            continue
+
+        if uri_timestamp_pst != row.timestamp_pst:
+            mismatches.append(
+                "Timestamp mismatch between CSV and URI:\n"
+                f"  csv: {row.node_name} {row.timestamp_pst}\n"
+                f"  uri: {row.node_name} {uri_timestamp_pst} -> {row.uri}"
+            )
+
+    if mismatches:
+        raise ValueError("\n".join(mismatches))
+
+
+def validate_node_slug_in_uri(rows: list[CSVRow]) -> None:
+    """Verify that the NodeName in CSV corresponds to the slug present in the URI path.
+
+    Args:
+        rows: Parsed CSV rows to validate.
+
+    Raises:
+        ValueError: If any row's URI slug does not match the node's expected slug or the URI is malformed.
+    """
+    mismatches: list[str] = []
+
+    # Load Orcasite feeds once to allow mapping DCLDE-style node names to known feeds.
+    feeds = []
+    try:
+        feeds = get_orcasite_feeds()
+    except Exception:
+        # If feed lookup fails, we'll fall back to using the raw node_name below.
+        feeds = []
+
+    for row in rows:
+        if not row.uri:
+            continue
+
+        # Map DCLDE-style or other composite node names to known feed node_name when possible.
+        normalized_node = row.node_name
+        for feed in feeds:
+            try:
+                if (feed.node_name and feed.node_name in row.node_name) or (
+                    feed.slug and feed.slug.replace('-', '_') in row.node_name
+                ):
+                    normalized_node = feed.node_name
+                    break
+            except Exception:
+                continue
+
+        try:
+            expected_slug = get_node_slug(normalized_node)
+        except Exception as e:
+            mismatches.append(f"Unable to look up slug for node {row.node_name} (normalized to {normalized_node}): {e}")
+            continue
+
+        # Ensure the expected slug (e.g., 'orcasound-lab') appears somewhere in the URI.
+        # Accept either hyphenated or underscored forms (orcasound-lab OR orcasound_lab).
+        alt_slug = expected_slug.replace("-", "_")
+        if (expected_slug not in row.uri) and (alt_slug not in row.uri):
+            mismatches.append(
+                "Node slug not found in URI (accepted forms: hyphen or underscore):\n"
+                f"  csv node: {row.node_name} (normalized: {normalized_node}) -> expected slug: {expected_slug}\n"
+                f"  uri: {row.uri}"
+            )
+
+    if mismatches:
+        raise ValueError("\n".join(mismatches))
+
+
 def download_audio_segment(
     category: str,
     node_name: str,
@@ -1069,9 +1158,11 @@ def run_download_wavs(
 
     validate_no_overlaps(training_rows, testing_rows, dclde_rows)
     validate_aligned_entries(testing_rows)
+    validate_uri_timestamps(testing_rows)
+    validate_node_slug_in_uri(testing_rows + dclde_rows)
 
     if validate_only:
-        print("Overlap and aligned-entry validation completed successfully.")
+        print("Overlap, aligned-entry, and URI validation completed successfully.")
         if dclde_rows:
             print(f"DCLDE manifest validation completed: {len(dclde_rows)} rows.")
         else:
