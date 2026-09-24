@@ -16,7 +16,7 @@ from download_wavs import (
 )
 
 
-CSV_HEADER = "category,node_name,timestamp_pst,uri,description,notes\n"
+CSV_HEADER = "category,node_name,timestamp_pst,uri,description,notes,confidence\n"
 
 
 def test_dclde_uses_testing_wav_directory_by_default():
@@ -46,14 +46,14 @@ def test_shared_cleanup_preserves_files_from_both_manifests(tmp_path):
     testing_csv = tmp_path / "testing_60s_samples.csv"
     testing_csv.write_text(
         CSV_HEADER
-        + "resident,rpi_orcasound_lab,2025_01_01_01_00_00_PST,uri,test,tp_human_only\n",
+        + "resident,rpi_orcasound_lab,2025_01_01_01_00_00_PST,uri,test,tp_human_only,100\n",
         encoding="utf-8",
     )
     dclde_csv = tmp_path / "dclde_60s_samples.csv"
     dclde_csv.write_text(
         CSV_HEADER
         + "abiotic,rpi_bush_point,2017_01_01_01_00_00_PST,"
-        "https://example.org/dclde.wav,dclde,dclde_orcasound_full_recording\n",
+        "https://example.org/dclde.wav,dclde,dclde_orcasound_full_recording,100\n",
         encoding="utf-8",
     )
 

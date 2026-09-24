@@ -16,13 +16,13 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 ENV PATH="/root/.local/bin:$PATH"
 
 # Install Python deps via uv (dev group excluded — no pytest in prod image)
-# UV_PYTHON pins to 3.11 to avoid issues with newer system pythons
+# UV_PYTHON pins to 3.12 to match NumPy 2.5+ support
 WORKDIR /usr/src/install
 COPY ./LiveInferenceSystem/pyproject.toml ./pyproject.toml
 COPY ./LiveInferenceSystem/uv.lock ./uv.lock
 ENV UV_PROJECT_ENVIRONMENT=/usr/src/venv
-ENV UV_PYTHON=3.11
-RUN uv python install 3.11 && uv sync --no-dev
+ENV UV_PYTHON=3.12
+RUN uv python install 3.12 && uv sync --no-dev
 
 # Bake HuggingFace model into image cache at build time
 ENV HF_HOME=/usr/src/hf_cache
