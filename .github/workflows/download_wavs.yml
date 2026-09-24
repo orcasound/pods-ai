@@ -10,6 +10,7 @@ on:
     paths:
       - output/csv/training_3s_samples.csv
       - output/csv/testing_60s_samples.csv
+      - output/csv/dclde_60s_samples.csv
       - .github/workflows/download_wavs.yml
       - src/download_wavs.py
       - audio_utils.py
@@ -49,6 +50,7 @@ jobs:
             s3-us-west-2.amazonaws.com:443
             aifororcasdetections.azurewebsites.net:443
             audio-orcasound-net.s3.amazonaws.com:443
+            storage.googleapis.com:443
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
@@ -64,7 +66,7 @@ jobs:
           git diff --name-only "${{ github.event.before }}" "${{ github.sha }}" > changed_files.txt
           cat changed_files.txt
           should_run=false
-          if grep -Eq '^output/csv/training_3s_samples\.csv$|^output/csv/testing_60s_samples\.csv$' changed_files.txt; then
+          if grep -Eq '^output/csv/training_3s_samples\.csv$|^output/csv/testing_60s_samples\.csv$|^output/csv/dclde_60s_samples\.csv$' changed_files.txt; then
             should_run=true
           fi
           echo "should_run=$should_run" >> "$GITHUB_OUTPUT"
@@ -127,4 +129,4 @@ jobs:
 
       - name: Skip notice
         if: steps.detect.outputs.should_run != 'true'
-        run: echo "No training_3s_samples.csv/testing_60s_samples.csv changes; skipping download_wavs.py"
+        run: echo "No *_samples.csv changes; skipping download_wavs.py"

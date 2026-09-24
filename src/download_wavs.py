@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone as dt_timezone
 from pathlib import Path
 from io import StringIO
 from typing import List
+import argparse
 import csv
 import math
 import os
@@ -30,6 +31,11 @@ from audio_utils import (
 PACIFIC_TZ = timezone('US/Pacific')
 N_SECONDS = 3  # Create 3-second wav files.
 TESTING_WINDOW_SECONDS = 60
+DEFAULT_DCLDE_MANIFEST = Path("output/csv/dclde_60s_samples.csv")
+DEFAULT_TESTING_WAV_ROOT = Path("output/testing-wav")
+# DCLDE 60-second recordings intentionally share the ordinary testing WAV
+# directory so existing PODS-AI evaluation tools can consume either manifest.
+DEFAULT_DCLDE_WAV_ROOT = DEFAULT_TESTING_WAV_ROOT
 ORCAHELLO_ORCASITE_WINDOW_SECONDS = TESTING_WINDOW_SECONDS + 1
 DETECTIONS_API_URL = "https://aifororcasdetections.azurewebsites.net/api/detections"
 CURRENT_EPOCH_START = datetime.fromisoformat("2025-10-12T14:23:00+00:00")
@@ -48,7 +54,7 @@ class CSVRow:
     uri: str
     description: str
     notes: str
-    confidence: str
+    confidence: str = ""
 
 # ============================================================================
 # CSV Parsing
@@ -59,10 +65,10 @@ class CSVRow:
 def parse_csv(csv_path: Path) -> List[CSVRow]:
     """
     Parse a CSV file (detections or training samples) and return a list of CSVRow objects.
-    
+
     Parameters:
         csv_path (Path): Path to the CSV file.
-    
+
     Returns:
         List[CSVRow]: List of parsed CSV rows.
     """
@@ -87,10 +93,10 @@ def parse_csv(csv_path: Path) -> List[CSVRow]:
 def parse_timestamp_pst(timestamp_str: str) -> datetime:
     """
     Parse a PST timestamp string in the format YYYY_MM_DD_HH_MM_SS_PST.
-    
+
     Parameters:
         timestamp_str (str): Timestamp string (e.g., "2025_12_24_17_51_23_PST").
-    
+
     Returns:
         datetime: Parsed datetime object with Pacific timezone.
     """
@@ -140,6 +146,12 @@ def _testing_window(row: CSVRow) -> tuple[datetime, datetime]:
     return end_time - timedelta(seconds=TESTING_WINDOW_SECONDS), end_time
 
 
+def _dclde_window(row: CSVRow) -> tuple[datetime, datetime]:
+    """Return the full-recording interval represented by a DCLDE row."""
+    start = parse_timestamp_pst(row.timestamp_pst)
+    return start, start + timedelta(seconds=TESTING_WINDOW_SECONDS)
+
+
 def _find_overlaps(rows: list[CSVRow], window_fn, label: str) -> list[str]:
     overlaps = []
     by_node: dict[str, list[tuple[datetime, datetime, CSVRow]]] = {}
@@ -161,32 +173,40 @@ def _find_overlaps(rows: list[CSVRow], window_fn, label: str) -> list[str]:
     return overlaps
 
 
-def _find_cross_overlaps(training_rows: list[CSVRow], testing_rows: list[CSVRow]) -> list[str]:
+def _find_cross_overlaps(
+    left_rows: list[CSVRow],
+    left_window_fn,
+    left_label: str,
+    right_rows: list[CSVRow],
+    right_window_fn,
+    right_label: str,
+) -> list[str]:
     overlaps = []
-    train_by_node: dict[str, list[tuple[datetime, datetime, CSVRow]]] = {}
-    test_by_node: dict[str, list[tuple[datetime, datetime, CSVRow]]] = {}
+    left_by_node: dict[str, list[tuple[datetime, datetime, CSVRow]]] = {}
+    right_by_node: dict[str, list[tuple[datetime, datetime, CSVRow]]] = {}
 
-    for row in training_rows:
-        start, end = _training_window(row)
-        train_by_node.setdefault(row.node_name, []).append((start, end, row))
-    for row in testing_rows:
-        start, end = _testing_window(row)
-        test_by_node.setdefault(row.node_name, []).append((start, end, row))
+    for row in left_rows:
+        start, end = left_window_fn(row)
+        left_by_node.setdefault(row.node_name, []).append((start, end, row))
+    for row in right_rows:
+        start, end = right_window_fn(row)
+        right_by_node.setdefault(row.node_name, []).append((start, end, row))
 
-    for node_name in set(train_by_node.keys()) & set(test_by_node.keys()):
-        train_windows = sorted(train_by_node[node_name], key=lambda item: item[0])
-        test_windows = sorted(test_by_node[node_name], key=lambda item: item[0])
+    for node_name in set(left_by_node.keys()) & set(right_by_node.keys()):
+        left_windows = sorted(left_by_node[node_name], key=lambda item: item[0])
+        right_windows = sorted(right_by_node[node_name], key=lambda item: item[0])
         i = 0
         j = 0
-        while i < len(train_windows) and j < len(test_windows):
-            train_start, train_end, train_row = train_windows[i]
-            test_start, test_end, test_row = test_windows[j]
-            if train_start < test_end and test_start < train_end:
+        while i < len(left_windows) and j < len(right_windows):
+            left_start, left_end, left_row = left_windows[i]
+            right_start, right_end, right_row = right_windows[j]
+            if left_start < right_end and right_start < left_end:
                 overlaps.append(
                     f"cross-file overlap at node {node_name}: "
-                    f"training {train_row.timestamp_pst} overlaps testing {test_row.timestamp_pst}"
+                    f"{left_label} {left_row.timestamp_pst} overlaps "
+                    f"{right_label} {right_row.timestamp_pst}"
                 )
-            if train_end <= test_end:
+            if left_end <= right_end:
                 i += 1
             else:
                 j += 1
@@ -206,12 +226,7 @@ HUMPBACK_SIGNAL_WAV_PREFIX = "signals-humpback_"
 
 
 def is_external_humpback_training_wav(relative_path: Path) -> bool:
-    """
-    Return True for submodule-derived humpback segments used in training.
-
-    These files are produced by src/process_humpback_wavs.py and are not listed
-    in training_3s_samples.csv, so download cleanup must keep them.
-    """
+    """Return True for retained submodule-derived humpback training segments."""
     return (
         len(relative_path.parts) >= 2
         and relative_path.parts[0] == "humpback"
@@ -267,14 +282,40 @@ def delete_stale_wavs(output_root: Path, expected_relative_paths: set[Path]) -> 
         print(f"Deleted {deleted_count} stale wav file(s) from {output_root}")
 
 
-def validate_no_overlaps(training_rows: list[CSVRow], testing_rows: list[CSVRow]) -> None:
+def validate_no_overlaps(
+    training_rows: list[CSVRow],
+    testing_rows: list[CSVRow],
+    dclde_rows: list[CSVRow] | None = None,
+) -> None:
+    dclde_rows = dclde_rows or []
     overlaps = []
     if training_rows:
         overlaps.extend(_find_overlaps(training_rows, _training_window, "training"))
     if testing_rows:
         overlaps.extend(_find_overlaps(testing_rows, _testing_window, "testing"))
+    if dclde_rows:
+        overlaps.extend(_find_overlaps(dclde_rows, _dclde_window, "DCLDE"))
     if training_rows and testing_rows:
-        overlaps.extend(_find_cross_overlaps(training_rows, testing_rows))
+        overlaps.extend(
+            _find_cross_overlaps(
+                training_rows, _training_window, "training",
+                testing_rows, _testing_window, "testing",
+            )
+        )
+    if training_rows and dclde_rows:
+        overlaps.extend(
+            _find_cross_overlaps(
+                training_rows, _training_window, "training",
+                dclde_rows, _dclde_window, "DCLDE",
+            )
+        )
+    if testing_rows and dclde_rows:
+        overlaps.extend(
+            _find_cross_overlaps(
+                testing_rows, _testing_window, "testing",
+                dclde_rows, _dclde_window, "DCLDE",
+            )
+        )
 
     if overlaps:
         details = "\n".join(f"  - {overlap}" for overlap in overlaps)
@@ -636,10 +677,10 @@ def download_audio_segment(
 ):
     """
     Download a 3-second audio segment for a detection and save it to the appropriate label directory.
-    
+
     This function implements a simplified version of DateRangeHLSStream logic to download
     only a 3-second wav file instead of the full 60-second clip.
-    
+
     Parameters:
         category (str): The label/category for the detection (e.g., "resident", "transient").
         node_name (str): The node name (e.g., "rpi_sunset_bay").
@@ -649,17 +690,17 @@ def download_audio_segment(
     label_dir = output_root / category
     label_dir.mkdir(parents=True, exist_ok=True)
     timestamp_pst = parse_timestamp_pst(timestamp_str)
-    
+
     # Check if the file already exists.
     wav_filename = _get_wav_filename(node_name, timestamp_str)
     clipname = wav_filename.removesuffix(".wav")
     expected_path = label_dir / wav_filename
     if expected_path.exists():
-        print(f"  Skipping (already exists): {expected_path}")
+        print(f"Skipping (already exists): {expected_path}")
         return
     if _copy_wav_from_cache_if_exists(expected_path, output_root, cache_root):
         return
-    
+
     # Set up S3 bucket and folder information.
     hydrophone_stream_url = 'https://s3-us-west-2.amazonaws.com/audio-orcasound-net/' + node_name
     bucket_folder = hydrophone_stream_url.split("https://s3-us-west-2.amazonaws.com/")[1]
@@ -667,29 +708,29 @@ def download_audio_segment(
     s3_bucket = tokens[0]
     folder_name = tokens[1]
     prefix = folder_name + "/hls/"
-    
+
     # Convert timestamps to unix time.
     start_time = timestamp_pst
     end_time = start_time + timedelta(seconds=N_SECONDS)
     start_unix_time = int(start_time.timestamp())
     end_unix_time = int(end_time.timestamp())
-    
+
     # Get all folders from S3 and filter by timestamp.
     try:
         # Use cached folders per node/bucket/prefix to avoid repeated S3 listing calls.
         all_hydrophone_folders = get_cached_folders(s3_bucket, prefix=prefix)
         print(f"Found {len(all_hydrophone_folders)} folders in total for {node_name}")
-        
+
         valid_folders = get_folders_between_timestamp(all_hydrophone_folders, start_unix_time, end_unix_time)
         print(f"Found {len(valid_folders)} folders in date range")
-        
+
         if not valid_folders:
             print(f"Warning: No folders found for timestamp {start_time}")
             return
-        
+
         # Use the first valid folder.
         current_folder = int(valid_folders[0])
-        
+
     except Exception as e:
         print(f"\nERROR: Failed to query S3 bucket.")
         print(f"Details: {e}")
@@ -697,29 +738,29 @@ def download_audio_segment(
         print(f"Start time (unix): {start_unix_time}")
         print(f"End time (unix): {end_unix_time}")
         return
- 
+
     # Read the m3u8 file for the current folder.
     stream_url = f"{hydrophone_stream_url}/hls/{current_folder}/live.m3u8"
-    
+
     try:
         stream_obj = load_m3u8_with_retry(stream_url)
     except Exception as e:
         print(f"ERROR: Failed to load m3u8 file from {stream_url}")
         print(f"Details: {e}")
         return
-    
+
     num_total_segments = len(stream_obj.segments)
     if num_total_segments == 0:
         print(f"ERROR: No segments found in m3u8 file")
         return
-    
+
     # Calculate target duration (average segment duration).
     target_duration_exact = sum(item.duration for item in stream_obj.segments) / num_total_segments
     target_duration = round(target_duration_exact, 1)
-    
+
     # Calculate number of segments needed for N_SECONDS.
     num_segments_needed = math.ceil(N_SECONDS / target_duration)
-    
+
     # Calculate start and end indices based on time since folder start.
     # Don't apply a 2-second offset since it was already applied into the timestamps we have.
     time_since_folder_start_for_start = get_difference_between_times_in_seconds(start_unix_time, current_folder)
@@ -728,16 +769,16 @@ def download_audio_segment(
 
     segment_start_index = max(0, math.floor(time_since_folder_start_for_start / target_duration))
     segment_end_index = min(num_total_segments, math.ceil(time_since_folder_start_for_end / target_duration))
-    
+
     if segment_end_index > num_total_segments:
         print(f"ERROR: Not enough segments available. Need {segment_end_index}, but only {num_total_segments} available.")
         return
-    
+
     # Download and process segments.
     try:
         with TemporaryDirectory() as tmp_path:
             os.makedirs(tmp_path, exist_ok=True)
-            
+
             file_names = []
             for i in range(segment_start_index, segment_end_index):
                 audio_segment = stream_obj.segments[i]
@@ -746,11 +787,11 @@ def download_audio_segment(
                 audio_url = base_path + file_name
                 download_from_url(audio_url, tmp_path)
                 file_names.append(file_name)
-            
+
             if not file_names:
                 print("ERROR: No segments were successfully downloaded")
                 return
-            
+
             # Concatenate all .ts files.
             if len(file_names) > 1:
                 hls_file = os.path.join(tmp_path, clipname + ".ts")
@@ -760,7 +801,7 @@ def download_audio_segment(
                             shutil.copyfileobj(fd, wfd)
             else:
                 hls_file = os.path.join(tmp_path, file_names[0])
-            
+
             # Convert to wav using ffmpeg, but only extract N_SECONDS starting
             # at the requested timestamp offset inside the concatenated file.
             wav_file_path = os.path.join(label_dir, wav_filename)
@@ -782,9 +823,9 @@ def download_audio_segment(
                 ac=1                 # optional: mono
             )
             ffmpeg.run(stream, overwrite_output=True, quiet=True)
-            
+
             print(f"Downloaded: {wav_file_path}")
-            
+
     except Exception as e:
         print(f"\nWarning: Unable to retrieve audio clip.")
         print(f"Error details: {type(e).__name__}: {str(e)}")
@@ -793,15 +834,15 @@ def download_audio_segment(
 def process_csv(csv_path: Path, output_root: Path, cache_root: Path | None = None):
     """
     Read the training samples CSV file and download corresponding WAV files.
-    
+
     Parameters:
         csv_path (Path): Path to the training_3s_samples.csv file.
         output_root (Path): Root directory where audio files will be saved in label subdirectories.
     """
     rows = parse_csv(csv_path)
-    
+
     print(f"Found {len(rows)} training samples to process")
-    
+
     expected_relative_paths: set[Path] = set()
     for row in rows:
         expected_relative_paths.add(_get_relative_wav_path(row))
@@ -848,14 +889,24 @@ def download_testing_sample(row: CSVRow, output_root: Path, cache_root: Path | N
     print(f"  Downloading audio ending shortly after {min_end_timestamp_pst_str}...")
 
     with TemporaryDirectory() as tmp_dir:
-        wav_path = download_60s_audio(node_name=row.node_name, min_end_timestamp_pst_str=min_end_timestamp_pst_str, tmp_dir=tmp_dir)
+        wav_path = download_60s_audio(
+            node_name=row.node_name,
+            min_end_timestamp_pst_str=min_end_timestamp_pst_str,
+            tmp_dir=tmp_dir,
+        )
         if wav_path is None:
             raise AssertionError(f"Error: Failed to download 60-second clip for {row.node_name} at {row.timestamp_pst}")
         shutil.move(wav_path, expected_path)
         print(f"  Downloaded: {expected_path}")
 
 
-def process_testing_csv(csv_path: Path, output_root: Path, cache_root: Path | None = None):
+def process_testing_csv(
+    csv_path: Path,
+    output_root: Path,
+    cache_root: Path | None = None,
+    cleanup_expected_paths: set[Path] | None = None,
+    do_cleanup: bool = True,
+):
     """
     Read the testing samples CSV file and download corresponding WAV files.
 
@@ -872,7 +923,77 @@ def process_testing_csv(csv_path: Path, output_root: Path, cache_root: Path | No
         print(f"Processing testing sample: {row.category} - {row.node_name} - {row.timestamp_pst} ({row.notes})")
         download_testing_sample(row, output_root, cache_root=cache_root)
 
-    delete_stale_wavs(output_root, expected_relative_paths)
+    if do_cleanup:
+        delete_stale_wavs(
+            output_root,
+            cleanup_expected_paths if cleanup_expected_paths is not None else expected_relative_paths,
+        )
+
+
+def download_dclde_sample(
+    row: CSVRow,
+    output_root: Path,
+    cache_root: Path | None = None,
+) -> None:
+    """Download one complete DCLDE WAV directly from the URI in its manifest."""
+    label_dir = output_root / row.category
+    label_dir.mkdir(parents=True, exist_ok=True)
+    expected_path = label_dir / _get_wav_filename(row.node_name, row.timestamp_pst)
+    if expected_path.exists() and expected_path.stat().st_size:
+        print(f"Skipping (already exists): {expected_path}")
+        return
+    if _copy_wav_from_cache_if_exists(expected_path, output_root, cache_root):
+        return
+    if not row.uri:
+        raise ValueError("DCLDE manifest row has an empty URI")
+
+    with TemporaryDirectory() as tmp_dir:
+        download_from_url(row.uri, tmp_dir)
+        downloaded_path = Path(tmp_dir) / os.path.basename(row.uri.split("?", 1)[0])
+        if not downloaded_path.is_file() or not downloaded_path.stat().st_size:
+            raise FileNotFoundError(f"Download did not produce {downloaded_path.name}")
+        shutil.move(str(downloaded_path), expected_path)
+    print(f"Downloaded DCLDE WAV: {expected_path}")
+
+
+def process_dclde_csv(
+    csv_path: Path,
+    output_root: Path,
+    cache_root: Path | None = None,
+    cleanup_expected_paths: set[Path] | None = None,
+    do_cleanup: bool = True,
+) -> None:
+    """Download all full recordings listed in the optional DCLDE manifest."""
+    rows = parse_csv(csv_path)
+    print(f"Found {len(rows)} DCLDE Orcasound recordings to process")
+    expected_relative_paths = {_get_relative_wav_path(row) for row in rows}
+    failures: list[str] = []
+    for index, row in enumerate(rows, start=1):
+        print(
+            f"Processing DCLDE sample {index}/{len(rows)}: "
+            f"{row.category} - {row.description}"
+        )
+        try:
+            download_dclde_sample(row, output_root, cache_root=cache_root)
+        except Exception as error:
+            message = (
+                f"row {index + 1} ({row.node_name}, {row.timestamp_pst}): "
+                f"{type(error).__name__}: {error}"
+            )
+            failures.append(message)
+            print(f"WARNING: DCLDE download failed for {message}", file=sys.stderr)
+
+    if do_cleanup:
+        delete_stale_wavs(
+            output_root,
+            cleanup_expected_paths if cleanup_expected_paths is not None else expected_relative_paths,
+        )
+    print(
+        f"DCLDE download summary: {len(rows) - len(failures)}/{len(rows)} "
+        "recordings available"
+    )
+    if failures:
+        print(f"DCLDE failures: {len(failures)}", file=sys.stderr)
 
 
 def print_usage():
@@ -881,14 +1002,15 @@ def print_usage():
     """
     print("Usage: python download_wavs.py [--validate-only]")
     print()
-    print("This script downloads wav files for training and testing samples.")
+    print("This script downloads training, testing, and optional DCLDE Orcasound WAVs.")
     print("It reads from:")
     print("  - output/csv/training_3s_samples.csv")
     print("  - output/csv/testing_60s_samples.csv")
+    print("  - output/csv/dclde_60s_samples.csv (optional)")
     print()
     print("And saves wav files to:")
     print("  - output/wav/ (training samples)")
-    print("  - output/testing-wav/ (testing samples)")
+    print("  - output/testing-wav/ (testing and DCLDE Orcasound samples)")
     print()
     print("Optional argument:")
     print("  --validate-only: validate CSV overlap rules without downloading WAV files")
@@ -897,21 +1019,29 @@ def print_usage():
     print("  - WAV_CACHE_DIR: root directory to copy existing wav files from before downloading")
 
 
-def run_download_wavs(validate_only: bool = False) -> None:
+def run_download_wavs(
+    validate_only: bool = False,
+    dclde_csv_path: Path = DEFAULT_DCLDE_MANIFEST,
+    dclde_output_root: Path | None = None,
+) -> None:
     training_csv_path = Path("output/csv/training_3s_samples.csv")
     testing_csv_path = Path("output/csv/testing_60s_samples.csv")
 
     worktree_root = Path(os.getenv("WAV_WORKTREE_DIR", "."))
     training_output_root = worktree_root / "output/wav"
-    testing_output_root = worktree_root / "output/testing-wav"
+    testing_output_root = worktree_root / DEFAULT_TESTING_WAV_ROOT
+    if dclde_output_root is None:
+        dclde_output_root = worktree_root / DEFAULT_DCLDE_WAV_ROOT
 
     cache_root_env = os.getenv("WAV_CACHE_DIR")
     training_cache_root = None
     testing_cache_root = None
+    dclde_cache_root = None
     if cache_root_env:
         cache_root = Path(cache_root_env)
         training_cache_root = cache_root / "output/wav"
-        testing_cache_root = cache_root / "output/testing-wav"
+        testing_cache_root = cache_root / DEFAULT_TESTING_WAV_ROOT
+        dclde_cache_root = cache_root / DEFAULT_DCLDE_WAV_ROOT
 
     if not training_csv_path.exists():
         print(f"Error: CSV file not found at {training_csv_path}")
@@ -926,22 +1056,92 @@ def run_download_wavs(validate_only: bool = False) -> None:
     else:
         testing_rows = parse_csv(testing_csv_path)
 
-    validate_no_overlaps(training_rows, testing_rows)
+    dclde_rows: list[CSVRow] = []
+    if dclde_csv_path.exists():
+        dclde_rows = parse_csv(dclde_csv_path)
+        if not dclde_rows:
+            raise ValueError(f"DCLDE manifest has no usable rows: {dclde_csv_path}")
+        missing_uri = sum(not row.uri for row in dclde_rows)
+        if missing_uri:
+            raise ValueError(f"DCLDE manifest contains {missing_uri} row(s) without a URI")
+
+    validate_no_overlaps(training_rows, testing_rows, dclde_rows)
     validate_aligned_entries(testing_rows)
 
     if validate_only:
         print("Overlap and aligned-entry validation completed successfully.")
+        if dclde_rows:
+            print(f"DCLDE manifest validation completed: {len(dclde_rows)} rows.")
+        else:
+            print(f"DCLDE manifest not found; validation skipped: {dclde_csv_path}")
         return
 
     process_csv(training_csv_path, training_output_root, cache_root=training_cache_root)
 
+    testing_expected_paths = {_get_relative_wav_path(row) for row in testing_rows}
+    dclde_expected_paths = {_get_relative_wav_path(row) for row in dclde_rows}
+    roots_are_shared = testing_output_root.resolve() == dclde_output_root.resolve()
+    shared_expected_paths = testing_expected_paths | dclde_expected_paths
+    shared_cleanup_is_safe = roots_are_shared and bool(testing_rows) and bool(dclde_rows)
+
     if testing_rows:
-        process_testing_csv(testing_csv_path, testing_output_root, cache_root=testing_cache_root)
+        process_testing_csv(
+            testing_csv_path,
+            testing_output_root,
+            cache_root=testing_cache_root,
+            cleanup_expected_paths=(
+                shared_expected_paths if shared_cleanup_is_safe else testing_expected_paths
+            ),
+            do_cleanup=not roots_are_shared or shared_cleanup_is_safe,
+        )
+
+    if dclde_rows:
+        process_dclde_csv(
+            dclde_csv_path,
+            dclde_output_root,
+            cache_root=dclde_cache_root,
+            cleanup_expected_paths=(
+                shared_expected_paths if shared_cleanup_is_safe else dclde_expected_paths
+            ),
+            do_cleanup=not roots_are_shared or shared_cleanup_is_safe,
+        )
+    else:
+        print(f"DCLDE manifest not found; skipping DCLDE downloads: {dclde_csv_path}")
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description=(
+            "Download PODS-AI training, testing, and optional DCLDE Orcasound WAVs. "
+            "Run from the repository root as python src/download_wavs.py."
+        )
+    )
+    parser.add_argument("--validate-only", action="store_true")
+    parser.add_argument(
+        "--dclde-manifest",
+        type=Path,
+        default=DEFAULT_DCLDE_MANIFEST,
+        help=(
+            "DCLDE Orcasound manifest (default: output/csv/dclde_60s_samples.csv). "
+            "If absent, DCLDE downloading is skipped."
+        ),
+    )
+    parser.add_argument(
+        "--dclde-wav-root",
+        type=Path,
+        default=None,
+        help=(
+            "Override DCLDE WAV output root "
+            "(default: output/testing-wav, shared with Orcasound testing clips)."
+        ),
+    )
+    return parser.parse_args()
 
 
 if __name__ == "__main__":
-    if len(sys.argv) > 2 or (len(sys.argv) == 2 and sys.argv[1] != "--validate-only"):
-        print_usage()
-        sys.exit(1)
-
-    run_download_wavs(validate_only=(len(sys.argv) == 2))
+    args = parse_args()
+    run_download_wavs(
+        validate_only=args.validate_only,
+        dclde_csv_path=args.dclde_manifest,
+        dclde_output_root=args.dclde_wav_root,
+    )
