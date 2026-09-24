@@ -33,6 +33,8 @@ N_SECONDS = 3  # Create 3-second wav files.
 TESTING_WINDOW_SECONDS = 60
 DEFAULT_DCLDE_MANIFEST = Path("output/csv/dclde_60s_samples.csv")
 DEFAULT_TESTING_WAV_ROOT = Path("output/testing-wav")
+DEFAULT_TRAINING_CSV_PATH = Path("output/csv/training_3s_samples.csv")
+DEFAULT_TESTING_CSV_PATH = Path("output/csv/testing_60s_samples.csv")
 # DCLDE 60-second recordings intentionally share the ordinary testing WAV
 # directory so existing PODS-AI evaluation tools can consume either manifest.
 DEFAULT_DCLDE_WAV_ROOT = DEFAULT_TESTING_WAV_ROOT
@@ -1021,11 +1023,11 @@ def print_usage():
 
 def run_download_wavs(
     validate_only: bool = False,
+    training_csv_path: Path = DEFAULT_TRAINING_CSV_PATH,
+    testing_csv_path: Path = DEFAULT_TESTING_CSV_PATH,
     dclde_csv_path: Path = DEFAULT_DCLDE_MANIFEST,
     dclde_output_root: Path | None = None,
 ) -> None:
-    training_csv_path = Path("output/csv/training_3s_samples.csv")
-    testing_csv_path = Path("output/csv/testing_60s_samples.csv")
 
     worktree_root = Path(os.getenv("WAV_WORKTREE_DIR", "."))
     training_output_root = worktree_root / "output/wav"
@@ -1118,6 +1120,22 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--validate-only", action="store_true")
     parser.add_argument(
+        "--training-csv-path",
+        type=Path,
+        default=DEFAULT_TRAINING_CSV_PATH,
+        help=(
+            "Training manifest (default: output/csv/training_3s_samples.csv)."
+        ),
+    )
+    parser.add_argument(
+        "--testing-csv-path",
+        type=Path,
+        default=DEFAULT_TESTING_CSV_PATH,
+        help=(
+            "Testing manifest (default: output/csv/testing_60s_samples.csv)."
+        ),
+    )
+    parser.add_argument(
         "--dclde-manifest",
         type=Path,
         default=DEFAULT_DCLDE_MANIFEST,
@@ -1142,6 +1160,8 @@ if __name__ == "__main__":
     args = parse_args()
     run_download_wavs(
         validate_only=args.validate_only,
+        training_csv_path=args.training_csv_path,
+        testing_csv_path=args.testing_csv_path,
         dclde_csv_path=args.dclde_manifest,
         dclde_output_root=args.dclde_wav_root,
     )
