@@ -905,6 +905,7 @@ def process_testing_csv(
     output_root: Path,
     cache_root: Path | None = None,
     cleanup_expected_paths: set[Path] | None = None,
+    do_cleanup: bool = True,
 ):
     """
     Read the testing samples CSV file and download corresponding WAV files.
@@ -922,10 +923,11 @@ def process_testing_csv(
         print(f"Processing testing sample: {row.category} - {row.node_name} - {row.timestamp_pst} ({row.notes})")
         download_testing_sample(row, output_root, cache_root=cache_root)
 
-    delete_stale_wavs(
-        output_root,
-        cleanup_expected_paths if cleanup_expected_paths is not None else expected_relative_paths,
-    )
+    if do_cleanup:
+        delete_stale_wavs(
+            output_root,
+            cleanup_expected_paths if cleanup_expected_paths is not None else expected_relative_paths,
+        )
 
 
 def download_dclde_sample(
@@ -959,6 +961,7 @@ def process_dclde_csv(
     output_root: Path,
     cache_root: Path | None = None,
     cleanup_expected_paths: set[Path] | None = None,
+    do_cleanup: bool = True,
 ) -> None:
     """Download all full recordings listed in the optional DCLDE manifest."""
     rows = parse_csv(csv_path)
@@ -980,10 +983,11 @@ def process_dclde_csv(
             failures.append(message)
             print(f"WARNING: DCLDE download failed for {message}", file=sys.stderr)
 
-    delete_stale_wavs(
-        output_root,
-        cleanup_expected_paths if cleanup_expected_paths is not None else expected_relative_paths,
-    )
+    if do_cleanup:
+        delete_stale_wavs(
+            output_root,
+            cleanup_expected_paths if cleanup_expected_paths is not None else expected_relative_paths,
+        )
     print(
         f"DCLDE download summary: {len(rows) - len(failures)}/{len(rows)} "
         "recordings available"
@@ -1078,6 +1082,7 @@ def run_download_wavs(
     dclde_expected_paths = {_get_relative_wav_path(row) for row in dclde_rows}
     roots_are_shared = testing_output_root.resolve() == dclde_output_root.resolve()
     shared_expected_paths = testing_expected_paths | dclde_expected_paths
+    shared_cleanup_is_safe = roots_are_shared and bool(testing_rows) and bool(dclde_rows)
 
     if testing_rows:
         process_testing_csv(
@@ -1085,8 +1090,9 @@ def run_download_wavs(
             testing_output_root,
             cache_root=testing_cache_root,
             cleanup_expected_paths=(
-                shared_expected_paths if roots_are_shared else testing_expected_paths
+                shared_expected_paths if shared_cleanup_is_safe else testing_expected_paths
             ),
+            do_cleanup=not roots_are_shared or shared_cleanup_is_safe,
         )
 
     if dclde_rows:
@@ -1095,8 +1101,9 @@ def run_download_wavs(
             dclde_output_root,
             cache_root=dclde_cache_root,
             cleanup_expected_paths=(
-                shared_expected_paths if roots_are_shared else dclde_expected_paths
+                shared_expected_paths if shared_cleanup_is_safe else dclde_expected_paths
             ),
+            do_cleanup=not roots_are_shared or shared_cleanup_is_safe,
         )
     else:
         print(f"DCLDE manifest not found; skipping DCLDE downloads: {dclde_csv_path}")
