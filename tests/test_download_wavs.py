@@ -472,3 +472,55 @@ class TestValidateOnly:
                 mock_validate_aligned_entries.assert_called_once()
             finally:
                 os.chdir(original_cwd)
+
+    def test_parse_args_custom_training_and_testing_paths_are_forwarded(self, monkeypatch, tmp_path):
+        custom_dir = tmp_path / "custom"
+        custom_dir.mkdir()
+        training_csv = custom_dir / "training.csv"
+        training_csv.write_text(
+            "category,node_name,timestamp_pst,uri,description,notes,confidence\n"
+            "resident,rpi_andrews_bay,2025_01_01_01_00_00_PST,uri,desc,note,100\n",
+            encoding="utf-8",
+        )
+        testing_csv = custom_dir / "testing.csv"
+        testing_csv.write_text(
+            "category,node_name,timestamp_pst,uri,description,notes,confidence\n"
+            "resident,rpi_andrews_bay,2025_01_01_01_01_06_PST,uri,desc,tp_human_only,100\n",
+            encoding="utf-8",
+        )
+
+        monkeypatch.setattr(
+            "sys.argv",
+            [
+                "download_wavs.py",
+                "--training-csv-path",
+                str(training_csv),
+                "--testing-csv-path",
+                str(testing_csv),
+            ],
+        )
+
+        args = download_wavs.parse_args()
+
+        original_cwd = Path.cwd()
+        try:
+            os.chdir(tmp_path)
+            with patch("download_wavs.process_csv") as mock_process_csv, \
+                    patch("download_wavs.process_testing_csv") as mock_process_testing_csv, \
+                    patch("download_wavs.validate_no_overlaps"), \
+                    patch("download_wavs.validate_aligned_entries"):
+                run_download_wavs(
+                    training_csv_path=args.training_csv_path,
+                    testing_csv_path=args.testing_csv_path,
+                )
+        finally:
+            os.chdir(original_cwd)
+
+        assert args.training_csv_path == training_csv
+        assert args.testing_csv_path == testing_csv
+        assert mock_process_csv.call_args.args[:2] == (training_csv, Path("output/wav"))
+        assert mock_process_csv.call_args.kwargs == {"cache_root": None}
+        assert mock_process_testing_csv.call_args.args[:2] == (
+            testing_csv,
+            Path("output/testing-wav"),
+        )
