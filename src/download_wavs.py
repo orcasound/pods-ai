@@ -717,6 +717,9 @@ def validate_node_slug_in_uri(rows: list[CSVRow]) -> None:
         # If feed lookup fails, we'll fall back to using the raw node_name below.
         feeds = []
 
+    # Build a node_name -> slug map so we do not call get_node_slug per row.
+    node_to_slug: dict[str, str] = {f.node_name: f.slug for f in feeds} if feeds else {}
+
     for row in rows:
         if not row.uri:
             continue
@@ -733,11 +736,14 @@ def validate_node_slug_in_uri(rows: list[CSVRow]) -> None:
             except Exception:
                 continue
 
-        try:
-            expected_slug = get_node_slug(normalized_node)
-        except Exception as e:
-            mismatches.append(f"Unable to look up slug for node {row.node_name} (normalized to {normalized_node}): {e}")
-            continue
+        expected_slug = node_to_slug.get(normalized_node)
+        if expected_slug is None:
+            # Fallback: try to call get_node_slug (may trigger network) only when mapping not available.
+            try:
+                expected_slug = get_node_slug(normalized_node)
+            except Exception as e:
+                mismatches.append(f"Unable to look up slug for node {row.node_name} (normalized to {normalized_node}): {e}")
+                continue
 
         # Ensure the expected slug (e.g., 'orcasound-lab') appears somewhere in the URI.
         # Accept either hyphenated or underscored forms (orcasound-lab OR orcasound_lab).

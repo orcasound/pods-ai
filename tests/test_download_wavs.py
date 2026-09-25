@@ -48,7 +48,7 @@ class TestDownloadTestingSample:
                 wav_path.write_bytes(b"fake wav content")
                 return str(wav_path)
 
-            with patch("download_wavs.download_60s_audio", side_effect=_fake_download_60s_audio) as mock_download_60s:
+            with patch("audio_utils.download_60s_audio", side_effect=_fake_download_60s_audio) as mock_download_60s:
                 download_testing_sample(row, output_root)
 
             mock_download_60s.assert_called_once_with(
@@ -79,7 +79,7 @@ class TestDownloadTestingSample:
                 wav_path.write_bytes(b"fake wav content")
                 return str(wav_path)
 
-            with patch("download_wavs.download_60s_audio", side_effect=_fake_download_60s_audio) as mock_download_60s:
+            with patch("audio_utils.download_60s_audio", side_effect=_fake_download_60s_audio) as mock_download_60s:
                 download_testing_sample(row, output_root)
 
             mock_download_60s.assert_called_once_with(
@@ -193,7 +193,7 @@ class TestAlignedEntryValidation:
                 self._mock_detection_response(second_page_payload, total_pages=2),
             ],
         ) as mock_get, \
-                patch("download_wavs.get_cached_folders", side_effect=AssertionError("should not query S3 for current epoch")):
+                patch("audio_utils.get_cached_folders", side_effect=AssertionError("should not query S3 for current epoch")):
             validate_aligned_entries(testing_rows)
 
         assert mock_get.call_count == 2
@@ -221,7 +221,7 @@ class TestAlignedEntryValidation:
         ]
 
         with patch("download_wavs.requests.get", return_value=self._mock_detection_response(detections)) as mock_get, \
-                patch("download_wavs.get_cached_folders", side_effect=AssertionError("should not query S3 for current epoch")):
+                patch("audio_utils.get_cached_folders", side_effect=AssertionError("should not query S3 for current epoch")):
             validate_aligned_entries(testing_rows)
 
         mock_get.assert_called_once()
@@ -255,7 +255,7 @@ class TestAlignedEntryValidation:
         ]
 
         with patch("download_wavs.requests.get", return_value=self._mock_detection_response(detections)), \
-                patch("download_wavs.get_cached_folders", side_effect=AssertionError("should not query S3 for current epoch")):
+                patch("audio_utils.get_cached_folders", side_effect=AssertionError("should not query S3 for current epoch")):
             with pytest.raises(
                 ValueError,
                 match=r"old testing_row: human,rpi_sunset_bay,2025_12_01_00_00_48_PST,https://live\.orcasound\.net/bouts/new/sunset-bay\?time=2025-12-01T08%3A00%3A48\.000Z,Radio,fp_machine_only,100\n"
@@ -287,7 +287,7 @@ class TestAlignedEntryValidation:
         folder_time = int(datetime(2025, 1, 1, 8, 0, 0, tzinfo=timezone.utc).timestamp())
 
         with patch("download_wavs.requests.get", return_value=self._mock_detection_response(detections)), \
-                patch("download_wavs.get_cached_folders", return_value=[str(folder_time)]):
+                patch("audio_utils.get_cached_folders", return_value=[str(folder_time)]):
             with pytest.raises(
                 ValueError,
                 match=r"old testing_row: human,rpi_sunset_bay,2025_01_01_00_10_48_PST,https://live\.orcasound\.net/bouts/new/sunset-bay\?time=2025-01-01T08%3A10%3A48\.000Z,Radio,fp_machine_only,100\n"
@@ -319,7 +319,7 @@ class TestAlignedEntryValidation:
         folder_time = int(datetime(2024, 7, 19, 7, 0, 48, tzinfo=timezone.utc).timestamp())
 
         with patch("download_wavs.requests.get", return_value=self._mock_detection_response(detections)), \
-                patch("download_wavs.get_cached_folders", return_value=[str(folder_time)]):
+                patch("audio_utils.get_cached_folders", return_value=[str(folder_time)]):
             with pytest.raises(
                 ValueError,
                 match=r"old testing_row: human,rpi_sunset_bay,2024_07_19_12_51_09_PST,https://live\.orcasound\.net/bouts/new/sunset-bay\?time=2024-07-19T19%3A51%3A09\.000Z,Human voices causing false positives despite significant noise from something contacting ladder and/or hydrophone\.,fp_machine_only,54\.4156\n"
@@ -345,7 +345,7 @@ class TestCacheAndCleanup:
             cached_file.parent.mkdir(parents=True, exist_ok=True)
             cached_file.write_bytes(b"cached")
 
-            with patch("download_wavs.get_cached_folders", side_effect=AssertionError("should not download")):
+            with patch("audio_utils.get_cached_folders", side_effect=AssertionError("should not download")):
                 process_csv(csv_path, output_root, cache_root=cache_root)
 
             downloaded_file = output_root / "resident" / "rpi-andrews-bay_2025_01_01_00_00_00_PST.wav"
@@ -434,7 +434,7 @@ class TestCacheAndCleanup:
             cached_file.parent.mkdir(parents=True, exist_ok=True)
             cached_file.write_bytes(b"cached")
 
-            with patch("download_wavs.download_60s_audio", side_effect=AssertionError("should not download")):
+            with patch("audio_utils.download_60s_audio", side_effect=AssertionError("should not download")):
                 process_testing_csv(csv_path, output_root, cache_root=cache_root)
 
             expected = output_root / "resident" / "rpi-andrews-bay_2025_01_01_00_00_00_PST.wav"
