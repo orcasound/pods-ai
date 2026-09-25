@@ -107,7 +107,7 @@ To add new testing samples:
 
 1. Use [process_false_negatives.py](docs/process-false-negatives.md) to find recent candidates reported
    by humans but missed by AI.
-2. Use [process_false_positives.py](docs/process-false-positives.md) with `--set testing` to find recent candidates
+2. Use [process_false_positives.py](docs/process-false-positives.md) with `--set testing --end now` to find recent candidates
    by AI but marked as false positives by a moderator.
 3. Use [run_inference.py](docs/run-inference.md) to see how the current PODS-AI performs on each
    segment, to see if it is a good test case.
@@ -163,7 +163,8 @@ tests/test_run_inference.py:PODSAI_TEST_MODEL_REVISION = "36620370fd59c8a70f9b7b
 image: orcaconservancycr.azurecr.io/pods-ai-live-inference-system:09-05-2026.v1.4.0
 ```
 13. Generate a pull request with those changes.
-14. Once that pull request merges, apply the config, e.g., `kubectl apply -f deploy/andrews-bay.yaml`
+14. Once that pull request merges, apply the config, e.g., `kubectl apply -f deploy/andrews-bay.yaml` from the
+    `LiveInferenceSystem` directory.
 
 You can instead train a model locally:
 
@@ -189,7 +190,7 @@ The active scripts in `src` include:
 - [**process_false_negatives.py**](docs/process-false-negatives.md): Re-checks confirmed OrcaHello detections by
   downloading the 60-second WAV, re-running PODS-AI and OrcaHello segment inference,
   and appending segments where OrcaHello predicts resident but PODS-AI does not to
-  `output/csv/training_3s_samples.csv` with corrected class `resident`.
+  `output/csv/new_manual_samples.csv` with corrected class `resident`.
 - [**process_testing_set_mispredictions.py**](docs/process-testing-set-mispredictions.md): Scans `output/csv/testing_60s_samples.csv`,
   runs PODS-AI on each corresponding `output/testing-wav/<category>/...wav`, and
   proposes `training_3s_samples.csv` rows plus `testing_60s_samples.csv` rows to
