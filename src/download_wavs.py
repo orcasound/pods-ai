@@ -19,14 +19,6 @@ import m3u8
 from pytz import timezone
 import requests
 
-from audio_utils import (
-    download_60s_audio,
-    get_cached_folders,
-    get_folders_between_timestamp,
-    get_difference_between_times_in_seconds,
-    download_from_url,
-    load_m3u8_with_retry
-)
 from add_samples import parse_uri, get_node_slug, get_orcasite_feeds
 
 PACIFIC_TZ = timezone('US/Pacific')
@@ -544,6 +536,8 @@ def _get_corrected_detection_timestamp(node_name: str, detection_timestamp: date
         _CORRECTED_TIMESTAMP_CACHE[cache_key] = detection_timestamp
         return detection_timestamp
 
+    from audio_utils import get_cached_folders
+
     folder_prefix = f"{node_name}/hls/"
     folders = get_cached_folders("audio-orcasound-net", prefix=folder_prefix)
     original_unix_time_seconds = int(detection_timestamp.timestamp())
@@ -792,6 +786,14 @@ def download_audio_segment(
     if _copy_wav_from_cache_if_exists(expected_path, output_root, cache_root):
         return
 
+    from audio_utils import (
+        get_cached_folders,
+        get_folders_between_timestamp,
+        load_m3u8_with_retry,
+        get_difference_between_times_in_seconds,
+        download_from_url,
+    )
+
     # Set up S3 bucket and folder information.
     hydrophone_stream_url = 'https://s3-us-west-2.amazonaws.com/audio-orcasound-net/' + node_name
     bucket_folder = hydrophone_stream_url.split("https://s3-us-west-2.amazonaws.com/")[1]
@@ -980,6 +982,8 @@ def download_testing_sample(row: CSVRow, output_root: Path, cache_root: Path | N
     print(f"  Downloading audio ending shortly after {min_end_timestamp_pst_str}...")
 
     with TemporaryDirectory() as tmp_dir:
+        from audio_utils import download_60s_audio
+
         wav_path = download_60s_audio(
             node_name=row.node_name,
             min_end_timestamp_pst_str=min_end_timestamp_pst_str,
@@ -1039,6 +1043,8 @@ def download_dclde_sample(
         raise ValueError("DCLDE manifest row has an empty URI")
 
     with TemporaryDirectory() as tmp_dir:
+        from audio_utils import download_from_url
+
         download_from_url(row.uri, tmp_dir)
         downloaded_path = Path(tmp_dir) / os.path.basename(row.uri.split("?", 1)[0])
         if not downloaded_path.is_file() or not downloaded_path.stat().st_size:
