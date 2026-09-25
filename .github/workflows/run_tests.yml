@@ -5,16 +5,6 @@ name: Run Tests
 
 on:
   pull_request:
-    paths:
-      - 'requirements.txt'
-      - 'output/csv/**'
-      - 'bootstrap/src/**'
-      - 'bootstrap/csv/**'
-      - 'tests/**'
-      - 'src/**'
-      - '.github/workflows/run_tests.yml'
-    paths-ignore:
-      - '**/*.md'
   workflow_dispatch:
 
 concurrency:
@@ -27,8 +17,36 @@ permissions:
   contents: read
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      test_files_changed: ${{ steps.filter.outputs.src }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - name: Check for file changes
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d  # v4.0.3
+        id: filter
+        with:
+          filters: |
+            src:
+              - 'requirements.txt'
+              - 'output/csv/**'
+              - 'bootstrap/src/**'
+              - 'bootstrap/csv/**'
+              - 'tests/**'
+              - 'src/**'
+              - '.github/workflows/run_tests.yml'
+              - '!**/*.md'
+
   run_tests_ubuntu:
-    if: github.actor != 'dependabot[bot]'
+    needs: changes
+    if: >
+      github.actor != 'dependabot[bot]' &&
+      needs.changes.outputs.test_files_changed == 'true'
     permissions:
       actions: write  # for fkirc/skip-duplicate-actions to skip or stop workflow runs
       contents: read  # for actions/checkout to fetch code
@@ -110,7 +128,10 @@ jobs:
 
 
   run_tests_windows:
-    if: github.actor != 'dependabot[bot]'
+    needs: changes
+    if: >
+      github.actor != 'dependabot[bot]' &&
+      needs.changes.outputs.test_files_changed == 'true'
     permissions:
       actions: write  # for fkirc/skip-duplicate-actions to skip or stop workflow runs
       contents: read  # for actions/checkout to fetch code
