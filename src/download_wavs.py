@@ -1164,7 +1164,7 @@ def run_download_wavs(
 
     validate_no_overlaps(training_rows, testing_rows, dclde_rows)
     validate_aligned_entries(testing_rows)
-    validate_uri_timestamps(testing_rows)
+    validate_uri_timestamps(training_rows + testing_rows)
     validate_node_slug_in_uri(testing_rows + dclde_rows)
 
     if validate_only:
