@@ -508,7 +508,9 @@ class TestValidateOnly:
             with patch("download_wavs.process_csv") as mock_process_csv, \
                     patch("download_wavs.process_testing_csv") as mock_process_testing_csv, \
                     patch("download_wavs.validate_no_overlaps"), \
-                    patch("download_wavs.validate_aligned_entries"):
+                    patch("download_wavs.validate_aligned_entries"), \
+                    patch("download_wavs.validate_uri_timestamps"), \
+                    patch("download_wavs.validate_node_slug_in_uri"):
                 run_download_wavs(
                     training_csv_path=args.training_csv_path,
                     testing_csv_path=args.testing_csv_path,
