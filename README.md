@@ -107,7 +107,7 @@ To add new testing samples:
 
 1. Use [process_false_negatives.py](docs/process-false-negatives.md) to find recent candidates reported
    by humans but missed by AI.
-2. Use [process_false_positives.py](docs/process-false-positives.md) to find recent candidates reported
+2. Use [process_false_positives.py](docs/process-false-positives.md) with `--set testing` to find recent candidates
    by AI but marked as false positives by a moderator.
 3. Use [run_inference.py](docs/run-inference.md) to see how the current PODS-AI performs on each
    segment, to see if it is a good test case.
@@ -185,7 +185,7 @@ The active scripts in `src` include:
   adding a short beep between clips to make quick listen-through review easier.
 - [**process_false_positives.py**](docs/process-false-positives.md): Re-checks rejected OrcaHello detections by
   downloading the 60-second WAV, re-running PODS-AI, and appending whale-class
-  sub-segments with corrected classes to `output/csv/new_mainual_training_samples.csv`.
+  sub-segments with corrected classes to `output/csv/new_manual_training_samples.csv`.
 - [**process_false_negatives.py**](docs/process-false-negatives.md): Re-checks confirmed OrcaHello detections by
   downloading the 60-second WAV, re-running PODS-AI and OrcaHello segment inference,
   and appending segments where OrcaHello predicts resident but PODS-AI does not to

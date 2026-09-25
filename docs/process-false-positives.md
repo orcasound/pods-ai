@@ -21,7 +21,7 @@ usage: process_false_positives.py [-h] [--set SET] [--feed FEED] [--start YYYY_M
 
 Process rejected OrcaHello resident detections looking for new training or testing samples. For training samples, re-
 run PODS-AI on the 60-second WAV, and append mismatched whale-class sub-segments to new_manual_training_samples.csv
-with a corrected class. For testing append mismatched whale-class segments to new_manual_testing_samples.csv.
+with a corrected class. For testing, append one corrected 60-second sample row to new_manual_testing_samples.csv.
 
 options:
   -h, --help            show this help message and exit
