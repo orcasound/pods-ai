@@ -5,6 +5,16 @@ name: Run Tests
 
 on:
   pull_request:
+    paths:
+      - 'requirements.txt'
+      - 'output/csv/**'
+      - 'bootstrap/src/**'
+      - 'bootstrap/csv/**'
+      - 'tests/**'
+      - 'src/**'
+      - '.github/workflows/run_tests.yml'
+    paths-ignore:
+      - '**/*.md'
   workflow_dispatch:
 
 concurrency:
