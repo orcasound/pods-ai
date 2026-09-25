@@ -742,7 +742,8 @@ def validate_node_slug_in_uri(rows: list[CSVRow]) -> None:
         # Ensure the expected slug (e.g., 'orcasound-lab') appears somewhere in the URI.
         # Accept either hyphenated or underscored forms (orcasound-lab OR orcasound_lab).
         alt_slug = expected_slug.replace("-", "_")
-        if (expected_slug not in row.uri) and (alt_slug not in row.uri):
+        uri_path = urlparse(row.uri).path
+        if (expected_slug not in uri_path) and (alt_slug not in uri_path):
             mismatches.append(
                 "Node slug not found in URI (accepted forms: hyphen or underscore):\n"
                 f"  csv node: {row.node_name} (normalized: {normalized_node}) -> expected slug: {expected_slug}\n"
@@ -1164,7 +1165,8 @@ def run_download_wavs(
 
     validate_no_overlaps(training_rows, testing_rows, dclde_rows)
     validate_aligned_entries(testing_rows)
-    validate_uri_timestamps(training_rows + testing_rows)
+    validate_uri_timestamps(training_rows + testing_rows)
+
     validate_node_slug_in_uri(testing_rows + dclde_rows)
 
     if validate_only:
