@@ -141,13 +141,13 @@ To have GitHub train a new model from the latest `main` branch:
 6. Get the SHA hash of the latest commit, which will be a long string like `36620370fd59c8a70f9b7be6060d4f40717e796d`.    This can be found by clicking the short prefix to the right of "Model save", just above the list of files.
 7. Update the SHA commit to the latest version in the following places:
 ```
-add_samples.py:DEFAULT_MODEL_REVISION = "36620370fd59c8a70f9b7be6060d4f40717e796d"  # Pinned Hub model revision.
-compare_models.py:PODSAI_MODEL_REVISION = "36620370fd59c8a70f9b7be6060d4f40717e796d"
-generate_embeddings.py:PODSAI_AST_MODEL_REVISION = "36620370fd59c8a70f9b7be6060d4f40717e796d"
-LiveInferenceOrchestrator.py:PODSAI_MODEL_REVISION = "36620370fd59c8a70f9b7be6060d4f40717e796d"
-run_inference.py:PODSAI_AST_MODEL_REVISION = "36620370fd59c8a70f9b7be6060d4f40717e796d"
-test_podsai_inference.py:PODSAI_TEST_MODEL_REVISION = "36620370fd59c8a70f9b7be6060d4f40717e796d"
-test_run_inference.py:PODSAI_TEST_MODEL_REVISION = "36620370fd59c8a70f9b7be6060d4f40717e796d"
+src/add_samples.py:DEFAULT_MODEL_REVISION = "36620370fd59c8a70f9b7be6060d4f40717e796d"  # Pinned Hub model revision.
+src/compare_models.py:PODSAI_MODEL_REVISION = "36620370fd59c8a70f9b7be6060d4f40717e796d"
+src/generate_embeddings.py:PODSAI_AST_MODEL_REVISION = "36620370fd59c8a70f9b7be6060d4f40717e796d"
+src/LiveInferenceOrchestrator.py:PODSAI_MODEL_REVISION = "36620370fd59c8a70f9b7be6060d4f40717e796d"
+src/run_inference.py:PODSAI_AST_MODEL_REVISION = "36620370fd59c8a70f9b7be6060d4f40717e796d"
+tests/test_podsai_inference.py:PODSAI_TEST_MODEL_REVISION = "36620370fd59c8a70f9b7be6060d4f40717e796d"
+tests/test_run_inference.py:PODSAI_TEST_MODEL_REVISION = "36620370fd59c8a70f9b7be6060d4f40717e796d"
 ```
 8. Run `python src/compare_models.py --models podsai` to verify that the F1 does not regress from the latest model as shown at the top of this README.  Don't proceed further unless the F1 improves.
 9. Update README.md with the latest model comparison results.
@@ -162,8 +162,8 @@ test_run_inference.py:PODSAI_TEST_MODEL_REVISION = "36620370fd59c8a70f9b7be6060d
 ```
 image: orcaconservancycr.azurecr.io/pods-ai-live-inference-system:09-05-2026.v1.4.0
 ```
-12. Generate a pull request with those changes.
-13. Once that pull request merges, apply the config, e.g., `kubectl apply -f deploy/andrews-bay.yaml`
+13. Generate a pull request with those changes.
+14. Once that pull request merges, apply the config, e.g., `kubectl apply -f deploy/andrews-bay.yaml`
 
 You can instead train a model locally:
 
@@ -185,7 +185,8 @@ The active scripts in `src` include:
   adding a short beep between clips to make quick listen-through review easier.
 - [**process_false_positives.py**](docs/process-false-positives.md): Re-checks rejected OrcaHello detections by
   downloading the 60-second WAV, re-running PODS-AI, and appending whale-class
-  sub-segments with corrected classes to `output/csv/training_3s_samples.csv`.- [**process_false_negatives.py**](docs/process-false-negatives.md): Re-checks confirmed OrcaHello detections by
+  sub-segments with corrected classes to `output/csv/new_mainual_training_samples.csv`.
+- [**process_false_negatives.py**](docs/process-false-negatives.md): Re-checks confirmed OrcaHello detections by
   downloading the 60-second WAV, re-running PODS-AI and OrcaHello segment inference,
   and appending segments where OrcaHello predicts resident but PODS-AI does not to
   `output/csv/training_3s_samples.csv` with corrected class `resident`.

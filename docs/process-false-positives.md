@@ -1,8 +1,11 @@
 # process_false_positives.py
 
 Re-checks rejected OrcaHello detections by
-downloading the 60-second WAV, re-running PODS-AI, and appending whale-class
-sub-segments with corrected classes to `output/csv/training_3s_samples.csv`.
+downloading the 60-second WAV, re-running PODS-AI, and appending candidate rows to
+the selected manual-samples CSV (training defaults to
+`output/csv/new_manual_training_samples.csv`; use `--set testing` for
+`output/csv/new_manual_testing_samples.csv`).
+
 The corrected class is inferred from the human-authored portion of the moderation
 comments (auto-generated "AI: …" lines are ignored).  Explicit negations in the
 comments are understood: "No humpback" suppresses the humpback match, and

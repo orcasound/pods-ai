@@ -3,10 +3,9 @@
 Re-checks confirmed OrcaHello detections by
 downloading the 60-second WAV, re-running PODS-AI and OrcaHello segment inference,
 and appending segments where OrcaHello predicts resident but PODS-AI does not to
-`output/csv/training_3s_samples.csv` with corrected class `resident`. Supports
+`output/csv/new_manual_samples.csv` with corrected class `resident`. Supports
 `--category CATEGORY` to process only detections whose PODS-AI predicted category
 matches the provided value.
-adding a short beep between clips to make quick listen-through review easier.
 
 ```
 usage: process_false_negatives.py [-h] [--feed FEED] [--start YYYY_MM_DD_HH_MM_SS_PST]

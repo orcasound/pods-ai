@@ -18,6 +18,8 @@ The columns are as follows:
 * Description: Comments provided by a trained human moderator.
 * Notes: fp_machine_only if the sample came from a set of (typically false positives) AI detections, tp_human_only if the sample came from a set of human positives (thus false negatives for AI models), or tp_both if the sample was correctly detected by both humans and AI.
 * Confidence: The confidence of an AI model at the time.  A value of 100 can be used in the absence of any other information.
+* Tags: Optional. If this column is present, it contains the tags provided by a trained human moderator.
 
-Only the first three fields are used by scripts; the others are for ease of human use of the CSV files.
+The first three fields identify the audio window; scripts also use URI, Description, and Notes
+for validation, matching, and processing decisions.
 
