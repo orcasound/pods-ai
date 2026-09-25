@@ -12,27 +12,22 @@ import os
 import shutil
 import sys
 from tempfile import TemporaryDirectory
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 
 import ffmpeg
 import m3u8
 from pytz import timezone
 import requests
 
-from audio_utils import (
-    download_60s_audio,
-    get_cached_folders,
-    get_folders_between_timestamp,
-    get_difference_between_times_in_seconds,
-    download_from_url,
-    load_m3u8_with_retry
-)
+from add_samples import parse_uri, get_node_slug, get_orcasite_feeds
 
 PACIFIC_TZ = timezone('US/Pacific')
 N_SECONDS = 3  # Create 3-second wav files.
 TESTING_WINDOW_SECONDS = 60
 DEFAULT_DCLDE_MANIFEST = Path("output/csv/dclde_60s_samples.csv")
 DEFAULT_TESTING_WAV_ROOT = Path("output/testing-wav")
+DEFAULT_TRAINING_CSV_PATH = Path("output/csv/training_3s_samples.csv")
+DEFAULT_TESTING_CSV_PATH = Path("output/csv/testing_60s_samples.csv")
 # DCLDE 60-second recordings intentionally share the ordinary testing WAV
 # directory so existing PODS-AI evaluation tools can consume either manifest.
 DEFAULT_DCLDE_WAV_ROOT = DEFAULT_TESTING_WAV_ROOT
@@ -541,6 +536,8 @@ def _get_corrected_detection_timestamp(node_name: str, detection_timestamp: date
         _CORRECTED_TIMESTAMP_CACHE[cache_key] = detection_timestamp
         return detection_timestamp
 
+    from audio_utils import get_cached_folders
+
     folder_prefix = f"{node_name}/hls/"
     folders = get_cached_folders("audio-orcasound-net", prefix=folder_prefix)
     original_unix_time_seconds = int(detection_timestamp.timestamp())
@@ -668,6 +665,103 @@ def validate_aligned_entries(testing_rows: list[CSVRow]) -> None:
         raise ValueError("\n".join(mismatches))
 
 
+def validate_uri_timestamps(rows: list[CSVRow]) -> None:
+    """Verify that the timestamp encoded in each row URI matches the CSV StartTimestamp.
+
+    Args:
+        rows: Parsed CSV rows to validate.
+
+    Raises:
+        ValueError: If any row's URI timestamp does not match the CSV timestamp or the URI cannot be parsed.
+    """
+    mismatches: list[str] = []
+
+    for row in rows:
+        if not row.uri:
+            continue
+        try:
+            uri_node, uri_timestamp_pst = parse_uri(row.uri)
+        except Exception as e:
+            mismatches.append(
+                f"Unable to parse URI for row {row.node_name} {row.timestamp_pst}: {row.uri} ({type(e).__name__}: {e})"
+            )
+            continue
+
+        if uri_timestamp_pst != row.timestamp_pst:
+            mismatches.append(
+                "Timestamp mismatch between CSV and URI:\n"
+                f"  csv: {row.node_name} {row.timestamp_pst}\n"
+                f"  uri: {row.node_name} {uri_timestamp_pst} -> {row.uri}"
+            )
+
+    if mismatches:
+        raise ValueError("\n".join(mismatches))
+
+
+def validate_node_slug_in_uri(rows: list[CSVRow]) -> None:
+    """Verify that the NodeName in CSV corresponds to the slug present in the URI path.
+
+    Args:
+        rows: Parsed CSV rows to validate.
+
+    Raises:
+        ValueError: If any row's URI slug does not match the node's expected slug or the URI is malformed.
+    """
+    mismatches: list[str] = []
+
+    # Load Orcasite feeds once to allow mapping DCLDE-style node names to known feeds.
+    feeds = []
+    try:
+        feeds = get_orcasite_feeds()
+    except Exception:
+        # If feed lookup fails, we'll fall back to using the raw node_name below.
+        feeds = []
+
+    # Build a node_name -> slug map so we do not call get_node_slug per row.
+    node_to_slug: dict[str, str] = {f.node_name: f.slug for f in feeds} if feeds else {}
+
+    for row in rows:
+        if not row.uri:
+            continue
+
+        # Map DCLDE-style or other composite node names to known feed node_name when possible.
+        normalized_node = row.node_name
+        for feed in feeds:
+            try:
+                if (feed.node_name and feed.node_name in row.node_name) or (
+                    feed.slug and feed.slug.replace('-', '_') in row.node_name
+                ):
+                    normalized_node = feed.node_name
+                    break
+            except Exception:
+                continue
+
+        expected_slug = node_to_slug.get(normalized_node)
+        if expected_slug is None:
+            # Fallback: try to call get_node_slug (may trigger network) only when mapping not available.
+            try:
+                expected_slug = get_node_slug(normalized_node)
+            except Exception as e:
+                mismatches.append(f"Unable to look up slug for node {row.node_name} (normalized to {normalized_node}): {e}")
+                continue
+
+        # Ensure the expected slug (e.g., 'orcasound-lab') appears somewhere in the URI.
+        # Accept either hyphenated or underscored forms (orcasound-lab OR orcasound_lab).
+        alt_slug = expected_slug.replace("-", "_")
+        uri_path = urlparse(row.uri).path
+
+        if (expected_slug not in uri_path) and (alt_slug not in uri_path):
+
+            mismatches.append(
+                "Node slug not found in URI (accepted forms: hyphen or underscore):\n"
+                f"  csv node: {row.node_name} (normalized: {normalized_node}) -> expected slug: {expected_slug}\n"
+                f"  uri: {row.uri}"
+            )
+
+    if mismatches:
+        raise ValueError("\n".join(mismatches))
+
+
 def download_audio_segment(
     category: str,
     node_name: str,
@@ -700,6 +794,14 @@ def download_audio_segment(
         return
     if _copy_wav_from_cache_if_exists(expected_path, output_root, cache_root):
         return
+
+    from audio_utils import (
+        get_cached_folders,
+        get_folders_between_timestamp,
+        load_m3u8_with_retry,
+        get_difference_between_times_in_seconds,
+        download_from_url,
+    )
 
     # Set up S3 bucket and folder information.
     hydrophone_stream_url = 'https://s3-us-west-2.amazonaws.com/audio-orcasound-net/' + node_name
@@ -889,6 +991,8 @@ def download_testing_sample(row: CSVRow, output_root: Path, cache_root: Path | N
     print(f"  Downloading audio ending shortly after {min_end_timestamp_pst_str}...")
 
     with TemporaryDirectory() as tmp_dir:
+        from audio_utils import download_60s_audio
+
         wav_path = download_60s_audio(
             node_name=row.node_name,
             min_end_timestamp_pst_str=min_end_timestamp_pst_str,
@@ -948,6 +1052,8 @@ def download_dclde_sample(
         raise ValueError("DCLDE manifest row has an empty URI")
 
     with TemporaryDirectory() as tmp_dir:
+        from audio_utils import download_from_url
+
         download_from_url(row.uri, tmp_dir)
         downloaded_path = Path(tmp_dir) / os.path.basename(row.uri.split("?", 1)[0])
         if not downloaded_path.is_file() or not downloaded_path.stat().st_size:
@@ -1021,11 +1127,11 @@ def print_usage():
 
 def run_download_wavs(
     validate_only: bool = False,
+    training_csv_path: Path = DEFAULT_TRAINING_CSV_PATH,
+    testing_csv_path: Path = DEFAULT_TESTING_CSV_PATH,
     dclde_csv_path: Path = DEFAULT_DCLDE_MANIFEST,
     dclde_output_root: Path | None = None,
 ) -> None:
-    training_csv_path = Path("output/csv/training_3s_samples.csv")
-    testing_csv_path = Path("output/csv/testing_60s_samples.csv")
 
     worktree_root = Path(os.getenv("WAV_WORKTREE_DIR", "."))
     training_output_root = worktree_root / "output/wav"
@@ -1067,9 +1173,12 @@ def run_download_wavs(
 
     validate_no_overlaps(training_rows, testing_rows, dclde_rows)
     validate_aligned_entries(testing_rows)
+    validate_uri_timestamps(training_rows + testing_rows)
+
+    validate_node_slug_in_uri(testing_rows + dclde_rows)
 
     if validate_only:
-        print("Overlap and aligned-entry validation completed successfully.")
+        print("Overlap, aligned-entry, and URI validation completed successfully.")
         if dclde_rows:
             print(f"DCLDE manifest validation completed: {len(dclde_rows)} rows.")
         else:
@@ -1118,6 +1227,22 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--validate-only", action="store_true")
     parser.add_argument(
+        "--training-csv-path",
+        type=Path,
+        default=DEFAULT_TRAINING_CSV_PATH,
+        help=(
+            "Training manifest (default: output/csv/training_3s_samples.csv)."
+        ),
+    )
+    parser.add_argument(
+        "--testing-csv-path",
+        type=Path,
+        default=DEFAULT_TESTING_CSV_PATH,
+        help=(
+            "Testing manifest (default: output/csv/testing_60s_samples.csv)."
+        ),
+    )
+    parser.add_argument(
         "--dclde-manifest",
         type=Path,
         default=DEFAULT_DCLDE_MANIFEST,
@@ -1142,6 +1267,8 @@ if __name__ == "__main__":
     args = parse_args()
     run_download_wavs(
         validate_only=args.validate_only,
+        training_csv_path=args.training_csv_path,
+        testing_csv_path=args.testing_csv_path,
         dclde_csv_path=args.dclde_manifest,
         dclde_output_root=args.dclde_wav_root,
     )

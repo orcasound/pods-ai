@@ -48,7 +48,7 @@ class TestDownloadTestingSample:
                 wav_path.write_bytes(b"fake wav content")
                 return str(wav_path)
 
-            with patch("download_wavs.download_60s_audio", side_effect=_fake_download_60s_audio) as mock_download_60s:
+            with patch("audio_utils.download_60s_audio", side_effect=_fake_download_60s_audio) as mock_download_60s:
                 download_testing_sample(row, output_root)
 
             mock_download_60s.assert_called_once_with(
@@ -79,7 +79,7 @@ class TestDownloadTestingSample:
                 wav_path.write_bytes(b"fake wav content")
                 return str(wav_path)
 
-            with patch("download_wavs.download_60s_audio", side_effect=_fake_download_60s_audio) as mock_download_60s:
+            with patch("audio_utils.download_60s_audio", side_effect=_fake_download_60s_audio) as mock_download_60s:
                 download_testing_sample(row, output_root)
 
             mock_download_60s.assert_called_once_with(
@@ -193,7 +193,7 @@ class TestAlignedEntryValidation:
                 self._mock_detection_response(second_page_payload, total_pages=2),
             ],
         ) as mock_get, \
-                patch("download_wavs.get_cached_folders", side_effect=AssertionError("should not query S3 for current epoch")):
+                patch("audio_utils.get_cached_folders", side_effect=AssertionError("should not query S3 for current epoch")):
             validate_aligned_entries(testing_rows)
 
         assert mock_get.call_count == 2
@@ -221,7 +221,7 @@ class TestAlignedEntryValidation:
         ]
 
         with patch("download_wavs.requests.get", return_value=self._mock_detection_response(detections)) as mock_get, \
-                patch("download_wavs.get_cached_folders", side_effect=AssertionError("should not query S3 for current epoch")):
+                patch("audio_utils.get_cached_folders", side_effect=AssertionError("should not query S3 for current epoch")):
             validate_aligned_entries(testing_rows)
 
         mock_get.assert_called_once()
@@ -255,7 +255,7 @@ class TestAlignedEntryValidation:
         ]
 
         with patch("download_wavs.requests.get", return_value=self._mock_detection_response(detections)), \
-                patch("download_wavs.get_cached_folders", side_effect=AssertionError("should not query S3 for current epoch")):
+                patch("audio_utils.get_cached_folders", side_effect=AssertionError("should not query S3 for current epoch")):
             with pytest.raises(
                 ValueError,
                 match=r"old testing_row: human,rpi_sunset_bay,2025_12_01_00_00_48_PST,https://live\.orcasound\.net/bouts/new/sunset-bay\?time=2025-12-01T08%3A00%3A48\.000Z,Radio,fp_machine_only,100\n"
@@ -287,7 +287,7 @@ class TestAlignedEntryValidation:
         folder_time = int(datetime(2025, 1, 1, 8, 0, 0, tzinfo=timezone.utc).timestamp())
 
         with patch("download_wavs.requests.get", return_value=self._mock_detection_response(detections)), \
-                patch("download_wavs.get_cached_folders", return_value=[str(folder_time)]):
+                patch("audio_utils.get_cached_folders", return_value=[str(folder_time)]):
             with pytest.raises(
                 ValueError,
                 match=r"old testing_row: human,rpi_sunset_bay,2025_01_01_00_10_48_PST,https://live\.orcasound\.net/bouts/new/sunset-bay\?time=2025-01-01T08%3A10%3A48\.000Z,Radio,fp_machine_only,100\n"
@@ -319,7 +319,7 @@ class TestAlignedEntryValidation:
         folder_time = int(datetime(2024, 7, 19, 7, 0, 48, tzinfo=timezone.utc).timestamp())
 
         with patch("download_wavs.requests.get", return_value=self._mock_detection_response(detections)), \
-                patch("download_wavs.get_cached_folders", return_value=[str(folder_time)]):
+                patch("audio_utils.get_cached_folders", return_value=[str(folder_time)]):
             with pytest.raises(
                 ValueError,
                 match=r"old testing_row: human,rpi_sunset_bay,2024_07_19_12_51_09_PST,https://live\.orcasound\.net/bouts/new/sunset-bay\?time=2024-07-19T19%3A51%3A09\.000Z,Human voices causing false positives despite significant noise from something contacting ladder and/or hydrophone\.,fp_machine_only,54\.4156\n"
@@ -345,7 +345,7 @@ class TestCacheAndCleanup:
             cached_file.parent.mkdir(parents=True, exist_ok=True)
             cached_file.write_bytes(b"cached")
 
-            with patch("download_wavs.get_cached_folders", side_effect=AssertionError("should not download")):
+            with patch("audio_utils.get_cached_folders", side_effect=AssertionError("should not download")):
                 process_csv(csv_path, output_root, cache_root=cache_root)
 
             downloaded_file = output_root / "resident" / "rpi-andrews-bay_2025_01_01_00_00_00_PST.wav"
@@ -434,7 +434,7 @@ class TestCacheAndCleanup:
             cached_file.parent.mkdir(parents=True, exist_ok=True)
             cached_file.write_bytes(b"cached")
 
-            with patch("download_wavs.download_60s_audio", side_effect=AssertionError("should not download")):
+            with patch("audio_utils.download_60s_audio", side_effect=AssertionError("should not download")):
                 process_testing_csv(csv_path, output_root, cache_root=cache_root)
 
             expected = output_root / "resident" / "rpi-andrews-bay_2025_01_01_00_00_00_PST.wav"
@@ -451,12 +451,12 @@ class TestValidateOnly:
             csv_dir.mkdir(parents=True, exist_ok=True)
             (csv_dir / "training_3s_samples.csv").write_text(
                 "category,node_name,timestamp_pst,uri,description,notes,confidence\n"
-                "resident,rpi_andrews_bay,2025_01_01_01_00_00_PST,uri,desc,note,100\n",
+                "resident,rpi_andrews_bay,2025_01_01_01_00_00_PST,https://live.orcasound.net/bouts/new/andrews-bay?time=2025-01-01T09%3A00%3A00.000Z,desc,note,100\n",
                 encoding="utf-8",
             )
             (csv_dir / "testing_60s_samples.csv").write_text(
                 "category,node_name,timestamp_pst,uri,description,notes,confidence\n"
-                "resident,rpi_andrews_bay,2025_01_01_01_01_06_PST,uri,desc,tp_human_only,100\n",
+                "resident,rpi_andrews_bay,2025_01_01_01_01_06_PST,https://live.orcasound.net/bouts/new/andrews-bay?time=2025-01-01T09%3A01%3A06.000Z,desc,tp_human_only,100\n",
                 encoding="utf-8",
             )
 
@@ -472,3 +472,57 @@ class TestValidateOnly:
                 mock_validate_aligned_entries.assert_called_once()
             finally:
                 os.chdir(original_cwd)
+
+    def test_parse_args_custom_training_and_testing_paths_are_forwarded(self, monkeypatch, tmp_path):
+        custom_dir = tmp_path / "custom"
+        custom_dir.mkdir()
+        training_csv = custom_dir / "training.csv"
+        training_csv.write_text(
+            "category,node_name,timestamp_pst,uri,description,notes,confidence\n"
+            "resident,rpi_andrews_bay,2025_01_01_01_00_00_PST,uri,desc,note,100\n",
+            encoding="utf-8",
+        )
+        testing_csv = custom_dir / "testing.csv"
+        testing_csv.write_text(
+            "category,node_name,timestamp_pst,uri,description,notes,confidence\n"
+            "resident,rpi_andrews_bay,2025_01_01_01_01_06_PST,uri,desc,tp_human_only,100\n",
+            encoding="utf-8",
+        )
+
+        monkeypatch.setattr(
+            "sys.argv",
+            [
+                "download_wavs.py",
+                "--training-csv-path",
+                str(training_csv),
+                "--testing-csv-path",
+                str(testing_csv),
+            ],
+        )
+
+        args = download_wavs.parse_args()
+
+        original_cwd = Path.cwd()
+        try:
+            os.chdir(tmp_path)
+            with patch("download_wavs.process_csv") as mock_process_csv, \
+                    patch("download_wavs.process_testing_csv") as mock_process_testing_csv, \
+                    patch("download_wavs.validate_no_overlaps"), \
+                    patch("download_wavs.validate_aligned_entries"), \
+                    patch("download_wavs.validate_uri_timestamps"), \
+                    patch("download_wavs.validate_node_slug_in_uri"):
+                run_download_wavs(
+                    training_csv_path=args.training_csv_path,
+                    testing_csv_path=args.testing_csv_path,
+                )
+        finally:
+            os.chdir(original_cwd)
+
+        assert args.training_csv_path == training_csv
+        assert args.testing_csv_path == testing_csv
+        assert mock_process_csv.call_args.args[:2] == (training_csv, Path("output/wav"))
+        assert mock_process_csv.call_args.kwargs == {"cache_root": None}
+        assert mock_process_testing_csv.call_args.args[:2] == (
+            testing_csv,
+            Path("output/testing-wav"),
+        )

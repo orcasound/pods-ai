@@ -1,5 +1,5 @@
 Category,NodeName,StartTimestamp,URI,Description,Notes,Confidence
-bird,rpi_bush_point,2026_08_09_17_36_48_PST,https://live.orcasound.net/bouts/new/port-townsend?time=2026-08-10T00%3A36%3A48.000Z,Gull,fp_machine_only,72.7767
+bird,rpi_bush_point,2026_08_09_17_36_48_PST,https://live.orcasound.net/bouts/new/bush-point?time=2026-08-10T00%3A36%3A48.000Z,Gull,fp_machine_only,72.7767
 bird,rpi_port_townsend,2026_08_07_10_05_49_PST,https://live.orcasound.net/bouts/new/port-townsend?time=2026-08-07T17%3A05%3A49.000Z,Pigu,fp_machine_only,100
 bird,rpi_port_townsend,2026_08_07_10_08_49_PST,https://live.orcasound.net/bouts/new/port-townsend?time=2026-08-07T17%3A08%3A49.000Z,Pigu,fp_machine_only,100
 bird,rpi_port_townsend,2026_08_07_10_21_49_PST,https://live.orcasound.net/bouts/new/port-townsend?time=2026-08-07T17%3A21%3A49.000Z,Pigu,fp_machine_only,100
@@ -35,6 +35,11 @@ humpback,rpi_orcasound_lab,2025_12_17_22_31_33_PST,https://live.orcasound.net/bo
 humpback,rpi_orcasound_lab,2025_12_17_22_36_31_PST,https://live.orcasound.net/bouts/new/orcasound-lab?time=2025-12-18T06%3A36%3A31.000Z,Humpback calls,tp_both,60.3478
 humpback,rpi_orcasound_lab,2025_12_17_22_39_55_PST,https://live.orcasound.net/bouts/new/orcasound-lab?time=2025-12-18T06%3A39%3A55.000Z,Humpback,tp_both,60.3478
 humpback,rpi_orcasound_lab,2025_12_20_21_57_20_PST,https://live.orcasound.net/bouts/new/orcasound-lab?time=2025-12-21T05%3A57%3A20.000Z,Humpback,tp_human_only,
+jingle,rpi_bush_point,2026_07_29_05_28_48_PST,https://live.orcasound.net/bouts/new/bush-point?time=2026-07-29T12%3A28%3A48.000Z,Mechanical squeak,fp_machine_only,72.7767
+jingle,rpi_bush_point,2026_07_28_23_10_48_PST,https://live.orcasound.net/bouts/new/bush-point?time=2026-07-29T06%3A10%3A48.000Z,Mechanical squeak,fp_machine_only,72.7767
+jingle,rpi_bush_point,2026_07_22_20_18_57_PST,https://live.orcasound.net/bouts/new/bush-point?time=2026-07-23T03%3A18%3A57.000Z,Mechanical squeak,fp_machine_only,72.7767
+jingle,rpi_bush_point,2026_07_20_00_45_57_PST,https://live.orcasound.net/bouts/new/bush-point?time=2026-07-20T07%3A45%3A57.000Z,Mechanical squeak,fp_machine_only,72.7767
+jingle,rpi_bush_point,2026_07_19_09_54_48_PST,https://live.orcasound.net/bouts/new/bush-point?time=2026-07-19T16%3A54%3A48.000Z,Mechanical squeak,fp_machine_only,72.7767
 jingle,rpi_orcasound_lab,2026_01_11_08_34_10_PST,https://live.orcasound.net/bouts/new/orcasound-lab?time=2026-01-11T16%3A34%3A10.000Z,Jingle,fp_machine_only,56.7107
 jingle,rpi_orcasound_lab,2026_01_11_09_04_10_PST,https://live.orcasound.net/bouts/new/orcasound-lab?time=2026-01-11T17%3A04%3A10.000Z,Jingle,fp_machine_only,60.6301
 jingle,rpi_orcasound_lab,2026_01_11_09_06_10_PST,https://live.orcasound.net/bouts/new/orcasound-lab?time=2026-01-11T17%3A06%3A10.000Z,Jingle,fp_machine_only,62.1588

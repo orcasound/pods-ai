@@ -39,7 +39,7 @@ bird,rpi_port_townsend,2026_08_02_22_10_10_PST,https://live.orcasound.net/bouts/
 bird,rpi_port_townsend,2026_08_04_12_50_30_PST,https://live.orcasound.net/bouts/new/port-townsend?time=2026-08-04T19%3A50%3A30.000Z,Pigu,fp_machine_only,66.7
 bird,rpi_port_townsend,2026_08_04_12_52_00_PST,https://live.orcasound.net/bouts/new/port-townsend?time=2026-08-04T19%3A52%3A00.000Z,Pigu,fp_machine_only,66.7
 bird,rpi_port_townsend,2026_08_06_06_53_06_PST,https://live.orcasound.net/bouts/new/port-townsend?time=2026-08-06T13%3A53%3A06.000Z,Pigu,fp_machine_only,66.7
-bird,rpi_port_townsend,2026_08_06_06_54_05_PST,https://live.orcasound.net/bouts/new/port-townsend?time=2026-08-06T13%3A53%3A05.000Z,Pigu,fp_machine_only,66.7
+bird,rpi_port_townsend,2026_08_06_06_54_05_PST,https://live.orcasound.net/bouts/new/port-townsend?time=2026-08-06T13%3A54%3A05.000Z,Pigu,fp_machine_only,66.7
 bird,rpi_port_townsend,2026_08_06_07_22_13_PST,https://live.orcasound.net/bouts/new/port-townsend?time=2026-08-06T14%3A22%3A13.000Z,Pigu,fp_machine_only,66.7
 bird,rpi_port_townsend,2026_08_06_07_23_40_PST,https://live.orcasound.net/bouts/new/port-townsend?time=2026-08-06T14%3A23%3A40.000Z,Pigu,fp_machine_only,66.7
 bird,rpi_port_townsend,2026_08_07_09_59_15_PST,https://live.orcasound.net/bouts/new/port-townsend?time=2026-08-07T16%3A59%3A15.000Z,Pigu,fp_machine_only,66.7
@@ -160,6 +160,10 @@ humpback,rpi_orcasound_lab,2025_12_19_04_57_33_PST,https://live.orcasound.net/bo
 humpback,rpi_orcasound_lab,2025_12_19_04_57_37_PST,https://live.orcasound.net/bouts/new/orcasound-lab?time=2025-12-19T12%3A57%3A37.000Z,"Humpback whale song, moderate ship noise",fp_machine,75.5
 humpback,rpi_sunset_bay,2025_11_10_13_55_23_PST,https://live.orcasound.net/bouts/new/sunset-bay?time=2025-11-10T21%3A55%3A23.000Z,humpback sound,tp_human_only,3.2
 humpback,rpi_sunset_bay,2025_11_10_13_58_25_PST,https://live.orcasound.net/bouts/new/sunset-bay?time=2025-11-10T21%3A58%3A25.000Z,humpback whale sound,tp_human_only,100
+jingle,rpi_bush_point,2026_07_06_02_12_02_PST,https://live.orcasound.net/bouts/new/bush-point?time=2026-07-06T09:12:02Z,Mechanical squeak,fp_machine_only,100
+jingle,rpi_bush_point,2026_07_06_02_12_36_PST,https://live.orcasound.net/bouts/new/bush-point?time=2026-07-06T09:12:36Z,Mechanical squeak,fp_machine_only,100
+jingle,rpi_bush_point,2026_07_05_10_09_25_PST,https://live.orcasound.net/bouts/new/bush-point?time=2026-07-05T17:09:25Z,Mechanical squeak,fp_machine_only,100
+jingle,rpi_bush_point,2026_07_05_10_09_47_PST,https://live.orcasound.net/bouts/new/bush-point?time=2026-07-05T17:09:47Z,Mechanical squeak,fp_machine_only,100
 jingle,rpi_andrews_bay,2026_02_18_04_36_17_PST,https://live.orcasound.net/bouts/new/andrews-bay?time=2026-02-18T12%3A36%3A17.000Z,"Jingle, water slosh",fp_machine_only,71.5
 jingle,rpi_north_sjc,2024_09_28_07_33_20_PST,https://live.orcasound.net/bouts/new/north-sjc?time=2024-09-28T14%3A33%3A20.000Z,"Jingling bell or key sounds with power peaks near 5.0, 5.6, and 9.5kHz. The source is unkown, currently.",fp_machine_only,67
 jingle,rpi_north_sjc,2024_10_19_02_03_17_PST,https://live.orcasound.net/bouts/new/north-sjc?time=2024-10-19T09%3A03%3A17.000Z,"More jingles, and a few clank-like short ones that have harmonics or overtones to much higher frequencies.",fp_machine_only,100
