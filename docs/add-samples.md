@@ -21,8 +21,8 @@ filename.  The filename must follow the same convention:
 (e.g. `rpi-orcasound-lab_2025_12_17_22_34_03_PST.wav` → node `rpi_orcasound_lab`,
 timestamp `2025_12_17_22_34_03_PST`).
 
-After reviewing the predictions you can move the segments into the appropriate
-`output/wav/<category>/` directory to add them to the training set.
+After reviewing the predictions, copy the printed rows into
+`output/csv/training_3s_samples.csv` and run `download_wavs.py` to add them to the training set.
 
 ```
 usage: python add_samples.py <wav_file> [--node-name NAME] [--timestamp TIMESTAMP]

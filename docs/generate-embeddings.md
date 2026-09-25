@@ -33,7 +33,7 @@ usage: python generate_embeddings.py
 ```
 | Argument | Description |
 |---|---|
-| `--testing-csv` | Path to `testing_60s_samples.csv` (default: `../output/csv/testing_60s_samples.csv`) |
+| `--testing-csv` | Path to `testing_60s_samples.csv` (default: `output/csv/testing_60s_samples.csv`) |
 | `--wav-dir` | Root directory containing downloaded testing WAV files (default: `output/testing-wav`) |
 | `--output-csv` | Output CSV file containing embeddings and metadata (default: `output/csv/embeddings.csv`) |
 | `--model-path` | HuggingFace Hub model ID or local PODS-AI model directory (default: `davethaler/whale-call-detector`) |

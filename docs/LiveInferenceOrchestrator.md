@@ -85,11 +85,9 @@ The timestamp correction implementation follows the architecture described in th
 Similar to [aifororcas-livesystem config files](https://github.com/orcasound/aifororcas-livesystem/blob/main/InferenceSystem/config/Test/Positive/FastAI_DateRangeHLS_AndrewsBay.yml):
 
 ```yaml
-model_type: "FastAI"
-model_local_threshold: 0.5
-model_global_threshold: 3
-model_path: "./model"
-model_name: "model.pkl"
+model_hf_repo_id: "davethaler/whale-call-detector"
+threshold: 0.5
+min_num_positive_calls_threshold: 2
 ```
 
 ## GitHub CI configuration

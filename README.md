@@ -55,7 +55,7 @@ NOTE 1: The results above may be biased against models, compared to what would b
 audio, since the testing set is weighted towards samples that were mispredicted in the past.
 
 NOTE 2: The F1 score is lower than the F1 for individual 3-second periods on which the models
-run.  This is because the prediction of a 60-second sample is a based on multiple 3-second
+run.  This is because the prediction of a 60-second sample is based on multiple 3-second
 periods, at least 2 of which must pass 60% confidence of a whale category before it will predict
 that whale category.  Thus, if 2 out of 20 non-whale samples were mis-predicted as resident,
 the F1 for the individual 3-second periods may be 90% but the 60-second sample would still
@@ -131,7 +131,7 @@ To add new training samples:
 
 ## Training a New Model
 
-To have github train a new model from the latest `main` branch:
+To have GitHub train a new model from the latest `main` branch:
 
 1. Go to https://github.com/orcasound/pods-ai/actions/workflows/train_model.yml in a browser.
 2. Open the "Run workflow" dropdown and click "Run workflow".  The process will take nearly 3 hours.
@@ -182,23 +182,14 @@ The active scripts in `src` include:
 - [**compare_models.py**](docs/compare-models.md): Evaluates models using `output/csv/testing_60s_samples.csv`.
 - [**generate_embeddings.py**](docs/generate-embeddings.md): Generates `output/csv/embeddings.csv` from `output/csv/testing_60s_samples.csv`.
 - [**concatenate_wavs.py**](docs/concatenate-wavs.md): Concatenates WAV files in a directory into a single output file,
-- **process_false_positives.py**: Re-checks rejected OrcaHello detections by
+  adding a short beep between clips to make quick listen-through review easier.
+- [**process_false_positives.py**](docs/process-false-positives.md): Re-checks rejected OrcaHello detections by
   downloading the 60-second WAV, re-running PODS-AI, and appending whale-class
-  sub-segments with corrected classes to `output/csv/training_3s_samples.csv`.
-  The corrected class is inferred from the human-authored portion of the moderation
-  comments (auto-generated "AI: …" lines are ignored).  Explicit negations in the
-  comments are understood: "No humpback" suppresses the humpback match, and
-  "No humpback nor vessel" resolves the corrected class to `water`.
-  Supports `--category CATEGORY` to process only detections whose inferred
-  actual category matches the provided value.
-- **process_false_negatives.py**: Re-checks confirmed OrcaHello detections by
+  sub-segments with corrected classes to `output/csv/training_3s_samples.csv`.- [**process_false_negatives.py**](docs/process-false-negatives.md): Re-checks confirmed OrcaHello detections by
   downloading the 60-second WAV, re-running PODS-AI and OrcaHello segment inference,
   and appending segments where OrcaHello predicts resident but PODS-AI does not to
-  `output/csv/training_3s_samples.csv` with corrected class `resident`. Supports
-  `--category CATEGORY` to process only detections whose PODS-AI predicted category
-  matches the provided value.
-  adding a short beep between clips to make quick listen-through review easier.
-- **process_testing_set_mispredictions.py**: Scans `output/csv/testing_60s_samples.csv`,
+  `output/csv/training_3s_samples.csv` with corrected class `resident`.
+- [**process_testing_set_mispredictions.py**](docs/process-testing-set-mispredictions.md): Scans `output/csv/testing_60s_samples.csv`,
   runs PODS-AI on each corresponding `output/testing-wav/<category>/...wav`, and
   proposes `training_3s_samples.csv` rows plus `testing_60s_samples.csv` rows to
   remove when non-adjacent high-confidence (>0.80) whale segments are found.
