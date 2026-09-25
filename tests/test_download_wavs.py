@@ -451,12 +451,12 @@ class TestValidateOnly:
             csv_dir.mkdir(parents=True, exist_ok=True)
             (csv_dir / "training_3s_samples.csv").write_text(
                 "category,node_name,timestamp_pst,uri,description,notes,confidence\n"
-                "resident,rpi_andrews_bay,2025_01_01_01_00_00_PST,uri,desc,note,100\n",
+                "resident,rpi_andrews_bay,2025_01_01_01_00_00_PST,https://live.orcasound.net/bouts/new/andrews-bay?time=2025-01-01T09%3A00%3A00.000Z,desc,note,100\n",
                 encoding="utf-8",
             )
             (csv_dir / "testing_60s_samples.csv").write_text(
                 "category,node_name,timestamp_pst,uri,description,notes,confidence\n"
-                "resident,rpi_andrews_bay,2025_01_01_01_01_06_PST,uri,desc,tp_human_only,100\n",
+                "resident,rpi_andrews_bay,2025_01_01_01_01_06_PST,https://live.orcasound.net/bouts/new/andrews-bay?time=2025-01-01T09%3A01%3A06.000Z,desc,tp_human_only,100\n",
                 encoding="utf-8",
             )
 

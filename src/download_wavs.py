@@ -748,8 +748,10 @@ def validate_node_slug_in_uri(rows: list[CSVRow]) -> None:
         # Ensure the expected slug (e.g., 'orcasound-lab') appears somewhere in the URI.
         # Accept either hyphenated or underscored forms (orcasound-lab OR orcasound_lab).
         alt_slug = expected_slug.replace("-", "_")
-        uri_path = urlparse(row.uri).path
-        if (expected_slug not in uri_path) and (alt_slug not in uri_path):
+        uri_path = urlparse(row.uri).path
+
+        if (expected_slug not in uri_path) and (alt_slug not in uri_path):
+
             mismatches.append(
                 "Node slug not found in URI (accepted forms: hyphen or underscore):\n"
                 f"  csv node: {row.node_name} (normalized: {normalized_node}) -> expected slug: {expected_slug}\n"
