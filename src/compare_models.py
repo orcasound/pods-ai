@@ -226,7 +226,7 @@ def load_test_samples(wav_dir: Path, max_samples: Optional[int] = None,
             category = get_category_from_path(wav_path, wav_dir)
             if category is None:
                 continue
-            if category != category_filter:
+            if category_filter is not None and category != category_filter:
                 continue
 
             samples.append(wav_path)
