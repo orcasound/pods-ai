@@ -192,6 +192,7 @@ def run_inference(wav_path: str, model_type: str = "podsai",
                   model_path: Optional[str] = None,
                   model_revision: Optional[str] = None,
                   model_variant: str = "ast",
+                  inference_model: Optional[Any] = None,
                   start_time_utc: Optional[datetime] = None) -> dict:
     """
     Run inference on a wav file and return per-class probabilities.
@@ -212,6 +213,8 @@ def run_inference(wav_path: str, model_type: str = "podsai",
                        (model_path and model_revision are not explicitly set).
                        Supported values are "ast" (default) and "wav2vec2".
                        Ignored when model_path or model_revision is explicitly provided.
+        inference_model: Optional preloaded model inference instance to reuse.
+                         When provided, model loading via get_model_inference is skipped.
 
     Returns:
         Dictionary with:
@@ -237,7 +240,11 @@ def run_inference(wav_path: str, model_type: str = "podsai",
     if model_type == "fastai":
         if model_path is None:
             model_path = "./model"
-        model = get_model_inference(model_type="fastai", model_path=model_path)
+        model = (
+            inference_model
+            if inference_model is not None
+            else get_model_inference(model_type="fastai", model_path=model_path)
+        )
 
         start_time = time.perf_counter()
         result = model.predict(wav_path)
@@ -266,7 +273,11 @@ def run_inference(wav_path: str, model_type: str = "podsai",
     elif model_type == "orcahello":
         if model_path is None:
             model_path = "orcasound/orcahello-srkw-detector-v1"
-        model = get_model_inference(model_type="orcahello", model_path=model_path)
+        model = (
+            inference_model
+            if inference_model is not None
+            else get_model_inference(model_type="orcahello", model_path=model_path)
+        )
 
         start_time = time.perf_counter()
         result = model.predict(wav_path)
@@ -310,8 +321,15 @@ def run_inference(wav_path: str, model_type: str = "podsai",
                 else:
                     model_revision = PODSAI_AST_MODEL_REVISION
 
-        model = get_model_inference(model_type="podsai", model_path=model_path,
-                                    model_revision=model_revision)
+        model = (
+            inference_model
+            if inference_model is not None
+            else get_model_inference(
+                model_type="podsai",
+                model_path=model_path,
+                model_revision=model_revision,
+            )
+        )
 
         start_time = time.perf_counter()
         result = model.predict(wav_path)
