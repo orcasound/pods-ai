@@ -221,7 +221,11 @@ def load_test_samples(wav_dir: Path, max_samples: Optional[int] = None,
     """
     samples = []
     try:
-        for wav_path in sorted(wav_dir.rglob("*.wav")):
+        wav_paths = sorted(
+            path for path in wav_dir.rglob("*")
+            if path.is_file() and path.suffix.lower() == ".wav"
+        )
+        for wav_path in wav_paths:
             relative_path = wav_path.relative_to(wav_dir)
             if len(relative_path.parts) != 2:
                 continue

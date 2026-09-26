@@ -192,6 +192,19 @@ class TestLoadTestSamples:
         samples = load_test_samples(wav_dir)
         assert samples == []
 
+    def test_loads_uppercase_wav_extension(self, tmp_path):
+        """load_test_samples accepts uppercase WAV filename extensions."""
+        from compare_models import load_test_samples
+
+        wav_dir = tmp_path / "testing-wav"
+        wav = wav_dir / "resident" / "rpi-lab_2023_01_01_00_00_00_PST.WAV"
+        wav.parent.mkdir(parents=True, exist_ok=True)
+        wav.touch()
+
+        samples = load_test_samples(wav_dir)
+        assert len(samples) == 1
+        assert samples[0].category == "resident"
+
 
 # ---------------------------------------------------------------------------
 # Tests for find_wav_file()
