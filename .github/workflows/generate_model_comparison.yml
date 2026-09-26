@@ -87,8 +87,14 @@ jobs:
       - name: Patch fastai_audio for Python 3.11+ compatibility
         run: bash patch_fastai_audio.sh
 
-      - name: Download WAV files
-        run: python src/download_wavs.py
+      - name: Download testing WAV files
+        run: |
+          cat > /tmp/empty_training_3s_samples.csv <<'CSV'
+          WAV,Category,Node,StartTimestamp,Duration,Location,Latitude,Longitude,Model,Site,Notes,Tags
+          CSV
+          python src/download_wavs.py \
+            --training-csv-path /tmp/empty_training_3s_samples.csv \
+            --testing-csv-path output/csv/testing_60s_samples.csv
 
       - name: Generate model comparison results
         run: python src/compare_models.py > model-comparison.txt
