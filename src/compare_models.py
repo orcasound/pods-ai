@@ -53,7 +53,7 @@ MODEL_TYPE_TO_INFERENCE_TYPE = {
     "podsai": "podsai",
 }
 WAV_FILENAME_RE = re.compile(
-    r"^(?P<node_name>.+)_(?P<start_timestamp>\d{4}_\d{2}_\d{2}_\d{2}_\d{2}_\d{2}_[A-Za-z]+)$"
+    r"^(?P<node_name>.+)_(?P<start_timestamp>\d{4}_\d{2}_\d{2}_\d{2}_\d{2}_\d{2}_(?:PST|PDT|UTC))$"
 )
 
 
@@ -227,7 +227,7 @@ def load_test_samples(wav_dir: Path, max_samples: Optional[int] = None,
     try:
         for wav_path in sorted(wav_dir.rglob("*.wav")):
             relative_path = wav_path.relative_to(wav_dir)
-            if len(relative_path.parts) < 2:
+            if len(relative_path.parts) != 2:
                 continue
 
             category = relative_path.parts[0]

@@ -180,6 +180,18 @@ class TestLoadTestSamples:
         samples = load_test_samples(wav_dir)
         assert samples == []
 
+    def test_skips_nested_wav_paths(self, tmp_path):
+        """load_test_samples ignores WAV files outside wav_dir/<category>/<file>.wav layout."""
+        from compare_models import load_test_samples
+
+        wav_dir = tmp_path / "testing-wav"
+        nested_wav = wav_dir / "resident" / "archive" / "rpi-lab_2023_01_01_00_00_00_PST.wav"
+        nested_wav.parent.mkdir(parents=True, exist_ok=True)
+        nested_wav.touch()
+
+        samples = load_test_samples(wav_dir)
+        assert samples == []
+
 
 # ---------------------------------------------------------------------------
 # Tests for find_wav_file()
@@ -818,6 +830,22 @@ class TestMainCLI:
         with patch.object(sys, "argv", test_args):
             result = main()
         assert result == 1
+
+    def test_rejects_removed_testing_csv_flag(self, tmp_path):
+        """main() rejects the removed --testing-csv option."""
+        from compare_models import main
+
+        wav_dir = tmp_path / "testing-wav"
+        wav_dir.mkdir()
+        test_args = [
+            "compare_models.py",
+            "--testing-csv", "output/csv/testing_60s_samples.csv",
+            "--wav-dir", str(wav_dir),
+        ]
+        with patch.object(sys, "argv", test_args):
+            with pytest.raises(SystemExit) as exc_info:
+                main()
+        assert exc_info.value.code == 2
 
     def test_returns_1_for_unknown_model(self, tmp_path):
         """main() returns 1 when an unrecognised model type is specified."""
