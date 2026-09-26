@@ -54,18 +54,6 @@ MODEL_TYPE_TO_INFERENCE_TYPE = {
 
 
 @dataclass
-class TestSample:
-    """A single detection row used as a test sample."""
-
-    category: str
-    node_name: str
-    start_timestamp: str
-    uri: str
-    description: str
-    notes: str
-
-
-@dataclass
 class ModelResult:
     """Accumulated results for a single model across all test samples."""
 
@@ -206,7 +194,7 @@ class ModelResult:
 
 
 def load_test_samples(wav_dir: Path, max_samples: Optional[int] = None,
-                      category_filter: Optional[str] = None) -> list[TestSample]:
+                      category_filter: Optional[str] = None) -> list[Path]:
     """
     Load test samples from WAV files in the testing directory.
 
@@ -217,7 +205,7 @@ def load_test_samples(wav_dir: Path, max_samples: Optional[int] = None,
                         If None, load samples from all categories.
 
     Returns:
-        List of TestSample objects, or an empty list on error.
+        List of WAV file paths, or an empty list on error.
     """
     samples = []
     try:
@@ -234,80 +222,13 @@ def load_test_samples(wav_dir: Path, max_samples: Optional[int] = None,
             if category_filter is not None and category != category_filter:
                 continue
 
-            parsed_filename = _parse_wav_filename(wav_path.stem)
-            if parsed_filename is None:
-                continue
-            node_name, start_timestamp = parsed_filename
-
-            samples.append(TestSample(
-                category=category,
-                node_name=node_name,
-                start_timestamp=start_timestamp,
-                uri="",
-                description="",
-                notes="",
-            ))
+            samples.append(wav_path)
 
             if max_samples is not None and len(samples) >= max_samples:
                 break
     except OSError as e:
         print(f"Error reading WAV files from {wav_dir}: {e}", file=sys.stderr)
     return samples
-
-
-def _parse_wav_filename(wav_stem: str) -> Optional[tuple[str, str]]:
-    """Parse a WAV stem into node name and timestamp.
-
-    Expected pattern: ``<node_name>_<YYYY>_<MM>_<DD>_<HH>_<MM>_<SS>_<TZ>``.
-    The timezone suffix is intentionally flexible to support both existing and
-    future testing manifests.
-    """
-    parts = wav_stem.rsplit("_", 7)
-    if len(parts) != 8:
-        return None
-
-    node_name, year, month, day, hour, minute, second, timezone = parts
-    numeric_parts = [
-        (year, 4),
-        (month, 2),
-        (day, 2),
-        (hour, 2),
-        (minute, 2),
-        (second, 2),
-    ]
-    if (
-        not node_name
-        or not timezone
-        or not timezone.isalpha()
-        or not timezone.isupper()
-        or not 1 <= len(timezone) <= 5
-        or any((not value.isdigit() or len(value) != width) for value, width in numeric_parts)
-    ):
-        return None
-
-    return node_name, "_".join([year, month, day, hour, minute, second, timezone])
-
-
-def find_wav_file(sample: TestSample, wav_dir: Path) -> Optional[Path]:
-    """
-    Find the 60-second WAV file for a testing sample.
-
-    WAV files are saved by download_wavs.py as:
-        <wav_dir>/<category>/<node_name_with_dashes>_<start_timestamp>.wav
-
-    Args:
-        sample: The testing sample.
-        wav_dir: Root directory of testing WAV files.
-
-    Returns:
-        Path to the WAV file, or None if not found.
-    """
-    node_name_in_filename = sample.node_name.replace("_", "-")
-    wav_filename = f"{node_name_in_filename}_{sample.start_timestamp}.wav"
-    wav_path = wav_dir / sample.category / wav_filename
-    if wav_path.exists():
-        return wav_path
-    return None
 
 
 def is_resident_prediction(global_prediction_label: str, model_type: str) -> bool:
@@ -378,10 +299,10 @@ def _labels_seen_in_confusion_matrix(confusion_matrix: dict[str, dict[str, int]]
 def evaluate_model(
     model_type: str,
     model_path: Optional[str],
-    samples: list[TestSample],
+    samples: list[Path],
     wav_dir: Path,
+    result_model_type: str,
     model_revision: Optional[str] = None,
-    result_model_type: Optional[str] = None,
 ) -> ModelResult:
     """
     Run a model against all test samples and accumulate results.
@@ -390,12 +311,11 @@ def evaluate_model(
         model_type: One of 'fastai', 'orcahello', 'oldpodsai', or 'podsai'.
                     'oldpodsai' is mapped to 'podsai' inference internally.
         model_path: Path to the model (or HuggingFace Hub model ID).
-        samples: List of testing samples.
+        samples: List of WAV file paths.
         wav_dir: Root directory containing testing WAV files.
+        result_model_type: Display name to store in ModelResult.model_type.
         model_revision: Git commit hash to pin the HuggingFace Hub model revision.
                         Only used when model_path is a Hub model ID (not a local path).
-        result_model_type: Optional display name to store in ModelResult.model_type.
-                           If omitted, model_type is used.
 
     Returns:
         ModelResult with counts of correct, false positive, and false negative predictions,
@@ -403,17 +323,13 @@ def evaluate_model(
     """
     result = ModelResult(model_type=result_model_type or model_type, total=len(samples))
 
-    for sample in samples:
-        wav_path = find_wav_file(sample, wav_dir)
-        if wav_path is None:
-            print(
-                f"  [{model_type}] Skipping {sample.category}/{sample.node_name}"
-                f"/{sample.start_timestamp}: WAV not found"
-            )
-            result.skipped += 1
+    for wav_path in samples:
+        relative_path = wav_path.relative_to(wav_dir)
+        if len(relative_path.parts) != 2:
             continue
 
-        expected_resident = (sample.category == RESIDENT_LABEL)
+        category = relative_path.parts[0]
+        expected_resident = (category == RESIDENT_LABEL)
 
         try:
             inference_result = run_inference(str(wav_path), model_type=model_type,
@@ -433,7 +349,7 @@ def evaluate_model(
         predicted_resident = RESIDENT_LABEL in predicted_labels
 
         if is_correct_prediction(
-            sample.category, predicted_label, model_type, predicted_labels
+            category, predicted_label, model_type, predicted_labels
         ):
             result.correct += 1
             status = "correct"
@@ -447,7 +363,7 @@ def evaluate_model(
             status = "incorrect"
 
         # Keep a primary-label matrix for display and the complete set for metrics.
-        actual_label = sample.category
+        actual_label = category
         result.prediction_labels.setdefault(actual_label, []).append(set(predicted_labels))
         if actual_label not in result.confusion_matrix:
             result.confusion_matrix[actual_label] = {}
@@ -455,7 +371,7 @@ def evaluate_model(
         preds[predicted_label] = preds.get(predicted_label, 0) + 1
 
         print(
-            f"  [{model_type}] {sample.category}/{sample.node_name}/{sample.start_timestamp}: "
+            f"  [{model_type}] {relative_path}: "
             f"predicted={predicted_label!r} -> {status} ({predict_time:.2f}s)"
         )
 
@@ -725,8 +641,8 @@ def main() -> int:
             model_path=model_paths[model_type],
             samples=samples,
             wav_dir=wav_dir,
-            model_revision=model_revisions[model_type],
             result_model_type=model_type,
+            model_revision=model_revisions[model_type],
         )
         results.append(model_result)
         print()
