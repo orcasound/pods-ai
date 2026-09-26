@@ -40,6 +40,8 @@ jobs:
             esm.ubuntu.com:443
             files.pythonhosted.org:443
             github.com:443
+            uploads.github.com:443
+            *.githubusercontent.com:443
             huggingface.co:443
             cdn-lfs.huggingface.co:443
             pypi.org:443
@@ -76,6 +78,11 @@ jobs:
           fi
 
           if [ "${{ github.ref_type }}" = "tag" ]; then
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ "${{ github.event.before }}" = "0000000000000000000000000000000000000000" ]; then
             echo "should_run=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
