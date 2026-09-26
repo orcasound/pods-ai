@@ -96,7 +96,7 @@ class TestLoadTestSamples:
 
         wav_paths = load_test_samples(wav_dir)
         assert len(wav_paths) == 3
-        assert {get_category_from_path(s) for s in wav_paths} == {"resident", "human", "humpback"}
+        assert {get_category_from_path(s, wav_dir) for s in wav_paths} == {"resident", "human", "humpback"}
 
 
     def test_returns_empty_list_for_missing_dir(self):
@@ -124,7 +124,7 @@ class TestLoadTestSamples:
 
         wav_paths = load_test_samples(wav_dir, category_filter="resident")
         assert len(wav_paths) == 1
-        assert all(get_category_from_path(s) == "resident" for s in wav_paths)
+        assert all(get_category_from_path(s, wav_dir) == "resident" for s in wav_paths)
 
     def test_category_filter_returns_empty_for_no_match(self, tmp_path):
         """load_test_samples returns [] when category filter matches no rows."""
@@ -149,7 +149,7 @@ class TestLoadTestSamples:
 
         wav_paths = load_test_samples(wav_dir, max_samples=2, category_filter="humpback")
         assert len(wav_paths) == 2
-        assert all(get_category_from_path(s) == "humpback" for s in wav_paths)
+        assert all(get_category_from_path(s, wav_dir) == "humpback" for s in wav_paths)
 
 
     def test_loads_uppercase_wav_extension(self, tmp_path):
@@ -163,7 +163,7 @@ class TestLoadTestSamples:
 
         wav_paths = load_test_samples(wav_dir)
         assert len(wav_paths) == 1
-        assert get_category_from_path(wav_paths[0]) == "resident"
+        assert get_category_from_path(wav_paths[0], wav_dir) == "resident"
 
 
 # ---------------------------------------------------------------------------

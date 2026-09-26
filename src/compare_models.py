@@ -193,8 +193,8 @@ class ModelResult:
         return self.false_negative_count_for_label(label) / actual_count
 
 
-def get_category_from_path(wav_path: Path) -> str:
-    relative_path = wav_path.relative_to(wav_path.parents[1])
+def get_category_from_path(wav_path: Path, wav_dir: Path) -> str:
+    relative_path = wav_path.relative_to(wav_dir)
     if len(relative_path.parts) != 2:
         return None
 
@@ -223,8 +223,10 @@ def load_test_samples(wav_dir: Path, max_samples: Optional[int] = None,
             if path.is_file() and path.suffix.lower() == ".wav"
         )
         for wav_path in wav_paths:
-            category = get_category_from_path(wav_path)
-            if category_filter is not None and category != category_filter:
+            category = get_category_from_path(wav_path, wav_dir)
+            if category is None:
+                continue
+            if category != category_filter:
                 continue
 
             samples.append(wav_path)
@@ -313,11 +315,11 @@ def evaluate_model(
     result = ModelResult(model_type=result_model_type or model_type, total=len(wav_paths))
 
     for wav_path in wav_paths:
-        relative_path = wav_path.relative_to(wav_dir)
-        category = get_category_from_path(wav_path)
+        category = get_category_from_path(wav_path, wav_dir)
         if category is None:
             continue
         expected_resident = (category == RESIDENT_LABEL)
+        relative_path = wav_path.relative_to(wav_dir)
 
         try:
             inference_result = run_inference(str(wav_path), model_type=model_type,
