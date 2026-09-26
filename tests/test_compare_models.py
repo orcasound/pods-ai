@@ -112,6 +112,19 @@ class TestLoadTestSamples:
         samples = load_test_samples(Path("/nonexistent/testing-wav"))
         assert samples == []
 
+    def test_loads_non_pst_timestamp_suffix(self, tmp_path):
+        """load_test_samples accepts WAV timestamps with non-PST timezone suffixes."""
+        from compare_models import load_test_samples
+
+        wav_dir = tmp_path / "testing-wav"
+        wav = wav_dir / "abiotic" / "dclde-orcasound-lab_2017_09_27_08_03_00_PDT.wav"
+        wav.parent.mkdir(parents=True, exist_ok=True)
+        wav.touch()
+
+        samples = load_test_samples(wav_dir)
+        assert len(samples) == 1
+        assert samples[0].start_timestamp == "2017_09_27_08_03_00_PDT"
+
     def test_respects_max_samples_limit(self, tmp_path):
         """load_test_samples respects max_samples parameter."""
         from compare_models import load_test_samples

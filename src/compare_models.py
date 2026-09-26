@@ -53,7 +53,7 @@ MODEL_TYPE_TO_INFERENCE_TYPE = {
     "podsai": "podsai",
 }
 WAV_FILENAME_RE = re.compile(
-    r"^(?P<node_name>.+)_(?P<start_timestamp>\d{4}_\d{2}_\d{2}_\d{2}_\d{2}_\d{2}_PST)$"
+    r"^(?P<node_name>.+)_(?P<start_timestamp>\d{4}_\d{2}_\d{2}_\d{2}_\d{2}_\d{2}_[A-Za-z]+)$"
 )
 
 
