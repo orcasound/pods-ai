@@ -28,8 +28,9 @@ import csv
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
+from model_inference import get_model_inference
 from run_inference import run_inference
 
 RESIDENT_LABEL = "resident"
@@ -343,6 +344,7 @@ def evaluate_model(
     wav_dir: Path,
     model_revision: Optional[str] = None,
     result_model_type: Optional[str] = None,
+    inference_model: Optional[Any] = None,
 ) -> ModelResult:
     """
     Run a model against all test samples and accumulate results.
@@ -357,18 +359,20 @@ def evaluate_model(
                         Only used when model_path is a Hub model ID (not a local path).
         result_model_type: Optional display name to store in ModelResult.model_type.
                            If omitted, model_type is used.
+        inference_model: Optional preloaded model inference instance to reuse.
 
     Returns:
         ModelResult with counts of correct, false positive, and false negative predictions,
         plus timing information for predict() calls.
     """
     result = ModelResult(model_type=result_model_type or model_type, total=len(samples))
+    display_model_type = result.model_type
 
     for sample in samples:
         wav_path = find_wav_file(sample, wav_dir)
         if wav_path is None:
             print(
-                f"  [{model_type}] Skipping {sample.category}/{sample.node_name}"
+                f"  [{display_model_type}] Skipping {sample.category}/{sample.node_name}"
                 f"/{sample.start_timestamp}: WAV not found"
             )
             result.skipped += 1
@@ -379,11 +383,12 @@ def evaluate_model(
         try:
             inference_result = run_inference(str(wav_path), model_type=model_type,
                                              model_path=model_path,
-                                             model_revision=model_revision)
+                                             model_revision=model_revision,
+                                             inference_model=inference_model)
             predict_time = inference_result.get("predict_time", 0.0)
             result.predict_times.append(predict_time)
         except Exception as e:
-            print(f"  [{model_type}] Error on {wav_path.name}: {e}")
+            print(f"  [{display_model_type}] Error on {wav_path.name}: {e}")
             result.skipped += 1
             continue
 
@@ -416,7 +421,7 @@ def evaluate_model(
         preds[predicted_label] = preds.get(predicted_label, 0) + 1
 
         print(
-            f"  [{model_type}] {sample.category}/{sample.node_name}/{sample.start_timestamp}: "
+            f"  [{display_model_type}] {sample.category}/{sample.node_name}/{sample.start_timestamp}: "
             f"predicted={predicted_label!r} -> {status} ({predict_time:.2f}s)"
         )
 
@@ -695,6 +700,15 @@ def main() -> int:
     for model_type in models:
         print(f"Evaluating model: {model_type}")
         inference_model_type = MODEL_TYPE_TO_INFERENCE_TYPE[model_type]
+        try:
+            inference_model = get_model_inference(
+                model_type=inference_model_type,
+                model_path=model_paths[model_type],
+                model_revision=model_revisions[model_type],
+            )
+        except Exception as e:
+            print(f"  [{model_type}] Warning: preloading failed ({e}); loading per file instead.")
+            inference_model = None
         model_result = evaluate_model(
             model_type=inference_model_type,
             model_path=model_paths[model_type],
@@ -702,6 +716,7 @@ def main() -> int:
             wav_dir=wav_dir,
             model_revision=model_revisions[model_type],
             result_model_type=model_type,
+            inference_model=inference_model,
         )
         results.append(model_result)
         print()
