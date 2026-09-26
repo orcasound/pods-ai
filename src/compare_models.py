@@ -193,6 +193,15 @@ class ModelResult:
         return self.false_negative_count_for_label(label) / actual_count
 
 
+def get_category_from_path(wav_path: Path) -> str:
+    relative_path = wav_path.relative_to(wav_path.parents[1])
+    if len(relative_path.parts) != 2:
+        return None
+
+    category = relative_path.parts[0]
+    return category
+
+
 def load_test_samples(wav_dir: Path, max_samples: Optional[int] = None,
                       category_filter: Optional[str] = None) -> list[Path]:
     """
@@ -214,11 +223,7 @@ def load_test_samples(wav_dir: Path, max_samples: Optional[int] = None,
             if path.is_file() and path.suffix.lower() == ".wav"
         )
         for wav_path in wav_paths:
-            relative_path = wav_path.relative_to(wav_dir)
-            if len(relative_path.parts) != 2:
-                continue
-
-            category = relative_path.parts[0]
+            category = get_category_from_path(wav_path)
             if category_filter is not None and category != category_filter:
                 continue
 
@@ -229,23 +234,6 @@ def load_test_samples(wav_dir: Path, max_samples: Optional[int] = None,
     except OSError as e:
         print(f"Error reading WAV files from {wav_dir}: {e}", file=sys.stderr)
     return samples
-
-
-def is_resident_prediction(global_prediction_label: str, model_type: str) -> bool:
-    """
-    Determine whether a model's prediction corresponds to "resident" (SRKW).
-
-    All model types (fastai, orcahello, oldpodsai, podsai) use "resident" as the
-    positive class label, so the check is the same regardless of model type.
-
-    Args:
-        global_prediction_label: The model's predicted class label.
-        model_type: The model type ('fastai', 'orcahello', or 'podsai').
-
-    Returns:
-        True if the prediction is "resident"; False otherwise.
-    """
-    return global_prediction_label == RESIDENT_LABEL
 
 
 def is_exact_match_model(model_type: str) -> bool:
@@ -299,10 +287,10 @@ def _labels_seen_in_confusion_matrix(confusion_matrix: dict[str, dict[str, int]]
 def evaluate_model(
     model_type: str,
     model_path: Optional[str],
-    samples: list[Path],
+    wav_paths: list[Path],
     wav_dir: Path,
-    result_model_type: str,
     model_revision: Optional[str] = None,
+    result_model_type: Optional[str] = None,
 ) -> ModelResult:
     """
     Run a model against all test samples and accumulate results.
@@ -311,24 +299,24 @@ def evaluate_model(
         model_type: One of 'fastai', 'orcahello', 'oldpodsai', or 'podsai'.
                     'oldpodsai' is mapped to 'podsai' inference internally.
         model_path: Path to the model (or HuggingFace Hub model ID).
-        samples: List of WAV file paths.
+        wav_paths: List of WAV file paths.
         wav_dir: Root directory containing testing WAV files.
-        result_model_type: Display name to store in ModelResult.model_type.
         model_revision: Git commit hash to pin the HuggingFace Hub model revision.
                         Only used when model_path is a Hub model ID (not a local path).
+        result_model_type: Optional display name to store in ModelResult.model_type.
+                           If omitted, model_type is used.
 
     Returns:
         ModelResult with counts of correct, false positive, and false negative predictions,
         plus timing information for predict() calls.
     """
-    result = ModelResult(model_type=result_model_type or model_type, total=len(samples))
+    result = ModelResult(model_type=result_model_type or model_type, total=len(wav_paths))
 
-    for wav_path in samples:
+    for wav_path in wav_paths:
         relative_path = wav_path.relative_to(wav_dir)
-        if len(relative_path.parts) != 2:
+        category = get_category_from_path(wav_path)
+        if category is None:
             continue
-
-        category = relative_path.parts[0]
         expected_resident = (category == RESIDENT_LABEL)
 
         try:
@@ -614,16 +602,16 @@ def main() -> int:
         print(f"Error: --max-samples must be a positive integer, got {args.max_samples}", file=sys.stderr)
         return 1
 
-    samples = load_test_samples(wav_dir, max_samples=args.max_samples,
+    wav_paths = load_test_samples(wav_dir, max_samples=args.max_samples,
                                 category_filter=args.category)
-    if not samples:
+    if not wav_paths:
         if args.category:
             print(f"Error: no test samples found for category '{args.category}'.", file=sys.stderr)
         else:
             print("Error: no test samples found.", file=sys.stderr)
         return 1
 
-    print(f"Loaded {len(samples)} test samples from WAV files in {wav_dir}")
+    print(f"Loaded {len(wav_paths)} test samples from WAV files in {wav_dir}")
     if args.category:
         print(f"  (filtered to category: {args.category})")
     if args.max_samples is not None:
@@ -639,7 +627,7 @@ def main() -> int:
         model_result = evaluate_model(
             model_type=inference_model_type,
             model_path=model_paths[model_type],
-            samples=samples,
+            wav_paths=wav_paths,
             wav_dir=wav_dir,
             result_model_type=model_type,
             model_revision=model_revisions[model_type],
