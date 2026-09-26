@@ -278,6 +278,9 @@ def _parse_wav_filename(wav_stem: str) -> Optional[tuple[str, str]]:
     if (
         not node_name
         or not timezone
+        or not timezone.isalpha()
+        or not timezone.isupper()
+        or not 1 <= len(timezone) <= 5
         or any((not value.isdigit() or len(value) != width) for value, width in numeric_parts)
     ):
         return None

@@ -205,6 +205,18 @@ class TestLoadTestSamples:
         assert len(samples) == 1
         assert samples[0].category == "resident"
 
+    def test_skips_non_timezone_suffix(self, tmp_path):
+        """load_test_samples rejects timestamp suffixes that are not timezone-like."""
+        from compare_models import load_test_samples
+
+        wav_dir = tmp_path / "testing-wav"
+        wav = wav_dir / "resident" / "rpi-lab_2023_01_01_00_00_00_123.wav"
+        wav.parent.mkdir(parents=True, exist_ok=True)
+        wav.touch()
+
+        samples = load_test_samples(wav_dir)
+        assert samples == []
+
 
 # ---------------------------------------------------------------------------
 # Tests for find_wav_file()
