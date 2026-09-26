@@ -5,6 +5,8 @@ name: Generate Model Comparison
 
 on:
   push:
+    branches:
+      - '**'
     tags:
       - model-*
     paths:
