@@ -5,16 +5,15 @@
 Unit tests for compare_models.py.
 
 Tests cover:
-- load_test_samples() CSV parsing
+- load_test_samples() WAV discovery
 - find_wav_file() path construction
-- is_resident_prediction() label mapping
+- is_correct_prediction() label mapping
 - evaluate_model() with mocked run_inference
 - print_summary() output
 - ModelResult property calculations, including whale-class F1 and per-whale-class FP/FN rates
 - main() CLI error handling
 """
 
-import csv
 import sys
 from pathlib import Path
 from unittest.mock import patch
@@ -25,17 +24,6 @@ import pytest
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
-def _write_csv(path, rows, fieldnames=None):
-    """Write a CSV file with the given rows."""
-    if not fieldnames:
-        fieldnames = ["Category", "NodeName", "StartTimestamp", "URI", "Description", "Notes", "Confidence"]
-    with open(path, "w", newline="", encoding="utf-8") as f:
-        import csv as _csv
-        writer = _csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
-        writer.writeheader()
-        writer.writerows(rows)
-
 
 def _make_testing_rows():
     """Return a list of testing sample rows."""
@@ -69,6 +57,13 @@ def _make_testing_rows():
         },
     ]
 
+def _make_wav(wav_dir, category="resident", node_name="rpi_orcasound_lab", start_timestamp="2023_08_18_00_59_53_PST"):
+    """Create a dummy WAV file for the sample and return a list containing the filename."""
+    node_name_in_filename = node_name.replace("_", "-")
+    wav_file = wav_dir / category / f"{node_name_in_filename}_{start_timestamp}.wav"
+    wav_file.parent.mkdir(parents=True, exist_ok=True)
+    wav_file.touch()
+    return [wav_file]
 
 def test_multilabel_prediction_counts_matching_species_as_correct():
     """Exact-match models accept a supported class in a multi-label result."""
@@ -85,256 +80,90 @@ def test_multilabel_prediction_counts_matching_species_as_correct():
 class TestLoadTestSamples:
     """Tests for load_test_samples()."""
 
+    def _write_testing_wavs(self, wav_dir: Path, rows):
+        """Create WAV files from testing rows under category directories."""
+        for row in rows:
+            node = row["NodeName"].replace("_", "-")
+            wav = wav_dir / row["Category"] / f"{node}_{row['StartTimestamp']}.wav"
+            wav.parent.mkdir(parents=True, exist_ok=True)
+            wav.touch()
+
     def test_loads_all_samples(self, tmp_path):
-        """load_test_samples loads all rows from testing_60s_samples.csv."""
-        from compare_models import load_test_samples
-        testing_rows = _make_testing_rows()
+        """load_test_samples loads all matching WAV files under wav_dir."""
+        from compare_models import load_test_samples, get_category_from_path
+        wav_dir = tmp_path / "testing-wav"
+        self._write_testing_wavs(wav_dir, _make_testing_rows())
 
-        testing_csv = tmp_path / "testing_60s_samples.csv"
-        _write_csv(testing_csv, testing_rows)
+        wav_paths = load_test_samples(wav_dir)
+        assert len(wav_paths) == 3
+        assert {get_category_from_path(s) for s in wav_paths} == {"resident", "human", "humpback"}
 
-        samples = load_test_samples(testing_csv)
-        assert len(samples) == 3
-        uris = {s.uri for s in samples}
-        assert "https://example.com/1" in uris
-        assert "https://example.com/2" in uris
-        assert "https://example.com/3" in uris
 
-    def test_parses_fields_correctly(self, tmp_path):
-        """load_test_samples correctly maps CSV columns to TestSample fields."""
-        from compare_models import load_test_samples
-        testing_rows = _make_testing_rows()
-
-        testing_csv = tmp_path / "testing_60s_samples.csv"
-        _write_csv(testing_csv, testing_rows)
-
-        samples = load_test_samples(testing_csv)
-        first = samples[0]
-        assert first.category == "resident"
-        assert first.node_name == "rpi_orcasound_lab"
-        assert first.start_timestamp == "2023_08_18_00_59_53_PST"
-        assert first.uri == "https://example.com/1"
-        assert first.notes == "tp_human_only"
-
-    def test_returns_empty_list_for_missing_file(self, tmp_path):
-        """load_test_samples returns [] when testing_60s_samples.csv is missing."""
+    def test_returns_empty_list_for_missing_dir(self):
+        """load_test_samples returns [] when wav_dir does not exist."""
         from compare_models import load_test_samples
 
-        samples = load_test_samples(Path("/nonexistent/testing_60s_samples.csv"))
-        assert samples == []
+        wav_paths = load_test_samples(Path("/nonexistent/testing-wav"))
+        assert wav_paths == []
+
 
     def test_respects_max_samples_limit(self, tmp_path):
         """load_test_samples respects max_samples parameter."""
         from compare_models import load_test_samples
-        testing_rows = _make_testing_rows()
+        wav_dir = tmp_path / "testing-wav"
+        self._write_testing_wavs(wav_dir, _make_testing_rows())
 
-        testing_csv = tmp_path / "testing_60s_samples.csv"
-        _write_csv(testing_csv, testing_rows)
-
-        samples = load_test_samples(testing_csv, max_samples=2)
-        assert len(samples) == 2
+        wav_paths = load_test_samples(wav_dir, max_samples=2)
+        assert len(wav_paths) == 2
 
     def test_category_filter_returns_only_matching_samples(self, tmp_path):
         """load_test_samples returns only samples matching the category filter."""
-        from compare_models import load_test_samples
-        testing_rows = _make_testing_rows()
+        from compare_models import load_test_samples, get_category_from_path
+        wav_dir = tmp_path / "testing-wav"
+        self._write_testing_wavs(wav_dir, _make_testing_rows())
 
-        testing_csv = tmp_path / "testing_60s_samples.csv"
-        _write_csv(testing_csv, testing_rows)
-
-        samples = load_test_samples(testing_csv, category_filter="resident")
-        assert len(samples) == 1
-        assert all(s.category == "resident" for s in samples)
+        wav_paths = load_test_samples(wav_dir, category_filter="resident")
+        assert len(wav_paths) == 1
+        assert all(get_category_from_path(s) == "resident" for s in wav_paths)
 
     def test_category_filter_returns_empty_for_no_match(self, tmp_path):
         """load_test_samples returns [] when category filter matches no rows."""
         from compare_models import load_test_samples
-        testing_rows = _make_testing_rows()
+        wav_dir = tmp_path / "testing-wav"
+        self._write_testing_wavs(wav_dir, _make_testing_rows())
 
-        testing_csv = tmp_path / "testing_60s_samples.csv"
-        _write_csv(testing_csv, testing_rows)
-
-        samples = load_test_samples(testing_csv, category_filter="transient")
-        assert samples == []
+        wav_paths = load_test_samples(wav_dir, category_filter="transient")
+        assert wav_paths == []
 
     def test_category_filter_combined_with_max_samples(self, tmp_path):
         """load_test_samples applies both category_filter and max_samples."""
-        from compare_models import load_test_samples
+        from compare_models import load_test_samples, get_category_from_path
 
+        wav_dir = tmp_path / "testing-wav"
         rows = [
-            {"Category": "humpback", "NodeName": "rpi_a", "StartTimestamp": "2024_01_01_00_00_00_PST",
-             "URI": "https://example.com/1", "Description": "", "Notes": "tp_machine_only", "Confidence": ""},
-            {"Category": "humpback", "NodeName": "rpi_b", "StartTimestamp": "2024_01_01_00_01_00_PST",
-             "URI": "https://example.com/2", "Description": "", "Notes": "tp_machine_only", "Confidence": ""},
-            {"Category": "humpback", "NodeName": "rpi_c", "StartTimestamp": "2024_01_01_00_02_00_PST",
-             "URI": "https://example.com/3", "Description": "", "Notes": "tp_machine_only", "Confidence": ""},
+            {"Category": "humpback", "NodeName": "rpi_a", "StartTimestamp": "2024_01_01_00_00_00_PST"},
+            {"Category": "humpback", "NodeName": "rpi_b", "StartTimestamp": "2024_01_01_00_01_00_PST"},
+            {"Category": "humpback", "NodeName": "rpi_c", "StartTimestamp": "2024_01_01_00_02_00_PST"},
         ]
-        testing_csv = tmp_path / "testing_60s_samples.csv"
-        _write_csv(testing_csv, rows)
+        self._write_testing_wavs(wav_dir, rows)
 
-        samples = load_test_samples(testing_csv, max_samples=2, category_filter="humpback")
-        assert len(samples) == 2
-        assert all(s.category == "humpback" for s in samples)
-
-    def test_handles_csv_error(self, tmp_path):
-        """load_test_samples returns [] on csv.Error."""
-        import csv
-        from unittest.mock import patch
-        from compare_models import load_test_samples
-
-        testing_csv = tmp_path / "testing_60s_samples.csv"
-        testing_csv.write_text("Category,NodeName,StartTimestamp,URI,Description,Notes\n")
-
-        # Patch DictReader iteration to raise csv.Error mid-read.
-        with patch("compare_models.csv.DictReader") as mock_reader_cls:
-            mock_reader_cls.return_value.__iter__ = lambda self: iter([])
-            mock_reader_cls.return_value.__enter__ = lambda self: self
-            mock_reader_cls.side_effect = csv.Error("simulated CSV parse error")
-            samples = load_test_samples(testing_csv)
-
-        assert samples == []
-
-    def test_handles_unicode_decode_error(self, tmp_path):
-        """load_test_samples returns [] for files with encoding issues."""
-        from compare_models import load_test_samples
-        
-        testing_csv = tmp_path / "testing_60s_samples.csv"
-        # Write file with invalid UTF-8
-        with open(testing_csv, "wb") as f:
-            f.write(b"Category,NodeName,StartTimestamp,URI,Description,Notes\n")
-            f.write(b"resident,rpi_lab,2023_01_01_00_00_00_PST,http://example.com,test\x8f,notes\n")
-        
-        samples = load_test_samples(testing_csv)
-        assert samples == []
+        wav_paths = load_test_samples(wav_dir, max_samples=2, category_filter="humpback")
+        assert len(wav_paths) == 2
+        assert all(get_category_from_path(s) == "humpback" for s in wav_paths)
 
 
-# ---------------------------------------------------------------------------
-# Tests for find_wav_file()
-# ---------------------------------------------------------------------------
+    def test_loads_uppercase_wav_extension(self, tmp_path):
+        """load_test_samples accepts uppercase WAV filename extensions."""
+        from compare_models import load_test_samples, get_category_from_path
 
-class TestFindWavFile:
-    """Tests for find_wav_file()."""
-
-    def test_returns_path_when_wav_exists(self, tmp_path):
-        """find_wav_file returns the correct path when the WAV file is present."""
-        from compare_models import TestSample, find_wav_file
-
-        sample = TestSample(
-            category="resident",
-            node_name="rpi_orcasound_lab",
-            start_timestamp="2023_08_18_00_59_53_PST",
-            uri="",
-            description="",
-            notes="tp_human_only",
-        )
         wav_dir = tmp_path / "testing-wav"
-        expected = wav_dir / "resident" / "rpi-orcasound-lab_2023_08_18_00_59_53_PST.wav"
-        expected.parent.mkdir(parents=True)
-        expected.touch()
+        wav = wav_dir / "resident" / "rpi-lab_2023_01_01_00_00_00_PST.WAV"
+        wav.parent.mkdir(parents=True, exist_ok=True)
+        wav.touch()
 
-        result = find_wav_file(sample, wav_dir)
-        assert result == expected
-
-    def test_returns_none_when_wav_missing(self, tmp_path):
-        """find_wav_file returns None when the WAV file does not exist."""
-        from compare_models import TestSample, find_wav_file
-
-        sample = TestSample(
-            category="resident",
-            node_name="rpi_orcasound_lab",
-            start_timestamp="2023_08_18_00_59_53_PST",
-            uri="",
-            description="",
-            notes="tp_human_only",
-        )
-        wav_dir = tmp_path / "testing-wav"
-        wav_dir.mkdir()
-
-        result = find_wav_file(sample, wav_dir)
-        assert result is None
-
-    def test_replaces_underscores_with_dashes_in_node_name(self, tmp_path):
-        """find_wav_file converts underscores to dashes in the node name portion of the filename."""
-        from compare_models import TestSample, find_wav_file
-
-        sample = TestSample(
-            category="human",
-            node_name="rpi_sunset_bay",
-            start_timestamp="2024_08_07_11_23_23_PST",
-            uri="",
-            description="",
-            notes="fp_machine_only",
-        )
-        wav_dir = tmp_path / "testing-wav"
-        expected = wav_dir / "human" / "rpi-sunset-bay_2024_08_07_11_23_23_PST.wav"
-        expected.parent.mkdir(parents=True)
-        expected.touch()
-
-        result = find_wav_file(sample, wav_dir)
-        assert result == expected
-
-
-# ---------------------------------------------------------------------------
-# Tests for is_resident_prediction()
-# ---------------------------------------------------------------------------
-
-class TestIsResidentPrediction:
-    """Tests for is_resident_prediction()."""
-
-    def test_fastai_resident_is_resident(self):
-        """FastAI "resident" prediction maps to resident."""
-        from compare_models import is_resident_prediction
-        assert is_resident_prediction("resident", "fastai") is True
-
-    def test_fastai_other_is_not_resident(self):
-        """FastAI "other" prediction maps to non-resident."""
-        from compare_models import is_resident_prediction
-        assert is_resident_prediction("other", "fastai") is False
-
-    def test_orcahello_resident_is_resident(self):
-        """OrcaHello "resident" prediction maps to resident."""
-        from compare_models import is_resident_prediction
-        assert is_resident_prediction("resident", "orcahello") is True
-
-    def test_orcahello_other_is_not_resident(self):
-        """OrcaHello "other" prediction maps to non-resident."""
-        from compare_models import is_resident_prediction
-        assert is_resident_prediction("other", "orcahello") is False
-
-    def test_podsai_resident_is_resident(self):
-        """PODS-AI "resident" prediction maps to resident."""
-        from compare_models import is_resident_prediction
-        assert is_resident_prediction("resident", "podsai") is True
-
-    def test_podsai_water_is_not_resident(self):
-        """PODS-AI "water" prediction maps to non-resident."""
-        from compare_models import is_resident_prediction
-        assert is_resident_prediction("water", "podsai") is False
-
-    def test_podsai_transient_is_not_resident(self):
-        """PODS-AI "transient" prediction maps to non-resident."""
-        from compare_models import is_resident_prediction
-        assert is_resident_prediction("transient", "podsai") is False
-
-    def test_podsai_humpback_is_not_resident(self):
-        """PODS-AI "humpback" prediction maps to non-resident."""
-        from compare_models import is_resident_prediction
-        assert is_resident_prediction("humpback", "podsai") is False
-
-    def test_podsai_human_is_not_resident(self):
-        """PODS-AI "human" prediction maps to non-resident."""
-        from compare_models import is_resident_prediction
-        assert is_resident_prediction("human", "podsai") is False
-
-    def test_podsai_vessel_is_not_resident(self):
-        """PODS-AI "vessel" prediction maps to non-resident."""
-        from compare_models import is_resident_prediction
-        assert is_resident_prediction("vessel", "podsai") is False
-
-    def test_podsai_bird_is_not_resident(self):
-        """PODS-AI "bird" prediction maps to non-resident."""
-        from compare_models import is_resident_prediction
-        assert is_resident_prediction("bird", "podsai") is False
+        wav_paths = load_test_samples(wav_dir)
+        assert len(wav_paths) == 1
+        assert get_category_from_path(wav_paths[0]) == "resident"
 
 
 # ---------------------------------------------------------------------------
@@ -466,21 +295,14 @@ class TestEvaluateModel:
 
     def test_correct_resident_prediction_counted(self, tmp_path):
         """A resident sample predicted as "resident" (fastai) counts as correct."""
-        from compare_models import TestSample, evaluate_model
+        from compare_models import evaluate_model
 
-        sample = TestSample(
-            category="resident",
-            node_name="rpi_orcasound_lab",
-            start_timestamp="2023_08_18_00_59_53_PST",
-            uri="",
-            description="",
-            notes="tp_human_only",
-        )
-        wav_dir = self._make_wav_files(tmp_path, [sample])
+        wav_dir = tmp_path / "testing-wav"
+        wav_files = _make_wav(wav_dir, "resident", "rpi_orcasound_lab", "2023_08_18_00_59_53_PST")
 
         mock_result = {"global_prediction_label": "resident", "global_confidence": 0.8, "predict_time": 1.5}
         with patch("compare_models.run_inference", return_value=mock_result):
-            result = evaluate_model("fastai", "./model", [sample], wav_dir)
+            result = evaluate_model("fastai", "./model", wav_files, wav_dir)
 
         assert result.correct == 1
         assert result.false_positives == 0
@@ -489,43 +311,30 @@ class TestEvaluateModel:
 
     def test_false_positive_counted(self, tmp_path):
         """A non-resident sample predicted as "resident" (fastai) counts as false positive."""
-        from compare_models import TestSample, evaluate_model
+        from compare_models import evaluate_model
 
-        sample = TestSample(
-            category="human",
-            node_name="rpi_sunset_bay",
-            start_timestamp="2024_08_07_11_23_23_PST",
-            uri="",
-            description="",
-            notes="fp_machine_only",
-        )
-        wav_dir = self._make_wav_files(tmp_path, [sample])
+        wav_dir = tmp_path / "testing-wav"
+        wav_files = _make_wav(wav_dir, "human", "rpi_sunset_bay", "2024_08_07_11_23_23_PST")
 
         mock_result = {"global_prediction_label": "resident", "global_confidence": 0.7, "predict_time": 1.2}
         with patch("compare_models.run_inference", return_value=mock_result):
-            result = evaluate_model("fastai", "./model", [sample], wav_dir)
+            result = evaluate_model("fastai", "./model", wav_files, wav_dir)
 
         assert result.correct == 0
         assert result.false_positives == 1
         assert result.false_negatives == 0
 
+
     def test_fastai_other_prediction_correct_for_non_resident(self, tmp_path):
         """Binary models still count non-resident predicted as non-resident as correct."""
-        from compare_models import TestSample, evaluate_model
+        from compare_models import evaluate_model
 
-        sample = TestSample(
-            category="human",
-            node_name="rpi_sunset_bay",
-            start_timestamp="2024_08_07_11_23_23_PST",
-            uri="",
-            description="",
-            notes="fp_machine_only",
-        )
-        wav_dir = self._make_wav_files(tmp_path, [sample])
+        wav_dir = tmp_path / "testing-wav"
+        wav_files = _make_wav(wav_dir, "human", "rpi_sunset_bay", "2024_08_07_11_23_23_PST")
 
         mock_result = {"global_prediction_label": "other", "global_confidence": 0.7, "predict_time": 1.2}
         with patch("compare_models.run_inference", return_value=mock_result):
-            result = evaluate_model("fastai", "./model", [sample], wav_dir)
+            result = evaluate_model("fastai", "./model", wav_files, wav_dir)
 
         assert result.correct == 1
         assert result.false_positives == 0
@@ -533,85 +342,43 @@ class TestEvaluateModel:
 
     def test_false_negative_counted(self, tmp_path):
         """A resident sample predicted as "other" (fastai) counts as false negative."""
-        from compare_models import TestSample, evaluate_model
+        from compare_models import evaluate_model
 
-        sample = TestSample(
-            category="resident",
-            node_name="rpi_orcasound_lab",
-            start_timestamp="2023_08_18_00_59_53_PST",
-            uri="",
-            description="",
-            notes="tp_human_only",
-        )
-        wav_dir = self._make_wav_files(tmp_path, [sample])
+        wav_dir = tmp_path / "testing-wav"
+        wav_files = _make_wav(wav_dir, "resident", "rpi_orcasound_lab", "2023_08_18_00_59_53_PST")
 
         mock_result = {"global_prediction_label": "other", "global_confidence": 0.1, "predict_time": 1.0}
         with patch("compare_models.run_inference", return_value=mock_result):
-            result = evaluate_model("fastai", "./model", [sample], wav_dir)
+            result = evaluate_model("fastai", "./model", wav_files, wav_dir)
 
         assert result.correct == 0
         assert result.false_positives == 0
         assert result.false_negatives == 1
 
-    def test_skips_sample_when_wav_missing(self, tmp_path):
-        """Samples whose WAV file is missing are counted as skipped."""
-        from compare_models import TestSample, evaluate_model
-
-        sample = TestSample(
-            category="resident",
-            node_name="rpi_orcasound_lab",
-            start_timestamp="2023_08_18_00_59_53_PST",
-            uri="",
-            description="",
-            notes="tp_human_only",
-        )
-        wav_dir = tmp_path / "testing-wav"
-        wav_dir.mkdir()
-
-        with patch("compare_models.run_inference") as mock_infer:
-            result = evaluate_model("fastai", "./model", [sample], wav_dir)
-            mock_infer.assert_not_called()
-
-        assert result.skipped == 1
-        assert result.correct == 0
-
+    
     def test_skips_sample_on_inference_error(self, tmp_path):
         """Samples that raise an exception during inference are counted as skipped."""
-        from compare_models import TestSample, evaluate_model
+        from compare_models import evaluate_model
 
-        sample = TestSample(
-            category="resident",
-            node_name="rpi_orcasound_lab",
-            start_timestamp="2023_08_18_00_59_53_PST",
-            uri="",
-            description="",
-            notes="tp_human_only",
-        )
-        wav_dir = self._make_wav_files(tmp_path, [sample])
+        wav_dir = tmp_path / "testing-wav"
+        wav_files = _make_wav(wav_dir, "resident", "rpi_orcasound_lab", "2023_08_18_00_59_53_PST")
 
         with patch("compare_models.run_inference", side_effect=RuntimeError("model error")):
-            result = evaluate_model("fastai", "./model", [sample], wav_dir)
+            result = evaluate_model("fastai", "./model", wav_files, wav_dir)
 
         assert result.skipped == 1
         assert result.correct == 0
 
     def test_podsai_resident_prediction_correct(self, tmp_path):
         """PODS-AI "resident" prediction for a resident sample counts as correct."""
-        from compare_models import TestSample, evaluate_model
+        from compare_models import evaluate_model
 
-        sample = TestSample(
-            category="resident",
-            node_name="rpi_orcasound_lab",
-            start_timestamp="2023_08_18_00_59_53_PST",
-            uri="",
-            description="",
-            notes="tp_human_only",
-        )
-        wav_dir = self._make_wav_files(tmp_path, [sample])
+        wav_dir = tmp_path / "testing-wav"
+        wav_files = _make_wav(wav_dir, "resident", "rpi_orcasound_lab", "2023_08_18_00_59_53_PST")
 
         mock_result = {"global_prediction_label": "resident", "global_confidence": 0.9, "predict_time": 2.0}
         with patch("compare_models.run_inference", return_value=mock_result):
-            result = evaluate_model("podsai", "/path/to/model", [sample], wav_dir)
+            result = evaluate_model("podsai", "/path/to/model", wav_files, wav_dir)
 
         assert result.correct == 1
         assert result.false_positives == 0
@@ -619,21 +386,14 @@ class TestEvaluateModel:
 
     def test_podsai_non_matching_non_resident_prediction_not_correct(self, tmp_path):
         """PODS-AI uses exact category matches for Correct, even within non-resident classes."""
-        from compare_models import TestSample, evaluate_model
+        from compare_models import evaluate_model
 
-        sample = TestSample(
-            category="human",
-            node_name="rpi_sunset_bay",
-            start_timestamp="2024_08_07_11_23_23_PST",
-            uri="",
-            description="",
-            notes="fp_machine_only",
-        )
-        wav_dir = self._make_wav_files(tmp_path, [sample])
+        wav_dir = tmp_path / "testing-wav"
+        wav_files = _make_wav(wav_dir, "human", "rpi_sunset_bay", "2024_08_07_11_23_23_PST")
 
         mock_result = {"global_prediction_label": "water", "global_confidence": 0.8, "predict_time": 1.8}
         with patch("compare_models.run_inference", return_value=mock_result):
-            result = evaluate_model("podsai", "/path/to/model", [sample], wav_dir)
+            result = evaluate_model("podsai", "/path/to/model", wav_files, wav_dir)
 
         assert result.correct == 0
         assert result.false_positives == 0
@@ -641,21 +401,14 @@ class TestEvaluateModel:
 
     def test_podsai_exact_matching_category_counts_as_correct(self, tmp_path):
         """PODS-AI counts exact multiclass matches as correct."""
-        from compare_models import TestSample, evaluate_model
+        from compare_models import evaluate_model
 
-        sample = TestSample(
-            category="humpback",
-            node_name="rpi_sunset_bay",
-            start_timestamp="2024_08_07_11_23_23_PST",
-            uri="",
-            description="",
-            notes="",
-        )
-        wav_dir = self._make_wav_files(tmp_path, [sample])
+        wav_dir = tmp_path / "testing-wav"
+        wav_files = _make_wav(wav_dir, "humpback", "rpi_sunset_bay", "2024_08_07_11_23_23_PST")
 
         mock_result = {"global_prediction_label": "humpback", "global_confidence": 0.8, "predict_time": 1.8}
         with patch("compare_models.run_inference", return_value=mock_result):
-            result = evaluate_model("podsai", "/path/to/model", [sample], wav_dir)
+            result = evaluate_model("podsai", "/path/to/model", wav_files, wav_dir)
 
         assert result.correct == 1
         assert result.false_positives == 0
@@ -663,37 +416,28 @@ class TestEvaluateModel:
 
     def test_total_equals_sample_count(self, tmp_path):
         """ModelResult.total always equals the number of samples passed."""
-        from compare_models import TestSample, evaluate_model
+        from compare_models import evaluate_model
 
-        samples = [
-            TestSample("resident", "rpi_orcasound_lab", "2023_08_18_00_59_53_PST", "", "", "tp_human_only"),
-            TestSample("human", "rpi_sunset_bay", "2024_08_07_11_23_23_PST", "", "", "fp_machine_only"),
-        ]
-        wav_dir = self._make_wav_files(tmp_path, samples)
+        wav_dir = tmp_path / "testing-wav"
+        wav_files = _make_wav(wav_dir, "resident", "rpi_orcasound_lab", "2023_08_18_00_59_53_PST")
+        wav_files += _make_wav(wav_dir, "human", "rpi_sunset_bay", "2024_08_07_11_23_23_PST")
 
         mock_result = {"global_prediction_label": "other", "global_confidence": 0.1, "predict_time": 1.0}
         with patch("compare_models.run_inference", return_value=mock_result):
-            result = evaluate_model("fastai", "./model", samples, wav_dir)
+            result = evaluate_model("fastai", "./model", wav_files, wav_dir)
 
         assert result.total == 2
 
     def test_records_predict_times(self, tmp_path):
         """evaluate_model records predict_time from inference results."""
-        from compare_models import TestSample, evaluate_model
+        from compare_models import evaluate_model
 
-        sample = TestSample(
-            category="resident",
-            node_name="rpi_orcasound_lab",
-            start_timestamp="2023_08_18_00_59_53_PST",
-            uri="",
-            description="",
-            notes="tp_human_only",
-        )
-        wav_dir = self._make_wav_files(tmp_path, [sample])
+        wav_dir = tmp_path / "testing-wav"
+        wav_files = _make_wav(wav_dir, "resident", "rpi_orcasound_lab", "2023_08_18_00_59_53_PST")
 
         mock_result = {"global_prediction_label": "resident", "global_confidence": 0.8, "predict_time": 2.5}
         with patch("compare_models.run_inference", return_value=mock_result):
-            result = evaluate_model("fastai", "./model", [sample], wav_dir)
+            result = evaluate_model("fastai", "./model", wav_files, wav_dir)
 
         assert len(result.predict_times) == 1
         assert abs(result.predict_times[0] - 2.5) < 1e-9
@@ -755,7 +499,7 @@ class TestPrintSummary:
         assert "Definitions:" in captured
         assert "Accuracy     = Correct / Evaluated" in captured
         assert "[R|T|H]FP%   = among non-[R|T|H] samples, fraction predicted as that class" in captured
-        assert "compares end-to-end 60-second inference on testing_60s_samples.csv" in captured
+        assert "compares end-to-end 60-second inference on all WAV files in --wav-dir" in captured
 
     def test_prints_avg_time(self, capsys):
         """print_summary includes average time column."""
@@ -825,35 +569,20 @@ class TestPrintSummary:
 class TestMainCLI:
     """Tests for the main() entry point."""
 
-    def _write_testing_csv(self, tmp_path, testing_rows):
-        """Write testing_60s_samples.csv to tmp_path."""
-        testing_csv = tmp_path / "testing_60s_samples.csv"
-        _write_csv(testing_csv, testing_rows)
-        return testing_csv
-
-    def test_returns_1_for_missing_testing_csv(self, tmp_path):
-        """main() returns 1 when testing_60s_samples.csv does not exist."""
-        from compare_models import main
-        wav_dir = tmp_path / "testing-wav"
-        wav_dir.mkdir()
-        test_args = [
-            "compare_models.py",
-            "--testing-csv", str(tmp_path / "nonexistent.csv"),
-            "--wav-dir", str(wav_dir),
-            "--models", "fastai",
-        ]
-        with patch.object(sys, "argv", test_args):
-            result = main()
-        assert result == 1
+    def _write_testing_wavs(self, wav_dir: Path, rows):
+        """Create WAV files from testing rows under category directories."""
+        for row in rows:
+            node = row["NodeName"].replace("_", "-")
+            wav = wav_dir / row["Category"] / f"{node}_{row['StartTimestamp']}.wav"
+            wav.parent.mkdir(parents=True, exist_ok=True)
+            wav.touch()
 
     def test_returns_1_for_missing_wav_dir(self, tmp_path):
         """main() returns 1 when the WAV directory does not exist."""
         from compare_models import main
 
-        testing_csv = self._write_testing_csv(tmp_path, _make_testing_rows())
         test_args = [
             "compare_models.py",
-            "--testing-csv", str(testing_csv),
             "--wav-dir", str(tmp_path / "nonexistent-wav-dir"),
             "--models", "fastai",
         ]
@@ -861,16 +590,30 @@ class TestMainCLI:
             result = main()
         assert result == 1
 
-    def test_returns_1_for_unknown_model(self, tmp_path):
-        """main() returns 1 when an unrecognised model type is specified."""
+    def test_rejects_removed_testing_csv_flag(self, tmp_path):
+        """main() rejects the removed --testing-csv option."""
         from compare_models import main
 
-        testing_csv = self._write_testing_csv(tmp_path, _make_testing_rows())
         wav_dir = tmp_path / "testing-wav"
         wav_dir.mkdir()
         test_args = [
             "compare_models.py",
-            "--testing-csv", str(testing_csv),
+            "--testing-csv", "output/csv/testing_60s_samples.csv",
+            "--wav-dir", str(wav_dir),
+        ]
+        with patch.object(sys, "argv", test_args):
+            with pytest.raises(SystemExit) as exc_info:
+                main()
+        assert exc_info.value.code == 2
+
+    def test_returns_1_for_unknown_model(self, tmp_path):
+        """main() returns 1 when an unrecognised model type is specified."""
+        from compare_models import main
+
+        wav_dir = tmp_path / "testing-wav"
+        wav_dir.mkdir()
+        test_args = [
+            "compare_models.py",
             "--wav-dir", str(wav_dir),
             "--models", "unknown_model",
         ]
@@ -883,19 +626,13 @@ class TestMainCLI:
         from compare_models import OLD_PODSAI_MODEL_REVISION, main
 
         rows = _make_testing_rows()
-        testing_csv = self._write_testing_csv(tmp_path, rows)
 
         wav_dir = tmp_path / "testing-wav"
-        row = rows[0]
-        node = row["NodeName"].replace("_", "-")
-        wav = wav_dir / row["Category"] / f"{node}_{row['StartTimestamp']}.wav"
-        wav.parent.mkdir(parents=True, exist_ok=True)
-        wav.touch()
+        self._write_testing_wavs(wav_dir, [rows[0]])
 
         mock_result = {"global_prediction_label": "resident", "global_confidence": 0.8, "predict_time": 1.5}
         test_args = [
             "compare_models.py",
-            "--testing-csv", str(testing_csv),
             "--wav-dir", str(wav_dir),
             "--models", "oldpodsai",
             "--max-samples", "1",
@@ -914,13 +651,11 @@ class TestMainCLI:
         from compare_models import ModelResult, OLD_PODSAI_MODEL_REVISION, PODSAI_MODEL_REVISION, main
 
         rows = _make_testing_rows()
-        testing_csv = self._write_testing_csv(tmp_path, rows)
         wav_dir = tmp_path / "testing-wav"
-        wav_dir.mkdir()
+        self._write_testing_wavs(wav_dir, [rows[0]])
 
         test_args = [
             "compare_models.py",
-            "--testing-csv", str(testing_csv),
             "--wav-dir", str(wav_dir),
             "--max-samples", "1",
         ]
@@ -943,19 +678,12 @@ class TestMainCLI:
         from compare_models import main
 
         rows = _make_testing_rows()
-        testing_csv = self._write_testing_csv(tmp_path, rows)
-
         wav_dir = tmp_path / "testing-wav"
-        for row in rows:
-            node = row["NodeName"].replace("_", "-")
-            wav = wav_dir / row["Category"] / f"{node}_{row['StartTimestamp']}.wav"
-            wav.parent.mkdir(parents=True, exist_ok=True)
-            wav.touch()
+        self._write_testing_wavs(wav_dir, rows)
 
         mock_result = {"global_prediction_label": "resident", "global_confidence": 0.8, "predict_time": 1.5}
         test_args = [
             "compare_models.py",
-            "--testing-csv", str(testing_csv),
             "--wav-dir", str(wav_dir),
             "--models", "fastai",
             "--fastai-model-path", "./model",
@@ -966,15 +694,13 @@ class TestMainCLI:
         assert result == 0
 
     def test_returns_1_when_no_test_samples(self, tmp_path):
-        """main() returns 1 when testing_60s_samples.csv is empty."""
+        """main() returns 1 when wav_dir contains no valid test samples."""
         from compare_models import main
 
-        testing_csv = self._write_testing_csv(tmp_path, [])
         wav_dir = tmp_path / "testing-wav"
         wav_dir.mkdir()
         test_args = [
             "compare_models.py",
-            "--testing-csv", str(testing_csv),
             "--wav-dir", str(wav_dir),
             "--models", "fastai",
         ]
@@ -987,19 +713,12 @@ class TestMainCLI:
         from compare_models import main
 
         rows = _make_testing_rows()
-        testing_csv = self._write_testing_csv(tmp_path, rows)
-
         wav_dir = tmp_path / "testing-wav"
-        for row in rows[:2]:  # Only create WAVs for first 2
-            node = row["NodeName"].replace("_", "-")
-            wav = wav_dir / row["Category"] / f"{node}_{row['StartTimestamp']}.wav"
-            wav.parent.mkdir(parents=True, exist_ok=True)
-            wav.touch()
+        self._write_testing_wavs(wav_dir, rows[:2])
 
         mock_result = {"global_prediction_label": "resident", "global_confidence": 0.8, "predict_time": 1.5}
         test_args = [
             "compare_models.py",
-            "--testing-csv", str(testing_csv),
             "--wav-dir", str(wav_dir),
             "--models", "fastai",
             "--max-samples", "2",
@@ -1015,12 +734,10 @@ class TestMainCLI:
         """main() returns 1 when --max-samples is zero or negative."""
         from compare_models import main
 
-        testing_csv = self._write_testing_csv(tmp_path, _make_testing_rows())
         wav_dir = tmp_path / "testing-wav"
         wav_dir.mkdir()
         test_args = [
             "compare_models.py",
-            "--testing-csv", str(testing_csv),
             "--wav-dir", str(wav_dir),
             "--models", "fastai",
             "--max-samples", "0",
@@ -1034,20 +751,13 @@ class TestMainCLI:
         from compare_models import main
 
         rows = _make_testing_rows()
-        testing_csv = self._write_testing_csv(tmp_path, rows)
-
         wav_dir = tmp_path / "testing-wav"
         # Only create WAV for the resident sample.
-        resident_row = rows[0]
-        node = resident_row["NodeName"].replace("_", "-")
-        wav = wav_dir / resident_row["Category"] / f"{node}_{resident_row['StartTimestamp']}.wav"
-        wav.parent.mkdir(parents=True, exist_ok=True)
-        wav.touch()
+        self._write_testing_wavs(wav_dir, [rows[0]])
 
         mock_result = {"global_prediction_label": "resident", "global_confidence": 0.9, "predict_time": 1.0}
         test_args = [
             "compare_models.py",
-            "--testing-csv", str(testing_csv),
             "--wav-dir", str(wav_dir),
             "--models", "fastai",
             "--fastai-model-path", "./model",
@@ -1061,15 +771,13 @@ class TestMainCLI:
         assert result == 0
 
     def test_returns_1_for_category_with_no_samples(self, tmp_path):
-        """main() returns 1 when --category matches no rows in testing_60s_samples.csv."""
+        """main() returns 1 when --category matches no WAV-discovered samples."""
         from compare_models import main
 
-        testing_csv = self._write_testing_csv(tmp_path, _make_testing_rows())
         wav_dir = tmp_path / "testing-wav"
-        wav_dir.mkdir()
+        self._write_testing_wavs(wav_dir, _make_testing_rows())
         test_args = [
             "compare_models.py",
-            "--testing-csv", str(testing_csv),
             "--wav-dir", str(wav_dir),
             "--models", "fastai",
             "--category", "transient",
@@ -1086,38 +794,16 @@ class TestMainCLI:
 class TestConfusionMatrix:
     """Tests for per-class confusion matrix tracking in ModelResult and evaluate_model()."""
 
-    def _make_sample(self, category, node_name="rpi_orcasound_lab", start_timestamp="2023_08_18_00_59_53_PST"):
-        """Return a TestSample with the given category."""
-        from compare_models import TestSample
-        return TestSample(
-            category=category,
-            node_name=node_name,
-            start_timestamp=start_timestamp,
-            uri="",
-            description="",
-            notes="",
-        )
-
-    def _make_wav(self, tmp_path, sample):
-        """Create a dummy WAV file for the sample and return the wav_dir."""
-        from compare_models import TestSample
-        wav_dir = tmp_path / "testing-wav"
-        node_name_in_filename = sample.node_name.replace("_", "-")
-        wav_file = wav_dir / sample.category / f"{node_name_in_filename}_{sample.start_timestamp}.wav"
-        wav_file.parent.mkdir(parents=True, exist_ok=True)
-        wav_file.touch()
-        return wav_dir
-
     def test_confusion_matrix_populated_on_correct_prediction(self, tmp_path):
         """evaluate_model records actual→predicted in confusion_matrix for correct predictions."""
         from compare_models import evaluate_model
 
-        sample = self._make_sample("resident")
-        wav_dir = self._make_wav(tmp_path, sample)
+        wav_dir = tmp_path / "testing-wav"
+        wav_files = _make_wav(wav_dir, "resident")
 
         mock_result = {"global_prediction_label": "resident", "global_confidence": 0.9, "predict_time": 1.0}
         with patch("compare_models.run_inference", return_value=mock_result):
-            result = evaluate_model("podsai", "/model", [sample], wav_dir)
+            result = evaluate_model("podsai", "/model", wav_files, wav_dir)
 
         assert result.confusion_matrix == {"resident": {"resident": 1}}
 
@@ -1125,8 +811,8 @@ class TestConfusionMatrix:
         """F1 and false-negative rates use all labels, not only the primary view."""
         from compare_models import evaluate_model
 
-        sample = self._make_sample("transient")
-        wav_dir = self._make_wav(tmp_path, sample)
+        wav_dir = tmp_path / "testing-wav"
+        wav_files = _make_wav(wav_dir, "transient")
         mock_result = {
             "global_prediction_label": "resident",
             "global_prediction_labels": ["resident", "transient"],
@@ -1134,7 +820,7 @@ class TestConfusionMatrix:
             "predict_time": 1.0,
         }
         with patch("compare_models.run_inference", return_value=mock_result):
-            result = evaluate_model("podsai", "/model", [sample], wav_dir)
+            result = evaluate_model("podsai", "/model", wav_files, wav_dir)
 
         assert result.correct == 1
         assert result.false_negative_count_for_label("transient") == 0
@@ -1145,12 +831,12 @@ class TestConfusionMatrix:
         """evaluate_model records actual→predicted in confusion_matrix for false positives."""
         from compare_models import evaluate_model
 
-        sample = self._make_sample("humpback")
-        wav_dir = self._make_wav(tmp_path, sample)
+        wav_dir = tmp_path / "testing-wav"
+        wav_files = _make_wav(wav_dir, "humpback")
 
         mock_result = {"global_prediction_label": "resident", "global_confidence": 0.8, "predict_time": 1.0}
         with patch("compare_models.run_inference", return_value=mock_result):
-            result = evaluate_model("podsai", "/model", [sample], wav_dir)
+            result = evaluate_model("podsai", "/model", wav_files, wav_dir)
 
         assert result.confusion_matrix == {"humpback": {"resident": 1}}
 
@@ -1158,32 +844,25 @@ class TestConfusionMatrix:
         """Skipped samples (missing WAV) do not appear in the confusion matrix."""
         from compare_models import evaluate_model
 
-        sample = self._make_sample("resident")
         wav_dir = tmp_path / "testing-wav"
-        wav_dir.mkdir()  # WAV file does not exist.
+        wav_dir.mkdir()
+        wav_file = wav_dir / "resident/nonexistent.wav"
 
         with patch("compare_models.run_inference") as mock_infer:
-            result = evaluate_model("fastai", "./model", [sample], wav_dir)
-            mock_infer.assert_not_called()
+            mock_infer.side_effect = FileNotFoundError("missing wav")
+            result = evaluate_model("fastai", "./model", [wav_file], wav_dir)
 
+        assert result.skipped == 1
         assert result.confusion_matrix == {}
 
     def test_confusion_matrix_accumulates_multiple_samples(self, tmp_path):
         """evaluate_model accumulates counts across multiple samples."""
-        from compare_models import evaluate_model, TestSample
-
-        samples = [
-            TestSample("resident", "rpi_orcasound_lab", "2023_08_18_00_59_53_PST", "", "", ""),
-            TestSample("resident", "rpi_orcasound_lab", "2023_08_19_00_00_00_PST", "", "", ""),
-            TestSample("humpback", "rpi_sunset_bay", "2023_08_20_00_00_00_PST", "", "", ""),
-        ]
+        from compare_models import evaluate_model
 
         wav_dir = tmp_path / "testing-wav"
-        for s in samples:
-            node = s.node_name.replace("_", "-")
-            wav = wav_dir / s.category / f"{node}_{s.start_timestamp}.wav"
-            wav.parent.mkdir(parents=True, exist_ok=True)
-            wav.touch()
+        wav_files = _make_wav(wav_dir, "resident", "rpi_orcasound_lab", "2023_08_18_00_59_53_PST")
+        wav_files += _make_wav(wav_dir, "resident", "rpi_orcasound_lab", "2023_08_19_00_00_00_PST")
+        wav_files += _make_wav(wav_dir, "humpback", "rpi_sunset_bay", "2023_08_20_00_00_00_PST")
 
         def fake_infer(wav_path, model_type, model_path, model_revision=None):
             if "humpback" in str(wav_path):
@@ -1191,7 +870,7 @@ class TestConfusionMatrix:
             return {"global_prediction_label": "resident", "global_confidence": 0.9, "predict_time": 1.0}
 
         with patch("compare_models.run_inference", side_effect=fake_infer):
-            result = evaluate_model("podsai", "/model", samples, wav_dir)
+            result = evaluate_model("podsai", "/model", wav_files, wav_dir)
 
         assert result.confusion_matrix["resident"]["resident"] == 2
         assert result.confusion_matrix["humpback"]["water"] == 1

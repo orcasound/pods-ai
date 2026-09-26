@@ -7,7 +7,7 @@ Compare multiple models on a test set of audio samples.
 Usage:
     python compare_models.py [options]
 
-Loads a test set from testing_60s_samples.csv, then runs each enabled model
+Loads a test set from WAV files under output/testing-wav, then runs each enabled model
 (fastai, orcahello, oldpodsai (Wav2Vec2)), podsai (AST) on the corresponding
 60-second WAV files and reports correct identifications, whale-class F1, and
 per-whale-class false-positive/false-negative rates per model.
@@ -24,7 +24,6 @@ For each whale class X (resident, transient, humpback):
 """
 
 import argparse
-import csv
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -52,18 +51,6 @@ MODEL_TYPE_TO_INFERENCE_TYPE = {
     "oldpodsai": "podsai",
     "podsai": "podsai",
 }
-
-
-@dataclass
-class TestSample:
-    """A single detection row used as a test sample."""
-
-    category: str
-    node_name: str
-    start_timestamp: str
-    uri: str
-    description: str
-    notes: str
 
 
 @dataclass
@@ -206,86 +193,47 @@ class ModelResult:
         return self.false_negative_count_for_label(label) / actual_count
 
 
-def load_test_samples(testing_csv: Path, max_samples: Optional[int] = None,
-                      category_filter: Optional[str] = None) -> list[TestSample]:
+def get_category_from_path(wav_path: Path) -> str:
+    relative_path = wav_path.relative_to(wav_path.parents[1])
+    if len(relative_path.parts) != 2:
+        return None
+
+    category = relative_path.parts[0]
+    return category
+
+
+def load_test_samples(wav_dir: Path, max_samples: Optional[int] = None,
+                      category_filter: Optional[str] = None) -> list[Path]:
     """
-    Load test samples from testing_60s_samples.csv.
+    Load test samples from WAV files in the testing directory.
 
     Args:
-        testing_csv: Path to testing_60s_samples.csv.
+        wav_dir: Root directory containing category subdirectories with WAV files.
         max_samples: Maximum number of samples to load. If None, load all samples.
         category_filter: If specified, only load samples matching this category.
                         If None, load samples from all categories.
 
     Returns:
-        List of TestSample objects, or an empty list on error.
+        List of WAV file paths, or an empty list on error.
     """
     samples = []
     try:
-        with open(testing_csv, newline="", encoding="utf-8") as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                category = row.get("Category", "")
+        wav_paths = sorted(
+            path for path in wav_dir.rglob("*")
+            if path.is_file() and path.suffix.lower() == ".wav"
+        )
+        for wav_path in wav_paths:
+            category = get_category_from_path(wav_path)
+            if category_filter is not None and category != category_filter:
+                continue
 
-                # Skip if category filter is specified and doesn't match.
-                if category_filter is not None and category != category_filter:
-                    continue
+            samples.append(wav_path)
 
-                samples.append(TestSample(
-                    category=category,
-                    node_name=row.get("NodeName", ""),
-                    start_timestamp=row.get("StartTimestamp", ""),
-                    uri=row.get("URI", ""),
-                    description=row.get("Description", ""),
-                    notes=row.get("Notes", ""),
-                ))
-
-                # Stop if we've reached the maximum.
-                if max_samples is not None and len(samples) >= max_samples:
-                    break
-
-    except (OSError, csv.Error, UnicodeDecodeError) as e:
-        print(f"Error reading {testing_csv}: {e}", file=sys.stderr)
+            if max_samples is not None and len(samples) >= max_samples:
+                break
+    except OSError as e:
+        print(f"Error reading WAV files from {wav_dir}: {e}", file=sys.stderr)
     return samples
-
-
-def find_wav_file(sample: TestSample, wav_dir: Path) -> Optional[Path]:
-    """
-    Find the 60-second WAV file for a testing sample.
-
-    WAV files are saved by download_wavs.py as:
-        <wav_dir>/<category>/<node_name_with_dashes>_<start_timestamp>.wav
-
-    Args:
-        sample: The testing sample.
-        wav_dir: Root directory of testing WAV files.
-
-    Returns:
-        Path to the WAV file, or None if not found.
-    """
-    node_name_in_filename = sample.node_name.replace("_", "-")
-    wav_filename = f"{node_name_in_filename}_{sample.start_timestamp}.wav"
-    wav_path = wav_dir / sample.category / wav_filename
-    if wav_path.exists():
-        return wav_path
-    return None
-
-
-def is_resident_prediction(global_prediction_label: str, model_type: str) -> bool:
-    """
-    Determine whether a model's prediction corresponds to "resident" (SRKW).
-
-    All model types (fastai, orcahello, oldpodsai, podsai) use "resident" as the
-    positive class label, so the check is the same regardless of model type.
-
-    Args:
-        global_prediction_label: The model's predicted class label.
-        model_type: The model type ('fastai', 'orcahello', or 'podsai').
-
-    Returns:
-        True if the prediction is "resident"; False otherwise.
-    """
-    return global_prediction_label == RESIDENT_LABEL
 
 
 def is_exact_match_model(model_type: str) -> bool:
@@ -339,7 +287,7 @@ def _labels_seen_in_confusion_matrix(confusion_matrix: dict[str, dict[str, int]]
 def evaluate_model(
     model_type: str,
     model_path: Optional[str],
-    samples: list[TestSample],
+    wav_paths: list[Path],
     wav_dir: Path,
     model_revision: Optional[str] = None,
     result_model_type: Optional[str] = None,
@@ -351,7 +299,7 @@ def evaluate_model(
         model_type: One of 'fastai', 'orcahello', 'oldpodsai', or 'podsai'.
                     'oldpodsai' is mapped to 'podsai' inference internally.
         model_path: Path to the model (or HuggingFace Hub model ID).
-        samples: List of testing samples.
+        wav_paths: List of WAV file paths.
         wav_dir: Root directory containing testing WAV files.
         model_revision: Git commit hash to pin the HuggingFace Hub model revision.
                         Only used when model_path is a Hub model ID (not a local path).
@@ -362,19 +310,14 @@ def evaluate_model(
         ModelResult with counts of correct, false positive, and false negative predictions,
         plus timing information for predict() calls.
     """
-    result = ModelResult(model_type=result_model_type or model_type, total=len(samples))
+    result = ModelResult(model_type=result_model_type or model_type, total=len(wav_paths))
 
-    for sample in samples:
-        wav_path = find_wav_file(sample, wav_dir)
-        if wav_path is None:
-            print(
-                f"  [{model_type}] Skipping {sample.category}/{sample.node_name}"
-                f"/{sample.start_timestamp}: WAV not found"
-            )
-            result.skipped += 1
+    for wav_path in wav_paths:
+        relative_path = wav_path.relative_to(wav_dir)
+        category = get_category_from_path(wav_path)
+        if category is None:
             continue
-
-        expected_resident = (sample.category == RESIDENT_LABEL)
+        expected_resident = (category == RESIDENT_LABEL)
 
         try:
             inference_result = run_inference(str(wav_path), model_type=model_type,
@@ -394,7 +337,7 @@ def evaluate_model(
         predicted_resident = RESIDENT_LABEL in predicted_labels
 
         if is_correct_prediction(
-            sample.category, predicted_label, model_type, predicted_labels
+            category, predicted_label, model_type, predicted_labels
         ):
             result.correct += 1
             status = "correct"
@@ -408,7 +351,7 @@ def evaluate_model(
             status = "incorrect"
 
         # Keep a primary-label matrix for display and the complete set for metrics.
-        actual_label = sample.category
+        actual_label = category
         result.prediction_labels.setdefault(actual_label, []).append(set(predicted_labels))
         if actual_label not in result.confusion_matrix:
             result.confusion_matrix[actual_label] = {}
@@ -416,7 +359,7 @@ def evaluate_model(
         preds[predicted_label] = preds.get(predicted_label, 0) + 1
 
         print(
-            f"  [{model_type}] {sample.category}/{sample.node_name}/{sample.start_timestamp}: "
+            f"  [{model_type}] {relative_path}: "
             f"predicted={predicted_label!r} -> {status} ({predict_time:.2f}s)"
         )
 
@@ -534,7 +477,7 @@ def print_summary(results: list[ModelResult]) -> None:
     print("  [R|T|H]FP%   = among non-[R|T|H] samples, fraction predicted as that class")
     print("  [R|T|H]FN%   = among actual samples of that class, fraction predicted as another class")
     print("  Avg Time     = average time spent in model predict() per 60-second WAV file")
-    print("  Note         = compares end-to-end 60-second inference on testing_60s_samples.csv")
+    print("  Note         = compares end-to-end 60-second inference on all WAV files in --wav-dir")
 
     for r in results:
         print()
@@ -549,15 +492,10 @@ def main() -> int:
     """
     parser = argparse.ArgumentParser(
         description=(
-            "Compare model predictions on a test set loaded from testing_60s_samples.csv. "
-            "Runs each enabled model against the corresponding 60-second WAV files "
+            "Compare model predictions on a test set discovered from WAV files in --wav-dir. "
+            "Runs each enabled model against 60-second WAV files "
             "and reports correct identifications, false positives, and false negatives."
         )
-    )
-    parser.add_argument(
-        "--testing-csv",
-        default="output/csv/testing_60s_samples.csv",
-        help="Path to testing_60s_samples.csv (default: output/csv/testing_60s_samples.csv).",
     )
     parser.add_argument(
         "--wav-dir",
@@ -627,15 +565,6 @@ def main() -> int:
 
     args = parser.parse_args()
 
-    testing_csv = Path(args.testing_csv)
-    if not testing_csv.exists():
-        print(f"Error: testing CSV not found: {testing_csv}", file=sys.stderr)
-        print(
-            "Update output/csv/testing_60s_samples.csv before running compare_models.py.",
-            file=sys.stderr,
-        )
-        return 1
-
     wav_dir = Path(args.wav_dir)
     if not wav_dir.exists():
         print(f"Error: WAV directory not found: {wav_dir}", file=sys.stderr)
@@ -673,16 +602,16 @@ def main() -> int:
         print(f"Error: --max-samples must be a positive integer, got {args.max_samples}", file=sys.stderr)
         return 1
 
-    samples = load_test_samples(testing_csv, max_samples=args.max_samples,
+    wav_paths = load_test_samples(wav_dir, max_samples=args.max_samples,
                                 category_filter=args.category)
-    if not samples:
+    if not wav_paths:
         if args.category:
             print(f"Error: no test samples found for category '{args.category}'.", file=sys.stderr)
         else:
             print("Error: no test samples found.", file=sys.stderr)
         return 1
 
-    print(f"Loaded {len(samples)} test samples from {testing_csv}")
+    print(f"Loaded {len(wav_paths)} test samples from WAV files in {wav_dir}")
     if args.category:
         print(f"  (filtered to category: {args.category})")
     if args.max_samples is not None:
@@ -698,10 +627,10 @@ def main() -> int:
         model_result = evaluate_model(
             model_type=inference_model_type,
             model_path=model_paths[model_type],
-            samples=samples,
+            wav_paths=wav_paths,
             wav_dir=wav_dir,
-            model_revision=model_revisions[model_type],
             result_model_type=model_type,
+            model_revision=model_revisions[model_type],
         )
         results.append(model_result)
         print()
