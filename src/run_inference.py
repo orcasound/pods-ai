@@ -240,7 +240,11 @@ def run_inference(wav_path: str, model_type: str = "podsai",
     if model_type == "fastai":
         if model_path is None:
             model_path = "./model"
-        model = inference_model or get_model_inference(model_type="fastai", model_path=model_path)
+        model = (
+            inference_model
+            if inference_model is not None
+            else get_model_inference(model_type="fastai", model_path=model_path)
+        )
 
         start_time = time.perf_counter()
         result = model.predict(wav_path)
@@ -269,7 +273,11 @@ def run_inference(wav_path: str, model_type: str = "podsai",
     elif model_type == "orcahello":
         if model_path is None:
             model_path = "orcasound/orcahello-srkw-detector-v1"
-        model = inference_model or get_model_inference(model_type="orcahello", model_path=model_path)
+        model = (
+            inference_model
+            if inference_model is not None
+            else get_model_inference(model_type="orcahello", model_path=model_path)
+        )
 
         start_time = time.perf_counter()
         result = model.predict(wav_path)
@@ -313,10 +321,14 @@ def run_inference(wav_path: str, model_type: str = "podsai",
                 else:
                     model_revision = PODSAI_AST_MODEL_REVISION
 
-        model = inference_model or get_model_inference(
-            model_type="podsai",
-            model_path=model_path,
-            model_revision=model_revision,
+        model = (
+            inference_model
+            if inference_model is not None
+            else get_model_inference(
+                model_type="podsai",
+                model_path=model_path,
+                model_revision=model_revision,
+            )
         )
 
         start_time = time.perf_counter()
