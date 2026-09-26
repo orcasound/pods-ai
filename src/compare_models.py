@@ -24,7 +24,6 @@ For each whale class X (resident, transient, humpback):
 """
 
 import argparse
-import re
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -52,9 +51,6 @@ MODEL_TYPE_TO_INFERENCE_TYPE = {
     "oldpodsai": "podsai",
     "podsai": "podsai",
 }
-WAV_FILENAME_RE = re.compile(
-    r"^(?P<node_name>.+)_(?P<start_timestamp>\d{4}_\d{2}_\d{2}_\d{2}_\d{2}_\d{2}_(?:PST|PDT|UTC))$"
-)
 
 
 @dataclass
@@ -234,14 +230,15 @@ def load_test_samples(wav_dir: Path, max_samples: Optional[int] = None,
             if category_filter is not None and category != category_filter:
                 continue
 
-            filename_match = WAV_FILENAME_RE.match(wav_path.stem)
-            if filename_match is None:
+            parsed_filename = _parse_wav_filename(wav_path.stem)
+            if parsed_filename is None:
                 continue
+            node_name, start_timestamp = parsed_filename
 
             samples.append(TestSample(
                 category=category,
-                node_name=filename_match.group("node_name"),
-                start_timestamp=filename_match.group("start_timestamp"),
+                node_name=node_name,
+                start_timestamp=start_timestamp,
                 uri="",
                 description="",
                 notes="",
@@ -252,6 +249,36 @@ def load_test_samples(wav_dir: Path, max_samples: Optional[int] = None,
     except OSError as e:
         print(f"Error reading WAV files from {wav_dir}: {e}", file=sys.stderr)
     return samples
+
+
+def _parse_wav_filename(wav_stem: str) -> Optional[tuple[str, str]]:
+    """Parse a WAV stem into node name and timestamp.
+
+    Expected pattern: ``<node_name>_<YYYY>_<MM>_<DD>_<HH>_<MM>_<SS>_<TZ>``.
+    The timezone suffix is intentionally flexible to support both existing and
+    future testing manifests.
+    """
+    parts = wav_stem.rsplit("_", 7)
+    if len(parts) != 8:
+        return None
+
+    node_name, year, month, day, hour, minute, second, timezone = parts
+    numeric_parts = [
+        (year, 4),
+        (month, 2),
+        (day, 2),
+        (hour, 2),
+        (minute, 2),
+        (second, 2),
+    ]
+    if (
+        not node_name
+        or not timezone
+        or any((not value.isdigit() or len(value) != width) for value, width in numeric_parts)
+    ):
+        return None
+
+    return node_name, "_".join([year, month, day, hour, minute, second, timezone])
 
 
 def find_wav_file(sample: TestSample, wav_dir: Path) -> Optional[Path]:
