@@ -700,15 +700,11 @@ def main() -> int:
     for model_type in models:
         print(f"Evaluating model: {model_type}")
         inference_model_type = MODEL_TYPE_TO_INFERENCE_TYPE[model_type]
-        try:
-            inference_model = get_model_inference(
-                model_type=inference_model_type,
-                model_path=model_paths[model_type],
-                model_revision=model_revisions[model_type],
-            )
-        except Exception as e:
-            print(f"  [{model_type}] Warning: preloading failed ({e}); loading per file instead.")
-            inference_model = None
+        inference_model = get_model_inference(
+            model_type=inference_model_type,
+            model_path=model_paths[model_type],
+            model_revision=model_revisions[model_type],
+        )
         model_result = evaluate_model(
             model_type=inference_model_type,
             model_path=model_paths[model_type],
