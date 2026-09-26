@@ -7,7 +7,7 @@ Compare multiple models on a test set of audio samples.
 Usage:
     python compare_models.py [options]
 
-Loads a test set from testing_60s_samples.csv, then runs each enabled model
+Loads a test set from WAV files under output/testing-wav, then runs each enabled model
 (fastai, orcahello, oldpodsai (Wav2Vec2)), podsai (AST) on the corresponding
 60-second WAV files and reports correct identifications, whale-class F1, and
 per-whale-class false-positive/false-negative rates per model.
@@ -24,7 +24,7 @@ For each whale class X (resident, transient, humpback):
 """
 
 import argparse
-import csv
+import re
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -52,6 +52,9 @@ MODEL_TYPE_TO_INFERENCE_TYPE = {
     "oldpodsai": "podsai",
     "podsai": "podsai",
 }
+WAV_FILENAME_RE = re.compile(
+    r"^(?P<node_name>.+)_(?P<start_timestamp>\d{4}_\d{2}_\d{2}_\d{2}_\d{2}_\d{2}_PST)$"
+)
 
 
 @dataclass
@@ -206,13 +209,13 @@ class ModelResult:
         return self.false_negative_count_for_label(label) / actual_count
 
 
-def load_test_samples(testing_csv: Path, max_samples: Optional[int] = None,
+def load_test_samples(wav_dir: Path, max_samples: Optional[int] = None,
                       category_filter: Optional[str] = None) -> list[TestSample]:
     """
-    Load test samples from testing_60s_samples.csv.
+    Load test samples from WAV files in the testing directory.
 
     Args:
-        testing_csv: Path to testing_60s_samples.csv.
+        wav_dir: Root directory containing category subdirectories with WAV files.
         max_samples: Maximum number of samples to load. If None, load all samples.
         category_filter: If specified, only load samples matching this category.
                         If None, load samples from all categories.
@@ -222,30 +225,32 @@ def load_test_samples(testing_csv: Path, max_samples: Optional[int] = None,
     """
     samples = []
     try:
-        with open(testing_csv, newline="", encoding="utf-8") as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                category = row.get("Category", "")
+        for wav_path in sorted(wav_dir.rglob("*.wav")):
+            relative_path = wav_path.relative_to(wav_dir)
+            if len(relative_path.parts) < 2:
+                continue
 
-                # Skip if category filter is specified and doesn't match.
-                if category_filter is not None and category != category_filter:
-                    continue
+            category = relative_path.parts[0]
+            if category_filter is not None and category != category_filter:
+                continue
 
-                samples.append(TestSample(
-                    category=category,
-                    node_name=row.get("NodeName", ""),
-                    start_timestamp=row.get("StartTimestamp", ""),
-                    uri=row.get("URI", ""),
-                    description=row.get("Description", ""),
-                    notes=row.get("Notes", ""),
-                ))
+            filename_match = WAV_FILENAME_RE.match(wav_path.stem)
+            if filename_match is None:
+                continue
 
-                # Stop if we've reached the maximum.
-                if max_samples is not None and len(samples) >= max_samples:
-                    break
+            samples.append(TestSample(
+                category=category,
+                node_name=filename_match.group("node_name"),
+                start_timestamp=filename_match.group("start_timestamp"),
+                uri="",
+                description="",
+                notes="",
+            ))
 
-    except (OSError, csv.Error, UnicodeDecodeError) as e:
-        print(f"Error reading {testing_csv}: {e}", file=sys.stderr)
+            if max_samples is not None and len(samples) >= max_samples:
+                break
+    except OSError as e:
+        print(f"Error reading WAV files from {wav_dir}: {e}", file=sys.stderr)
     return samples
 
 
@@ -534,7 +539,7 @@ def print_summary(results: list[ModelResult]) -> None:
     print("  [R|T|H]FP%   = among non-[R|T|H] samples, fraction predicted as that class")
     print("  [R|T|H]FN%   = among actual samples of that class, fraction predicted as another class")
     print("  Avg Time     = average time spent in model predict() per 60-second WAV file")
-    print("  Note         = compares end-to-end 60-second inference on testing_60s_samples.csv")
+    print("  Note         = compares end-to-end 60-second inference on all WAV files in --wav-dir")
 
     for r in results:
         print()
@@ -549,15 +554,10 @@ def main() -> int:
     """
     parser = argparse.ArgumentParser(
         description=(
-            "Compare model predictions on a test set loaded from testing_60s_samples.csv. "
-            "Runs each enabled model against the corresponding 60-second WAV files "
+            "Compare model predictions on a test set discovered from WAV files in --wav-dir. "
+            "Runs each enabled model against 60-second WAV files "
             "and reports correct identifications, false positives, and false negatives."
         )
-    )
-    parser.add_argument(
-        "--testing-csv",
-        default="output/csv/testing_60s_samples.csv",
-        help="Path to testing_60s_samples.csv (default: output/csv/testing_60s_samples.csv).",
     )
     parser.add_argument(
         "--wav-dir",
@@ -627,15 +627,6 @@ def main() -> int:
 
     args = parser.parse_args()
 
-    testing_csv = Path(args.testing_csv)
-    if not testing_csv.exists():
-        print(f"Error: testing CSV not found: {testing_csv}", file=sys.stderr)
-        print(
-            "Update output/csv/testing_60s_samples.csv before running compare_models.py.",
-            file=sys.stderr,
-        )
-        return 1
-
     wav_dir = Path(args.wav_dir)
     if not wav_dir.exists():
         print(f"Error: WAV directory not found: {wav_dir}", file=sys.stderr)
@@ -673,7 +664,7 @@ def main() -> int:
         print(f"Error: --max-samples must be a positive integer, got {args.max_samples}", file=sys.stderr)
         return 1
 
-    samples = load_test_samples(testing_csv, max_samples=args.max_samples,
+    samples = load_test_samples(wav_dir, max_samples=args.max_samples,
                                 category_filter=args.category)
     if not samples:
         if args.category:
@@ -682,7 +673,7 @@ def main() -> int:
             print("Error: no test samples found.", file=sys.stderr)
         return 1
 
-    print(f"Loaded {len(samples)} test samples from {testing_csv}")
+    print(f"Loaded {len(samples)} test samples from WAV files in {wav_dir}")
     if args.category:
         print(f"  (filtered to category: {args.category})")
     if args.max_samples is not None:

@@ -5,7 +5,7 @@
 Unit tests for compare_models.py.
 
 Tests cover:
-- load_test_samples() CSV parsing
+- load_test_samples() WAV discovery
 - find_wav_file() path construction
 - is_resident_prediction() label mapping
 - evaluate_model() with mocked run_inference
@@ -14,7 +14,6 @@ Tests cover:
 - main() CLI error handling
 """
 
-import csv
 import sys
 from pathlib import Path
 from unittest.mock import patch
@@ -25,17 +24,6 @@ import pytest
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
-def _write_csv(path, rows, fieldnames=None):
-    """Write a CSV file with the given rows."""
-    if not fieldnames:
-        fieldnames = ["Category", "NodeName", "StartTimestamp", "URI", "Description", "Notes", "Confidence"]
-    with open(path, "w", newline="", encoding="utf-8") as f:
-        import csv as _csv
-        writer = _csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
-        writer.writeheader()
-        writer.writerows(rows)
-
 
 def _make_testing_rows():
     """Return a list of testing sample rows."""
@@ -85,126 +73,98 @@ def test_multilabel_prediction_counts_matching_species_as_correct():
 class TestLoadTestSamples:
     """Tests for load_test_samples()."""
 
+    def _write_testing_wavs(self, wav_dir: Path, rows):
+        """Create WAV files from testing rows under category directories."""
+        for row in rows:
+            node = row["NodeName"].replace("_", "-")
+            wav = wav_dir / row["Category"] / f"{node}_{row['StartTimestamp']}.wav"
+            wav.parent.mkdir(parents=True, exist_ok=True)
+            wav.touch()
+
     def test_loads_all_samples(self, tmp_path):
-        """load_test_samples loads all rows from testing_60s_samples.csv."""
+        """load_test_samples loads all matching WAV files under wav_dir."""
         from compare_models import load_test_samples
-        testing_rows = _make_testing_rows()
+        wav_dir = tmp_path / "testing-wav"
+        self._write_testing_wavs(wav_dir, _make_testing_rows())
 
-        testing_csv = tmp_path / "testing_60s_samples.csv"
-        _write_csv(testing_csv, testing_rows)
-
-        samples = load_test_samples(testing_csv)
+        samples = load_test_samples(wav_dir)
         assert len(samples) == 3
-        uris = {s.uri for s in samples}
-        assert "https://example.com/1" in uris
-        assert "https://example.com/2" in uris
-        assert "https://example.com/3" in uris
+        assert {s.category for s in samples} == {"resident", "human", "humpback"}
 
     def test_parses_fields_correctly(self, tmp_path):
-        """load_test_samples correctly maps CSV columns to TestSample fields."""
+        """load_test_samples infers fields from WAV path and filename."""
         from compare_models import load_test_samples
-        testing_rows = _make_testing_rows()
+        wav_dir = tmp_path / "testing-wav"
+        self._write_testing_wavs(wav_dir, _make_testing_rows())
 
-        testing_csv = tmp_path / "testing_60s_samples.csv"
-        _write_csv(testing_csv, testing_rows)
-
-        samples = load_test_samples(testing_csv)
+        samples = load_test_samples(wav_dir)
         first = samples[0]
-        assert first.category == "resident"
-        assert first.node_name == "rpi_orcasound_lab"
-        assert first.start_timestamp == "2023_08_18_00_59_53_PST"
-        assert first.uri == "https://example.com/1"
-        assert first.notes == "tp_human_only"
+        assert first.node_name
+        assert first.start_timestamp.endswith("_PST")
+        assert first.uri == ""
+        assert first.notes == ""
+        assert first.description == ""
 
-    def test_returns_empty_list_for_missing_file(self, tmp_path):
-        """load_test_samples returns [] when testing_60s_samples.csv is missing."""
+    def test_returns_empty_list_for_missing_dir(self):
+        """load_test_samples returns [] when wav_dir does not exist."""
         from compare_models import load_test_samples
 
-        samples = load_test_samples(Path("/nonexistent/testing_60s_samples.csv"))
+        samples = load_test_samples(Path("/nonexistent/testing-wav"))
         assert samples == []
 
     def test_respects_max_samples_limit(self, tmp_path):
         """load_test_samples respects max_samples parameter."""
         from compare_models import load_test_samples
-        testing_rows = _make_testing_rows()
+        wav_dir = tmp_path / "testing-wav"
+        self._write_testing_wavs(wav_dir, _make_testing_rows())
 
-        testing_csv = tmp_path / "testing_60s_samples.csv"
-        _write_csv(testing_csv, testing_rows)
-
-        samples = load_test_samples(testing_csv, max_samples=2)
+        samples = load_test_samples(wav_dir, max_samples=2)
         assert len(samples) == 2
 
     def test_category_filter_returns_only_matching_samples(self, tmp_path):
         """load_test_samples returns only samples matching the category filter."""
         from compare_models import load_test_samples
-        testing_rows = _make_testing_rows()
+        wav_dir = tmp_path / "testing-wav"
+        self._write_testing_wavs(wav_dir, _make_testing_rows())
 
-        testing_csv = tmp_path / "testing_60s_samples.csv"
-        _write_csv(testing_csv, testing_rows)
-
-        samples = load_test_samples(testing_csv, category_filter="resident")
+        samples = load_test_samples(wav_dir, category_filter="resident")
         assert len(samples) == 1
         assert all(s.category == "resident" for s in samples)
 
     def test_category_filter_returns_empty_for_no_match(self, tmp_path):
         """load_test_samples returns [] when category filter matches no rows."""
         from compare_models import load_test_samples
-        testing_rows = _make_testing_rows()
+        wav_dir = tmp_path / "testing-wav"
+        self._write_testing_wavs(wav_dir, _make_testing_rows())
 
-        testing_csv = tmp_path / "testing_60s_samples.csv"
-        _write_csv(testing_csv, testing_rows)
-
-        samples = load_test_samples(testing_csv, category_filter="transient")
+        samples = load_test_samples(wav_dir, category_filter="transient")
         assert samples == []
 
     def test_category_filter_combined_with_max_samples(self, tmp_path):
         """load_test_samples applies both category_filter and max_samples."""
         from compare_models import load_test_samples
 
+        wav_dir = tmp_path / "testing-wav"
         rows = [
-            {"Category": "humpback", "NodeName": "rpi_a", "StartTimestamp": "2024_01_01_00_00_00_PST",
-             "URI": "https://example.com/1", "Description": "", "Notes": "tp_machine_only", "Confidence": ""},
-            {"Category": "humpback", "NodeName": "rpi_b", "StartTimestamp": "2024_01_01_00_01_00_PST",
-             "URI": "https://example.com/2", "Description": "", "Notes": "tp_machine_only", "Confidence": ""},
-            {"Category": "humpback", "NodeName": "rpi_c", "StartTimestamp": "2024_01_01_00_02_00_PST",
-             "URI": "https://example.com/3", "Description": "", "Notes": "tp_machine_only", "Confidence": ""},
+            {"Category": "humpback", "NodeName": "rpi_a", "StartTimestamp": "2024_01_01_00_00_00_PST"},
+            {"Category": "humpback", "NodeName": "rpi_b", "StartTimestamp": "2024_01_01_00_01_00_PST"},
+            {"Category": "humpback", "NodeName": "rpi_c", "StartTimestamp": "2024_01_01_00_02_00_PST"},
         ]
-        testing_csv = tmp_path / "testing_60s_samples.csv"
-        _write_csv(testing_csv, rows)
+        self._write_testing_wavs(wav_dir, rows)
 
-        samples = load_test_samples(testing_csv, max_samples=2, category_filter="humpback")
+        samples = load_test_samples(wav_dir, max_samples=2, category_filter="humpback")
         assert len(samples) == 2
         assert all(s.category == "humpback" for s in samples)
 
-    def test_handles_csv_error(self, tmp_path):
-        """load_test_samples returns [] on csv.Error."""
-        import csv
-        from unittest.mock import patch
+    def test_skips_malformed_wav_filenames(self, tmp_path):
+        """load_test_samples ignores WAV files with unexpected filename formats."""
         from compare_models import load_test_samples
 
-        testing_csv = tmp_path / "testing_60s_samples.csv"
-        testing_csv.write_text("Category,NodeName,StartTimestamp,URI,Description,Notes\n")
-
-        # Patch DictReader iteration to raise csv.Error mid-read.
-        with patch("compare_models.csv.DictReader") as mock_reader_cls:
-            mock_reader_cls.return_value.__iter__ = lambda self: iter([])
-            mock_reader_cls.return_value.__enter__ = lambda self: self
-            mock_reader_cls.side_effect = csv.Error("simulated CSV parse error")
-            samples = load_test_samples(testing_csv)
-
-        assert samples == []
-
-    def test_handles_unicode_decode_error(self, tmp_path):
-        """load_test_samples returns [] for files with encoding issues."""
-        from compare_models import load_test_samples
-        
-        testing_csv = tmp_path / "testing_60s_samples.csv"
-        # Write file with invalid UTF-8
-        with open(testing_csv, "wb") as f:
-            f.write(b"Category,NodeName,StartTimestamp,URI,Description,Notes\n")
-            f.write(b"resident,rpi_lab,2023_01_01_00_00_00_PST,http://example.com,test\x8f,notes\n")
-        
-        samples = load_test_samples(testing_csv)
+        wav_dir = tmp_path / "testing-wav"
+        bad_wav = wav_dir / "resident" / "not_a_timestamp.wav"
+        bad_wav.parent.mkdir(parents=True, exist_ok=True)
+        bad_wav.touch()
+        samples = load_test_samples(wav_dir)
         assert samples == []
 
 
@@ -755,7 +715,7 @@ class TestPrintSummary:
         assert "Definitions:" in captured
         assert "Accuracy     = Correct / Evaluated" in captured
         assert "[R|T|H]FP%   = among non-[R|T|H] samples, fraction predicted as that class" in captured
-        assert "compares end-to-end 60-second inference on testing_60s_samples.csv" in captured
+        assert "compares end-to-end 60-second inference on all WAV files in --wav-dir" in captured
 
     def test_prints_avg_time(self, capsys):
         """print_summary includes average time column."""
@@ -825,35 +785,20 @@ class TestPrintSummary:
 class TestMainCLI:
     """Tests for the main() entry point."""
 
-    def _write_testing_csv(self, tmp_path, testing_rows):
-        """Write testing_60s_samples.csv to tmp_path."""
-        testing_csv = tmp_path / "testing_60s_samples.csv"
-        _write_csv(testing_csv, testing_rows)
-        return testing_csv
-
-    def test_returns_1_for_missing_testing_csv(self, tmp_path):
-        """main() returns 1 when testing_60s_samples.csv does not exist."""
-        from compare_models import main
-        wav_dir = tmp_path / "testing-wav"
-        wav_dir.mkdir()
-        test_args = [
-            "compare_models.py",
-            "--testing-csv", str(tmp_path / "nonexistent.csv"),
-            "--wav-dir", str(wav_dir),
-            "--models", "fastai",
-        ]
-        with patch.object(sys, "argv", test_args):
-            result = main()
-        assert result == 1
+    def _write_testing_wavs(self, wav_dir: Path, rows):
+        """Create WAV files from testing rows under category directories."""
+        for row in rows:
+            node = row["NodeName"].replace("_", "-")
+            wav = wav_dir / row["Category"] / f"{node}_{row['StartTimestamp']}.wav"
+            wav.parent.mkdir(parents=True, exist_ok=True)
+            wav.touch()
 
     def test_returns_1_for_missing_wav_dir(self, tmp_path):
         """main() returns 1 when the WAV directory does not exist."""
         from compare_models import main
 
-        testing_csv = self._write_testing_csv(tmp_path, _make_testing_rows())
         test_args = [
             "compare_models.py",
-            "--testing-csv", str(testing_csv),
             "--wav-dir", str(tmp_path / "nonexistent-wav-dir"),
             "--models", "fastai",
         ]
@@ -865,12 +810,10 @@ class TestMainCLI:
         """main() returns 1 when an unrecognised model type is specified."""
         from compare_models import main
 
-        testing_csv = self._write_testing_csv(tmp_path, _make_testing_rows())
         wav_dir = tmp_path / "testing-wav"
         wav_dir.mkdir()
         test_args = [
             "compare_models.py",
-            "--testing-csv", str(testing_csv),
             "--wav-dir", str(wav_dir),
             "--models", "unknown_model",
         ]
@@ -883,19 +826,13 @@ class TestMainCLI:
         from compare_models import OLD_PODSAI_MODEL_REVISION, main
 
         rows = _make_testing_rows()
-        testing_csv = self._write_testing_csv(tmp_path, rows)
 
         wav_dir = tmp_path / "testing-wav"
-        row = rows[0]
-        node = row["NodeName"].replace("_", "-")
-        wav = wav_dir / row["Category"] / f"{node}_{row['StartTimestamp']}.wav"
-        wav.parent.mkdir(parents=True, exist_ok=True)
-        wav.touch()
+        self._write_testing_wavs(wav_dir, [rows[0]])
 
         mock_result = {"global_prediction_label": "resident", "global_confidence": 0.8, "predict_time": 1.5}
         test_args = [
             "compare_models.py",
-            "--testing-csv", str(testing_csv),
             "--wav-dir", str(wav_dir),
             "--models", "oldpodsai",
             "--max-samples", "1",
@@ -914,13 +851,11 @@ class TestMainCLI:
         from compare_models import ModelResult, OLD_PODSAI_MODEL_REVISION, PODSAI_MODEL_REVISION, main
 
         rows = _make_testing_rows()
-        testing_csv = self._write_testing_csv(tmp_path, rows)
         wav_dir = tmp_path / "testing-wav"
-        wav_dir.mkdir()
+        self._write_testing_wavs(wav_dir, [rows[0]])
 
         test_args = [
             "compare_models.py",
-            "--testing-csv", str(testing_csv),
             "--wav-dir", str(wav_dir),
             "--max-samples", "1",
         ]
@@ -943,19 +878,12 @@ class TestMainCLI:
         from compare_models import main
 
         rows = _make_testing_rows()
-        testing_csv = self._write_testing_csv(tmp_path, rows)
-
         wav_dir = tmp_path / "testing-wav"
-        for row in rows:
-            node = row["NodeName"].replace("_", "-")
-            wav = wav_dir / row["Category"] / f"{node}_{row['StartTimestamp']}.wav"
-            wav.parent.mkdir(parents=True, exist_ok=True)
-            wav.touch()
+        self._write_testing_wavs(wav_dir, rows)
 
         mock_result = {"global_prediction_label": "resident", "global_confidence": 0.8, "predict_time": 1.5}
         test_args = [
             "compare_models.py",
-            "--testing-csv", str(testing_csv),
             "--wav-dir", str(wav_dir),
             "--models", "fastai",
             "--fastai-model-path", "./model",
@@ -966,15 +894,13 @@ class TestMainCLI:
         assert result == 0
 
     def test_returns_1_when_no_test_samples(self, tmp_path):
-        """main() returns 1 when testing_60s_samples.csv is empty."""
+        """main() returns 1 when wav_dir contains no valid test samples."""
         from compare_models import main
 
-        testing_csv = self._write_testing_csv(tmp_path, [])
         wav_dir = tmp_path / "testing-wav"
         wav_dir.mkdir()
         test_args = [
             "compare_models.py",
-            "--testing-csv", str(testing_csv),
             "--wav-dir", str(wav_dir),
             "--models", "fastai",
         ]
@@ -987,19 +913,12 @@ class TestMainCLI:
         from compare_models import main
 
         rows = _make_testing_rows()
-        testing_csv = self._write_testing_csv(tmp_path, rows)
-
         wav_dir = tmp_path / "testing-wav"
-        for row in rows[:2]:  # Only create WAVs for first 2
-            node = row["NodeName"].replace("_", "-")
-            wav = wav_dir / row["Category"] / f"{node}_{row['StartTimestamp']}.wav"
-            wav.parent.mkdir(parents=True, exist_ok=True)
-            wav.touch()
+        self._write_testing_wavs(wav_dir, rows[:2])
 
         mock_result = {"global_prediction_label": "resident", "global_confidence": 0.8, "predict_time": 1.5}
         test_args = [
             "compare_models.py",
-            "--testing-csv", str(testing_csv),
             "--wav-dir", str(wav_dir),
             "--models", "fastai",
             "--max-samples", "2",
@@ -1015,12 +934,10 @@ class TestMainCLI:
         """main() returns 1 when --max-samples is zero or negative."""
         from compare_models import main
 
-        testing_csv = self._write_testing_csv(tmp_path, _make_testing_rows())
         wav_dir = tmp_path / "testing-wav"
         wav_dir.mkdir()
         test_args = [
             "compare_models.py",
-            "--testing-csv", str(testing_csv),
             "--wav-dir", str(wav_dir),
             "--models", "fastai",
             "--max-samples", "0",
@@ -1034,20 +951,13 @@ class TestMainCLI:
         from compare_models import main
 
         rows = _make_testing_rows()
-        testing_csv = self._write_testing_csv(tmp_path, rows)
-
         wav_dir = tmp_path / "testing-wav"
         # Only create WAV for the resident sample.
-        resident_row = rows[0]
-        node = resident_row["NodeName"].replace("_", "-")
-        wav = wav_dir / resident_row["Category"] / f"{node}_{resident_row['StartTimestamp']}.wav"
-        wav.parent.mkdir(parents=True, exist_ok=True)
-        wav.touch()
+        self._write_testing_wavs(wav_dir, [rows[0]])
 
         mock_result = {"global_prediction_label": "resident", "global_confidence": 0.9, "predict_time": 1.0}
         test_args = [
             "compare_models.py",
-            "--testing-csv", str(testing_csv),
             "--wav-dir", str(wav_dir),
             "--models", "fastai",
             "--fastai-model-path", "./model",
@@ -1061,15 +971,13 @@ class TestMainCLI:
         assert result == 0
 
     def test_returns_1_for_category_with_no_samples(self, tmp_path):
-        """main() returns 1 when --category matches no rows in testing_60s_samples.csv."""
+        """main() returns 1 when --category matches no WAV-discovered samples."""
         from compare_models import main
 
-        testing_csv = self._write_testing_csv(tmp_path, _make_testing_rows())
         wav_dir = tmp_path / "testing-wav"
-        wav_dir.mkdir()
+        self._write_testing_wavs(wav_dir, _make_testing_rows())
         test_args = [
             "compare_models.py",
-            "--testing-csv", str(testing_csv),
             "--wav-dir", str(wav_dir),
             "--models", "fastai",
             "--category", "transient",
