@@ -4,9 +4,7 @@
 name: Generate Model Comparison
 
 on:
-  push:
-    branches:
-      - '**'
+  create:
     tags:
       - model-*
   workflow_dispatch:
@@ -82,20 +80,7 @@ jobs:
             exit 0
           fi
 
-          if [ "${{ github.event.before }}" = "0000000000000000000000000000000000000000" ]; then
-            echo "should_run=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          git diff --name-only "${{ github.event.before }}" "${{ github.sha }}" > changed_files.txt
-          cat changed_files.txt
-
-          should_run=false
-          if grep -Eq '^output/csv/testing_60s_samples\.csv$|^src/compare_models\.py$|^\.github/workflows/generate_model_comparison\.yml$' changed_files.txt; then
-            should_run=true
-          fi
-
-          echo "should_run=$should_run" >> "$GITHUB_OUTPUT"
+          echo "should_run=false" >> "$GITHUB_OUTPUT"
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
         if: steps.detect.outputs.should_run == 'true'
@@ -126,6 +111,10 @@ jobs:
           python src/download_wavs.py \
             --training-csv-path /tmp/empty_training_3s_samples.csv \
             --testing-csv-path output/csv/testing_60s_samples.csv
+
+      - name: Process humpback signal wavs
+        if: steps.detect.outputs.should_run == 'true'
+        run: python src/process_humpback_wavs.py
 
       - name: Generate model comparison results
         if: steps.detect.outputs.should_run == 'true'
