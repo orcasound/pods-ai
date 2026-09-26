@@ -134,7 +134,7 @@ To add new training samples:
 To have GitHub train a new model from the latest `main` branch:
 
 1. Go to https://github.com/orcasound/pods-ai/actions/workflows/train_model.yml in a browser.
-2. Open the "Run workflow" dropdown and click "Run workflow".  The process will take nearly 3 hours.
+2. Open the "Run workflow" dropdown and click "Run workflow".  The process will take around 3 hours.
 3. Add a tag to the main branch such as "model-20260905" if the date is Sept. 5, 2026.
 4. Once the workflow completes, a new model will appear on [HuggingFace](https://huggingface.co/davethaler/whale-call-detector).
 5. From HuggingFace, click the [Files](https://huggingface.co/davethaler/whale-call-detector/tree/main) tab.
