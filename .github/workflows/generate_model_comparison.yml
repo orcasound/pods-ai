@@ -96,9 +96,7 @@ jobs:
 
       - name: Install Python dependencies
         if: steps.detect.outputs.should_run == 'true'
-        run: |
-          pip install -r requirements.txt
-          pip install "setuptools>=74,<80"
+        run: pip install -r requirements.txt
 
       - name: Verify pkg_resources is available
         if: steps.detect.outputs.should_run == 'true'
