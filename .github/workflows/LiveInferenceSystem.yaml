@@ -79,6 +79,7 @@ jobs:
       - name: Build Dockerfile image
         env:
           DOCKER_BUILDKIT: 1
+        shell: bash
         run: |
           build_args=()
           if [ -n "${HF_TOKEN:-}" ]; then
