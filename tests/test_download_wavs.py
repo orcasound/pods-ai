@@ -20,7 +20,9 @@ from download_wavs import (
     process_testing_csv,
     run_download_wavs,
     validate_aligned_entries,
+    validate_node_slug_in_uri,
     validate_no_overlaps,
+    validate_uri_timestamps,
 )
 
 
@@ -441,6 +443,59 @@ class TestCacheAndCleanup:
             assert expected.exists()
             assert expected.read_bytes() == b"cached"
             assert not stale.exists()
+
+
+class TestNodeSlugValidation:
+    def test_validate_node_slug_uses_default_mapping_when_feed_lookup_fails(self):
+        rows = [
+            CSVRow(
+                "resident",
+                "rpi_andrews_bay",
+                "2025_01_01_01_01_06_PST",
+                "https://live.orcasound.net/bouts/new/andrews-bay?time=2025-01-01T09%3A01%3A06.000Z",
+                "desc",
+                "tp_human_only",
+                "100",
+            ),
+        ]
+
+        with patch("download_wavs.get_orcasite_feeds", side_effect=Exception("Read timed out")):
+            validate_node_slug_in_uri(rows)
+
+    def test_validate_node_slug_still_rejects_mismatch_with_default_mapping(self):
+        rows = [
+            CSVRow(
+                "resident",
+                "rpi_andrews_bay",
+                "2025_01_01_01_01_06_PST",
+                "https://live.orcasound.net/bouts/new/sunset-bay?time=2025-01-01T09%3A01%3A06.000Z",
+                "desc",
+                "tp_human_only",
+                "100",
+            ),
+        ]
+
+        with patch("download_wavs.get_orcasite_feeds", side_effect=Exception("Read timed out")), \
+                pytest.raises(ValueError, match="Node slug not found in URI"):
+            validate_node_slug_in_uri(rows)
+
+
+class TestUriTimestampValidation:
+    def test_validate_uri_timestamps_does_not_require_feed_lookup(self):
+        rows = [
+            CSVRow(
+                "resident",
+                "rpi_andrews_bay",
+                "2025_01_01_01_01_06_PST",
+                "https://live.orcasound.net/bouts/new/andrews-bay?time=2025-01-01T09%3A01%3A06.000Z",
+                "desc",
+                "tp_human_only",
+                "100",
+            ),
+        ]
+
+        with patch("download_wavs.get_orcasite_feeds", side_effect=Exception("Read timed out")):
+            validate_uri_timestamps(rows)
 
 
 class TestValidateOnly:
