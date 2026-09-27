@@ -78,6 +78,7 @@ jobs:
 
       - name: Build Dockerfile image
         env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
           DOCKER_BUILDKIT: 1
         shell: bash
         run: |
