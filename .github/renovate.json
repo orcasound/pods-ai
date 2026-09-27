@@ -26,6 +26,7 @@
         "/^src/LiveInferenceOrchestrator\\.py$/"
       ],
       "matchStrings": [
+        "PODSAI_AST_MODEL_REVISION = \"(?<currentValue>[a-f0-9]{7,64})\"",
         "PODSAI_MODEL_REVISION = \"(?<currentValue>[a-f0-9]{7,64})\"",
         "DEFAULT_MODEL_REVISION = \"(?<currentValue>[a-f0-9]{7,64})\""
       ],
