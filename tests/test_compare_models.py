@@ -652,19 +652,12 @@ class TestMainCLI:
         from compare_models import main
 
         rows = _make_testing_rows()
-        testing_csv = self._write_testing_csv(tmp_path, rows)
-
         wav_dir = tmp_path / "testing-wav"
-        row = rows[0]
-        node = row["NodeName"].replace("_", "-")
-        wav = wav_dir / row["Category"] / f"{node}_{row['StartTimestamp']}.wav"
-        wav.parent.mkdir(parents=True, exist_ok=True)
-        wav.touch()
+        self._write_testing_wavs(wav_dir, [rows[0]])
 
         mock_result = {"global_prediction_label": "resident", "global_confidence": 0.8, "predict_time": 1.5}
         test_args = [
             "compare_models.py",
-            "--testing-csv", str(testing_csv),
             "--wav-dir", str(wav_dir),
             "--models", "oldpodsai",
             "--max-samples", "1",
@@ -712,20 +705,13 @@ class TestMainCLI:
         from compare_models import main
 
         rows = _make_testing_rows()
-        testing_csv = self._write_testing_csv(tmp_path, rows)
-
         wav_dir = tmp_path / "testing-wav"
-        for row in rows[:2]:
-            node = row["NodeName"].replace("_", "-")
-            wav = wav_dir / row["Category"] / f"{node}_{row['StartTimestamp']}.wav"
-            wav.parent.mkdir(parents=True, exist_ok=True)
-            wav.touch()
+        self._write_testing_wavs(wav_dir, rows)
 
         mock_result = {"global_prediction_label": "resident", "global_confidence": 0.8, "predict_time": 1.5}
         preloaded_model = object()
         test_args = [
             "compare_models.py",
-            "--testing-csv", str(testing_csv),
             "--wav-dir", str(wav_dir),
             "--models", "fastai",
             "--max-samples", "2",
