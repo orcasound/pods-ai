@@ -16,7 +16,7 @@ Every new source file must start with a copyright notice and SPDX license identi
 
 ### Language and Style
 
-- **Language**: Python 3.11+
+- **Language**: Python 3.12+
 - **Spellings**: Use American English spellings (e.g., "color" not "colour", "recognize" not "recognise").
 - **Typing**: Use `dataclasses`, built-in generic types (`list`, `tuple`), and `typing` utilities (`Optional`) with type annotations throughout.
 - **Docstrings**: All public functions and classes must have Google-style or plain docstrings describing parameters and return values.

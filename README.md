@@ -1,27 +1,214 @@
 # Programmatic Orca Detection System using Artificial Intelligence (PODS-AI)
 
-This repository contains scripts for preparing training data for orca detection models.
+This repository contains scripts for training, evaluating, and using the
+PODS-AI model for detecting orcas (both residents and Biggs/transients)
+and humpbacks, based on [training data](docs/csv-manifests.md).
 
-Bootstrap-only generation scripts and archived CSV inputs now live under [`bootstrap/`](bootstrap/README.md).
+## Model Comparison
 
-## Overview
+A comparison between the latest PODS-AI model and the current
+[OrcaHello](https://github.com/orcasound/orcahello) model is:
 
-The ongoing sample CSVs are:
+```
+================================================================================================================
+Model Comparison Summary
+================================================================================================================
+Model           Evaluated   Correct  Accuracy      F1    RFP%    RFN%    TFP%    TFN%    HFP%    HFN%   Avg Time
+----------------------------------------------------------------------------------------------------------------
+orcahello             144        36     25.0%   0.119   93.5%   42.3%    0.0%  100.0%    0.0%  100.0%      4.89s
+podsai                144        68     47.2%   0.507   16.3%   42.3%    4.4%   36.7%    0.0%   88.9%      7.52s
+================================================================================================================
 
-- `output/csv/training_3s_samples.csv`
-- `output/csv/testing_60s_samples.csv`
-- `output/csv/dclde_60s_samples.csv`
+Definitions:
+  Accuracy     = Correct / Evaluated
+  Correct      = fastai/orcahello: resident vs other; oldpodsai/podsai: category in prediction set
+  F1           = macro F1 over humpback, resident, and transient classes that are present
+  [R|T|H]FP%   = among non-[R|T|H] samples, fraction predicted as that class
+  [R|T|H]FN%   = among actual samples of that class, fraction predicted as another class
+  Avg Time     = average time spent in model predict() per 60-second WAV file
+  Note         = compares end-to-end 60-second inference on testing_60s_samples.csv
 
-These files can be updated manually by editing rows directly, or via scripts (for example
-`add_samples.py`, `process_false_positives.py`, and `process_false_negatives.py`).
+Confusion Matrix for orcahello (rows=actual, cols=predicted):
+                other  resident     total
+       bird         2         8        10
+      human         0        10        10
+   humpback         4        14        18
+     jingle         0         7         7
+   resident        22        30        52
+  transient         0        30        30
+     vessel         0         7         7
+      water         0        10        10
+
+Confusion Matrix for podsai (rows=actual, cols=predicted):
+                 human   humpback   resident  transient     vessel      water      total
+       bird          0          0          3          0          7          0         10
+      human          9          0          0          1          0          0         10
+   humpback          0          2          3          1         11          1         18
+     jingle          0          0          0          0          7          0          7
+   resident          1          0         30          3         16          2         52
+  transient          0          0          9         19          2          0         30
+     vessel          0          0          0          0          7          0          7
+      water          0          0          0          0          9          1         10
+```
+
+NOTE 1: The results above may be biased against models, compared to what would be expected on live
+audio, since the testing set is weighted towards samples that were mispredicted in the past.
+
+NOTE 2: The F1 score is lower than the F1 for individual 3-second periods on which the models
+run.  This is because the prediction of a 60-second sample is based on multiple 3-second
+periods, at least 2 of which must pass 60% confidence of a whale category before it will predict
+that whale category.  Thus, if 2 out of 20 non-whale samples were mis-predicted as resident,
+the F1 for the individual 3-second periods may be 90% but the 60-second sample would still
+result in a false positive.
+
+## Getting Started
+
+1. Install Python 3.12
+
+2. Install FFmpeg
+
+Linux:
+```
+sudo apt-get install -y ffmpeg
+```
+
+Windows:
+```
+choco install ffmpeg -y
+```
+
+3. Install Python dependencies:
+
+```
+pip install -r requirements.txt
+```
+
+4. Patch fastai_audio
+
+Linux:
+```bash
+patch_fastai_audio.sh
+```
+
+Windows:
+```cmd
+patch_fastai_audio.bat
+```
+
+5. Run unit tests with `python -m pytest tests/ -v -s`
+
+If anything fails, compare what the [run_tests.yml](.github/workflows/run_tests.yml) workflow does.
+
+See the [Contributing Guidelines](CONTRIBUTING.md) if you plan to contribute changes to this repository.
+
+## Adding Testing Samples
+
+To add new testing samples:
+
+1. Use [process_false_negatives.py](docs/process-false-negatives.md) to find recent candidates reported
+   by humans but missed by AI.
+2. Use [process_false_positives.py](docs/process-false-positives.md) with `--set testing --end now` to find recent candidates
+   by AI but marked as false positives by a moderator.
+3. Use [run_inference.py](docs/run-inference.md) to see how the current PODS-AI performs on each
+   segment, to see if it is a good test case.
+4. Listen to the sample by navigating to the bouts URI, to verify it sounds reasonable.
+5. Add the line to [testing_60s_samples.csv](docs/csv-manifests.md).
+6. Run [download_wavs.py](docs/download-wavs.md) to verify there are no issues with the lines added,
+   such as overlaps in time and location with other testing or training samples.
+
+## Adding Training Samples
+
+To add new training samples:
+
+1. Use [process_testing_set_mispredictions.py](docs/process-testing-set-mispredictions.md) to find
+   current testing set candidates to convert to training samples.
+2. For any candidate:
+   - Listen to the candidate 3-second samples by navigating to the bouts URI, to verify they sound reasonable.
+   - Remove the row from [testing_60s_samples.csv](docs/csv-manifests.md)
+   - Add rows to [training_3s_samples.csv](docs/csv-manifests.md).
+3. For any rows removed from the testing set, [add more testing samples](#adding-testing-samples)
+   so that the testing set does not shrink.
+
+## Training a New Model
+
+To have GitHub train a new model from the latest `main` branch:
+
+1. Go to https://github.com/orcasound/pods-ai/actions/workflows/train_model.yml in a browser.
+2. Open the "Run workflow" dropdown and click "Run workflow".  The process will take around 3 hours.
+3. Add a tag to the main branch such as "model-20260905" if the date is Sept. 5, 2026.
+4. Once the workflow completes, a new model will appear on [HuggingFace](https://huggingface.co/davethaler/whale-call-detector).
+5. From HuggingFace, click the [Files](https://huggingface.co/davethaler/whale-call-detector/tree/main) tab.
+6. Get the SHA hash of the latest commit, which will be a long string like `36620370fd59c8a70f9b7be6060d4f40717e796d`.    This can be found by clicking the short prefix to the right of "Model save", just above the list of files, and copying it from the path in the address bar.
+7. Update the SHA commit to the latest version in the following places:
+```
+src/add_samples.py:DEFAULT_MODEL_REVISION = "36620370fd59c8a70f9b7be6060d4f40717e796d"  # Pinned Hub model revision.
+src/compare_models.py:PODSAI_MODEL_REVISION = "36620370fd59c8a70f9b7be6060d4f40717e796d"
+src/generate_embeddings.py:PODSAI_AST_MODEL_REVISION = "36620370fd59c8a70f9b7be6060d4f40717e796d"
+src/LiveInferenceOrchestrator.py:PODSAI_MODEL_REVISION = "36620370fd59c8a70f9b7be6060d4f40717e796d"
+src/run_inference.py:PODSAI_AST_MODEL_REVISION = "36620370fd59c8a70f9b7be6060d4f40717e796d"
+tests/test_podsai_inference.py:PODSAI_TEST_MODEL_REVISION = "36620370fd59c8a70f9b7be6060d4f40717e796d"
+tests/test_run_inference.py:PODSAI_TEST_MODEL_REVISION = "36620370fd59c8a70f9b7be6060d4f40717e796d"
+```
+8. Run `python src/compare_models.py --models podsai` to verify that the F1 does not regress from the latest model as shown at the top of this README.  Don't proceed further unless the F1 improves.
+9. Update README.md with the latest model comparison results.
+10. Generate a pull request with the changes
+11. Once the pull request is merged, add another tag to the main branch such as
+   `LiveInferenceSystem.v1.4.0` (bumping the version from the most recent such tag).
+    This will cause the
+    [LiveInferenceSystem-deploy.yaml](.github/workflows/LiveInferenceSystem-deploy.yaml)
+    workflow to build a new container image and push it to the Azure Container Registry.
+12. Once that succeeds, update the `LiveInferenceSystem/deploy/<slug>.yaml` files to
+    reference the new image.  For example:
+```
+image: orcaconservancycr.azurecr.io/pods-ai-live-inference-system:09-05-2026.v1.4.0
+```
+13. Generate a pull request with those changes.
+14. Once that pull request merges, apply the config, e.g., `kubectl apply -f deploy/andrews-bay.yaml` from the
+    `LiveInferenceSystem` directory.
+
+You can instead train a model locally:
+
+1. Do `python src/process_humpback_wavs.py` to ensure that the humpback training samples are present.
+2. Do `python src/download_wavs.py` to ensure that the training WAVs are up to date with the [CSV manifests](docs/csv-manifests.md).
+3. Do `python src/train_podsai_model.py`
+4. Run `python src/compare_models.py --models podsai` to evaluate the model using the testing set.
+
+## Overview of Scripts
 
 The active scripts in `src` include:
 
-1. **download_wavs.py**: Uses `output/csv/training_3s_samples.csv`, `output/csv/testing_60s_samples.csv`, and `output/csv/dclde_60s_samples.csv` to download wav files. It keeps `output/wav/humpback/signals-humpback_*.wav` segments from the `signals-humpback` submodule (those rows are not in the CSVs).
-2. **make_spectrograms.py**: Creates a png file for each wav file in a subdirectory of `output/png`.
-3. **train_podsai_model.py**: Trains a PODS-AI model on the generated training samples, including retained humpback signal windows.
-4. **compare_models.py**: Evaluates models using `output/csv/testing_60s_samples.csv`.
-5. **generate_embeddings.py**: Generates `output/csv/embeddings.csv` from `output/csv/testing_60s_samples.csv`.
+- **download_wavs.py**: Uses `output/csv/training_3s_samples.csv`, `output/csv/testing_60s_samples.csv`, and `output/csv/dclde_60s_samples.csv` to download wav files. It keeps `output/wav/humpback/signals-humpback_*.wav` segments from the `signals-humpback` submodule (those rows are not in the CSVs).
+- **make_spectrograms.py**: Creates a png file for each wav file in a subdirectory of `output/png`.
+- **train_podsai_model.py**: Trains a PODS-AI model on the generated training samples, including retained humpback signal windows.
+- [**compare_models.py**](docs/compare-models.md): Evaluates models using `output/csv/testing_60s_samples.csv`.
+- [**generate_embeddings.py**](docs/generate-embeddings.md): Generates `output/csv/embeddings.csv` from `output/csv/testing_60s_samples.csv`.
+- [**concatenate_wavs.py**](docs/concatenate-wavs.md): Concatenates WAV files in a directory into a single output file,
+  adding a short beep between clips to make quick listen-through review easier.
+- [**process_false_positives.py**](docs/process-false-positives.md): Re-checks rejected OrcaHello detections by
+  downloading the 60-second WAV, re-running PODS-AI, and appending whale-class
+  sub-segments with corrected classes to `output/csv/new_manual_training_samples.csv`.
+- [**process_false_negatives.py**](docs/process-false-negatives.md): Re-checks confirmed OrcaHello detections by
+  downloading the 60-second WAV, re-running PODS-AI and OrcaHello segment inference,
+  and appending segments where OrcaHello predicts resident but PODS-AI does not to
+  `output/csv/new_manual_samples.csv` with corrected class `resident`.
+- [**process_testing_set_mispredictions.py**](docs/process-testing-set-mispredictions.md): Scans `output/csv/testing_60s_samples.csv`,
+  runs PODS-AI on each corresponding `output/testing-wav/<category>/...wav`, and
+  proposes `training_3s_samples.csv` rows plus `testing_60s_samples.csv` rows to
+  remove when non-adjacent high-confidence (>0.80) whale segments are found.
+- [**run_inference.py**](docs/run-inference.md): Runs a model on a wav file and prints the global prediction,
+  confidence, and per-class probabilities.
+- [**generate_embeddings.py**](docs/generate-embeddings.md): Runs the PODS-AI AST model on a set of test WAV files and extracts the AST class token embeddings for each analyzed segment. Outputs a CSV containing embeddings, predictions, confidence scores, and metadata that can be used to generate UMAP visualizations of the model's learned audio representation.
+- [**generate_umaps.py**](docs/generate-umaps.md): Creates a two-dimensional UMAP visualization from embeddings generated by `generate_embeddings.py`. Embeddings are projected using UMAP and colored by the selected label type (`ground_truth_label`, `predicted_label`, or `global_prediction_label`) to visualize how the PODS-AI AST model organizes different acoustic classes in embedding space. Outputs a publication-quality PNG figure.
+- [**LiveInferenceOrchestrator.py**](docs/LiveInferenceOrchestrator.md): Runs live/date-range HLS inference with the multiclass
+  PODS-AI model and can upload positive detections (resident/transient/humpback)
+  to Azure Blob Storage and Cosmos DB.
+- [**compare_models.py**](docs/compare-models.md): Evaluates and compares fastai, orcahello, podsai (AST), and oldpodsai (Wav2Vec2) models
+  on the test set loaded from `output/csv/testing_60s_samples.csv` and downloaded by `download_wavs.py`).
+  Reports correct identifications, false positives, false negatives, and average prediction time for each model.
+
+Bootstrap-only generation scripts and archived CSV inputs now live under [`bootstrap/`](bootstrap/README.md).
+
+## Data Flow Architecture
 
 ```mermaid
 flowchart TD;
@@ -64,694 +251,3 @@ flowchart TD;
     testingWav-->generateEmbeddings-->embeddings;
 ```
 
-## Requirements
-
-Install dependencies:
-
-```bash
-pip install -r requirements.txt
-```
-
-Key dependencies:
-- `boto3`: For accessing S3 audio files
-- `ffmpeg-python`: For audio processing
-- `librosa>=0.10.0`: For audio analysis
-- `m3u8`: For HLS stream parsing
-- `pytz`: For timezone handling
-- `fastai==1.0.61`: For FastAI model support
-- `torch>=2.1.0`: PyTorch deep learning framework
-- `torchvision>=0.16.0`: Computer vision models and utilities
-- `torchaudio>=2.1.0`: Audio processing for PyTorch
-- `soundfile`: Audio file I/O
-- `fastai_audio`: FastAI audio extensions (from GitHub)
-- `pandas`, `pydub`: Data processing and audio manipulation
-
-## Helper Scripts
-
-- **spectrogram_visualizer.py**: Adapted from [aifororcas-livesystem](https://github.com/orcasound/aifororcas-livesystem/blob/main/InferenceSystem/src/spectrogram_visualizer.py)
-- **model_inference.py**: Provides model inference interface for scoring audio samples
-- **orcasite_feeds.py**: Lightweight module providing the `OrcasiteFeed` dataclass and
-  `get_orcasite_feeds()` helper. Depends only on `requests` — no `azure-cosmos` — so
-  scripts that only need the feeds REST API (e.g. `add_samples.py`) can import it
-  without pulling in the full `make_csv` dependency tree.
-- **add_samples.py**: Splits a WAV file into 3-second segments (2-second hop), saves each
-  segment to a `new/` directory using the standard filename convention, and prints the
-  predicted class for each segment. Useful for labelling new recordings and adding them
-  to the training set. See [add_samples.py](#add_samplespy) below.
-- **concatenate_wavs.py**: Concatenates WAV files in a directory into a single output file,
-  adding a short beep between clips to make quick listen-through review easier. See
-  [concatenate_wavs.py](#concatenate_wavspy) below.
-- **process_false_positives.py**: Re-checks rejected OrcaHello detections by
-  downloading the 60-second WAV, re-running PODS-AI, and appending whale-class
-  sub-segments with corrected classes to `output/csv/training_3s_samples.csv`.
-  The corrected class is inferred from the human-authored portion of the moderation
-  comments (auto-generated "AI: …" lines are ignored).  Explicit negations in the
-  comments are understood: "No humpback" suppresses the humpback match, and
-  "No humpback nor vessel" resolves the corrected class to `water`.
-  Supports `--category CATEGORY` to process only detections whose inferred
-  actual category matches the provided value.
-- **process_false_negatives.py**: Re-checks confirmed OrcaHello detections by
-  downloading the 60-second WAV, re-running PODS-AI and OrcaHello segment inference,
-  and appending segments where OrcaHello predicts resident but PODS-AI does not to
-  `output/csv/training_3s_samples.csv` with corrected class `resident`. Supports
-  `--category CATEGORY` to process only detections whose PODS-AI predicted category
-  matches the provided value.
-- **process_testing_set_mispredictions.py**: Scans `output/csv/testing_60s_samples.csv`,
-  runs PODS-AI on each corresponding `output/testing-wav/<category>/...wav`, and
-  proposes `training_3s_samples.csv` rows plus `testing_60s_samples.csv` rows to
-  remove when non-adjacent high-confidence (>0.80) whale segments are found.
-- **run_inference.py**: Runs a model on a wav file and prints the global prediction,
-  confidence, and per-class probabilities.
-- **generate_embeddings.py**: Runs the PODS-AI AST model on a set of test WAV files and extracts the AST class token embeddings for each analyzed segment. Outputs a CSV containing embeddings, predictions, confidence scores, and metadata that can be used to generate UMAP visualizations of the model's learned audio representation. See [generate_embeddings.py](#generate_embeddingspy) below.
-- **generate_umaps.py**: Creates a two-dimensional UMAP visualization from embeddings generated by `generate_embeddings.py`. Embeddings are projected using UMAP and colored by the selected label type (`ground_truth_label`, `predicted_label`, or `global_prediction_label`) to visualize how the PODS-AI AST model organizes different acoustic classes in embedding space. Outputs a publication-quality PNG figure. See [generate_umaps.py](#generate_umapspy) below.
-- **LiveInferenceOrchestrator.py**: Runs live/date-range HLS inference with the multiclass
-  PODS-AI model and can upload positive detections (resident/transient/humpback)
-  to Azure Blob Storage and Cosmos DB.
-- **compare_models.py**: Evaluates and compares fastai, orcahello, podsai (AST), and oldpodsai (Wav2Vec2) models
-  on the test set loaded from `output/csv/testing_60s_samples.csv` and downloaded by `download_wavs.py`).
-  Reports correct identifications, false positives, false negatives, and average prediction time for each model.
-
-### add_samples.py
-
-Split a WAV recording into 3-second segments (with a 2-second hop — the same settings
-used by `run_inference.py`), save each segment to a `new/` directory using the standard
-filename convention, and print the predicted class for each segment.  The timestamp
-encoded in each filename reflects the **actual start time** of that sample inside the
-original recording.
-
-Output files follow the same naming convention as `output/wav/humpback/` etc.:
-
-```
-{node_name_with_hyphens}_{YYYY_MM_DD_HH_MM_SS_PST}.wav
-```
-
-Inference always uses the **PODS-AI (podsai)** model type.  The default model is
-`davethaler/whale-call-detector` on HuggingFace Hub; override with `--model-path`.
-
-If `--node-name` and `--timestamp` are omitted, the script infers them from the input
-filename.  The filename must follow the same convention:
-`{node_name_with_hyphens}_{YYYY_MM_DD_HH_MM_SS_PST}.wav`
-(e.g. `rpi-orcasound-lab_2025_12_17_22_34_03_PST.wav` → node `rpi_orcasound_lab`,
-timestamp `2025_12_17_22_34_03_PST`).
-
-After reviewing the predictions you can move the segments into the appropriate
-`output/wav/<category>/` directory to add them to the training set.
-
-```
-usage: python add_samples.py <wav_file> [--node-name NAME] [--timestamp TIMESTAMP]
-                             [--output-dir DIR] [--model-path PATH] [--uri URI]
-```
-
-| Argument | Description |
-|---|---|
-| `wav_file` | Path to the input WAV file to segment |
-| `--node-name` | Hydrophone node name (e.g. `rpi_orcasound_lab`). Underscores are replaced with hyphens in output filenames. **Inferred from the input filename if omitted.** |
-| `--timestamp` | PST timestamp of the **start** of the recording (e.g. `2025_01_15_12_30_00_PST`). **Inferred from the input filename if omitted.** |
-| `--output-dir` | Directory to save segments (default: `new`) |
-| `--model-path` | HuggingFace Hub model ID or path to a local podsai model directory (default: `davethaler/whale-call-detector`) |
-| `--uri` | Optional custom URI to use for all segments. If provided, all output rows will use this URI instead of generating one per segment. Useful when all segments come from the same detection. |
-
-**Example — node name and timestamp inferred from filename**
-
-```bash
-cd src
-python add_samples.py rpi-orcasound-lab_2025_01_15_12_30_00_PST.wav
-```
-
-**Example — explicit node name and timestamp with custom model**
-
-```bash
-cd src
-python add_samples.py /path/to/recording.wav \
-    --node-name rpi_orcasound_lab \
-    --timestamp 2025_01_15_12_30_00_PST \
-    --model-path /path/to/local-model
-```
-
-
-**Example — use custom URI for all segments**
-
-When all segments come from the same detection event, you can specify a single URI
-to use for all output rows:
-
-```bash
-cd src
-python add_samples.py /path/to/recording.wav \
-    --node-name rpi_orcasound_lab \
-    --timestamp 2025_01_15_12_30_00_PST \
-    --uri "https://live.orcasound.net/bouts/new/rpi_orcasound_lab?time=2025-01-15T20%3A30%3A00.000Z"
-```
-
-Output:
-```
-Saved: new/rpi-orcasound-lab_2025_01_15_12_30_00_PST.wav
-Saved: new/rpi-orcasound-lab_2025_01_15_12_30_02_PST.wav
-Saved: new/rpi-orcasound-lab_2025_01_15_12_30_04_PST.wav
-...
-
-Loading podsai model from /path/to/local-model...
-
-Segment predictions:
-  rpi-orcasound-lab_2025_01_15_12_30_00_PST.wav: water
-  rpi-orcasound-lab_2025_01_15_12_30_02_PST.wav: resident
-  rpi-orcasound-lab_2025_01_15_12_30_04_PST.wav: resident
-  ...
-```
-
-### concatenate_wavs.py
-
-Concatenate all WAV files in a directory into a single WAV file with a short beep
-between clips.
-
-```bash
-cd src
-python concatenate_wavs.py <directory> [--output OUTPUT_FILENAME]
-```
-
-Example:
-
-```bash
-cd src
-python concatenate_wavs.py ../output/wav/resident --output concatenated.wav
-```
-
-### run_inference.py
-
-Run model inference on a wav file and display the global prediction, confidence score,
-and per-class probabilities.  For PODS-AI models the per-class probability is the
-mean of all `local_confidence` values (from windows predicting that class) that exceed
-the model's threshold — the same statistic used for `global_confidence`.  For the FastAI
-binary model, `resident = global_confidence` and `other = 1 - global_confidence`.
-
-```
-usage: python run_inference.py [wav_file]
-       [--node-name NODE_NAME]
-       [--end-timestamp-str YYYY_MM_DD_HH_MM_SS_PST | --start-timestamp-utc YYYY-MM-DDTHH:MM:SSZ]
-       [--model {podsai,fastai,orcahello}] [--type {ast,wav2vec2}] [--model-path PATH]
-```
-
-| Argument | Description |
-|---|---|
-| `wav_file` | Path to the wav file to score |
-| `--node-name` | Hydrophone feed node name (for download mode) |
-| `--end-timestamp-str` | PST **end** timestamp used with `--node-name` (format: `YYYY_MM_DD_HH_MM_SS_PST`) |
-| `--start-timestamp-utc` | UTC **start** timestamp used with `--node-name` (format: `YYYY-MM-DDTHH:MM:SSZ`) |
-| `--model` | Model type: `podsai` (default), `fastai`, or `orcahello` |
-| `--type` | PODS-AI model variant used with `--model podsai`: `ast` (default) or `wav2vec2` (older model variant). These map to the currently pinned revisions in `src/run_inference.py` |
-| `--model-path` | Path to model directory or HuggingFace Hub model ID. Required for `podsai`; defaults to `./model` for `fastai`; defaults to `orcasound/orcahello-srkw-detector-v1` for `orcahello`; defaults to `davethaler/whale-call-detector` for `podsai` |
-
-When using `--node-name`, provide exactly one timestamp argument:
-`--end-timestamp-str` or `--start-timestamp-utc`.
-
-**Example — PODS-AI model**
-
-```bash
-cd src
-python run_inference.py sample.wav --model podsai
-```
-
-Output:
-```
-Model type: podsai
-Global prediction: resident (confidence: 0.7000)
-Prediction time: 1.23s
-
-Per-class probabilities:
-  humpback: 0.0000
-  human: 0.0000
-  jingle: 0.0000
-  resident: 0.7000
-  transient: 0.0000
-  vessel: 0.0000
-  water: 0.0000
-```
-
-For multi-class PODS-AI inference, `global_prediction_labels` also reports every
-class that independently meets the evidence threshold. The legacy
-`global_prediction_label` remains the primary label for compatibility.
-
-### Compatibility / Migration
-
-- Use `global_prediction_labels` for new consumers; it is an ordered list and may
-  contain multiple classes.
-- `global_prediction_label` is retained for single-label compatibility and selects
-  the first class in the priority order: whale classes, then bird/jingle, then
-  background classes, with each group ordered by mean class probability.
-- Empty or error responses always return `global_prediction_labels: []`, which
-  clients should interpret as no classes.
-
-**Example — FastAI model**
-
-```bash
-cd src
-python run_inference.py sample.wav --model fastai --model-path ../model
-```
-
-Output:
-```
-Model type: fastai
-Global prediction: resident (confidence: 0.7500)
-Prediction time: 0.85s
-
-Per-class probabilities:
-  other: 0.2500
-  resident: 0.7500
-```
-
-**Example — OrcaHello SRKW Detector**
-
-Uses the [`orcasound/orcahello-srkw-detector-v1`](https://huggingface.co/orcasound/orcahello-srkw-detector-v1)
-model from HuggingFace Hub. This is a binary SRKW (Southern Resident Killer Whale) detector
-based on the new OrcaHello inference pipeline (ResNet50 + mel spectrograms, no fastai_audio dependency).
-
-The model implementation is loaded from the `orcasound/orcahello` submodule. Initialize it first:
-
-```bash
-git submodule update --init external/orcahello
-```
-
-Then run inference:
-
-```bash
-cd src
-python run_inference.py sample.wav --model orcahello
-```
-
-Output:
-```
-Model type: orcahello
-Global prediction: resident (confidence: 0.8000)
-Prediction time: 0.92s
-
-Per-class probabilities:
-  other: 0.2000
-  resident: 0.8000
-```
-
-You can compare results between models by running each on the
-same file and comparing the output.
-
-### generate_embeddings.py
-
-Generate AST embeddings for a collection of WAV files and save them to a CSV file for
-visualization and analysis. The script loads samples from
-`output/csv/testing_60s_samples.csv`, runs PODS-AI AST inference on each corresponding
-60-second WAV file, extracts the CLS-token embedding from the Audio Spectrogram
-Transformer (AST), and writes one row per analyzed segment.
-
-The output CSV contains:
-
-- Original sample metadata (category, node name, timestamp, URI, notes, etc.)
-- Segment timing information
-- Local and global model predictions
-- Confidence scores
-- AST embedding dimensions (`embedding_0`, `embedding_1`, ...)
-
-These embeddings can be used with dimensionality-reduction techniques such as UMAP
-or t-SNE to visualize how the AST model organizes different whale call classes and
-background sounds in embedding space.
-
-Inference uses the PODS-AI AST model (`davethaler/whale-call-detector`) by default,
-but a different model or local checkpoint can be specified with `--model-path`.
-
-```bash
-usage: python generate_embeddings.py
-       [--testing-csv PATH]
-       [--wav-dir PATH]
-       [--output-csv PATH]
-       [--model-path PATH]
-       [--model-revision REVISION]
-       [--category CATEGORY]
-       [--max-samples N]
-```
-| Argument | Description |
-|---|---|
-| `--testing-csv` | Path to `testing_60s_samples.csv` (default: `../output/csv/testing_60s_samples.csv`) |
-| `--wav-dir` | Root directory containing downloaded testing WAV files (default: `output/testing-wav`) |
-| `--output-csv` | Output CSV file containing embeddings and metadata (default: `output/csv/embeddings.csv`) |
-| `--model-path` | HuggingFace Hub model ID or local PODS-AI model directory (default: `davethaler/whale-call-detector`) |
-| `--model-revision` | Specific model revision to load from HuggingFace. Defaults to the pinned AST model revision used by the repository. |
-| `--category` | Only process samples from the specified category (e.g. `resident`, `transient`, `humpback`, `water`) |
-| `--max-samples` | Maximum number of samples to process. If omitted, all matching samples are processed. |  
-
-### generate_umaps.py
-
-Generate a two-dimensional UMAP visualization from the embeddings produced by
-`generate_embeddings.py`.
-
-The script loads an embeddings CSV containing AST embedding vectors
-(`embedding_0`, `embedding_1`, …), projects them into two dimensions using
-UMAP (Uniform Manifold Approximation and Projection), and colors each point
-according to a selected label column.
-
-Supported label types are:
-
-- `ground_truth_label`
-- `predicted_label`
-- `global_prediction_label`
-
-This makes it possible to visually compare:
-
-- Ground-truth class separation
-- Local window predictions
-- Global clip predictions
-
-UMAP visualizations are useful for evaluating how well the learned AST embedding
-space separates whale vocalizations from background sounds, identifying classes
-that overlap in embedding space, and diagnosing distribution shifts between
-training, validation, and real-world datasets.
-
-```
-usage: python generate_umaps.py
-       --embeddings_csv PATH
-       --label_type {ground_truth_label,predicted_label,global_prediction_label}
-       --output_file OUTPUT.png
-```
-
-| Argument | Description |
-|---|---|
-| `--embeddings_csv` | CSV file produced by `generate_embeddings.py` containing embedding vectors and labels |
-| `--label_type` | Column used to color the UMAP (`ground_truth_label`, `predicted_label`, or `global_prediction_label`) |
-| `--output_file` | Output PNG filename |
-
-**Example — visualize ground-truth labels**
-
-```bash
-cd src
-python generate_umaps.py \
-    --embeddings_csv ../output/csv/test_embeddings.csv \
-    --label_type ground_truth_label \
-    --output_file ground_truth_umap.png
-```
-
-### compare_models.py
-
-Evaluate and compare fastai, orcahello, podsai (AST), and oldpodsai (Wav2Vec2) models on the same test set of
-60-second audio samples.  Loads the test set directly from `output/csv/testing_60s_samples.csv`, then runs each enabled model on the
-corresponding WAV files under `output/testing-wav/`
-(downloaded by `download_wavs.py`), and reports a summary table
-with correct identifications, whale-class F1, per-whale-class false positive/false negative rates,
-and average prediction time.
-
-Evaluation uses model-specific correctness plus per-whale-class error counts:
-- **Correct** – for `fastai` and `orcahello`, model predicted "resident" (SRKW) when the label is
-  `resident`, or anything other than `resident` when the label is not `resident`; for
-  `oldpodsai` and `podsai`, a whale category is correct when it is included in
-  `global_prediction_labels`; non-whale categories use the primary
-  `global_prediction_label`. Older model results use that primary-label fallback.
-- **F1** – macro F1 over the whale classes `humpback`, `resident`, and `transient` that are
-  present in the evaluated samples.
-- **R/T/H false positive** – model predicted `resident`, `transient`, or `humpback`
-  when the correct label was a different class.
-- **R/T/H false negative** – the correct label was `resident`, `transient`, or `humpback`,
-  but the model predicted a different class. Because `fastai` and `orcahello` are binary
-  resident-vs-other models, their transient/humpback FP% values stay at `0.0%` and their
-  transient/humpback FN% values are `100.0%` whenever those classes are present.
-- For multi-label PODS-AI output, per-class F1 and FP/FN counts use every emitted global
-  label; the displayed confusion matrix keeps the primary label for backwards-compatible
-  tabular output.
-- `compare_models.py` evaluates end-to-end 60-second WAV inference from `output/testing-wav`, so
-  its results will differ from the training workflow's held-out evaluation metrics, which score the
-  model directly on the trainer's test split.
-
-```
-usage: python compare_models.py [--testing-csv PATH] [--max-samples N]
-                                [--wav-dir PATH] [--models MODEL_LIST]
-                                [--fastai-model-path PATH]
-                                [--orcahello-model-path PATH]
-                                [--podsai-model-path PATH]
-                                [--category CATEGORY]
-```
-
-| Argument | Description |
-|---|---|
-| `--testing-csv` | Path to `testing_60s_samples.csv` (default: `output/csv/testing_60s_samples.csv`) |
-| `--max-samples` | Maximum number of test samples to process. If not specified, all samples are processed |
-| `--wav-dir` | Root directory of testing WAV files (default: `output/testing-wav`) |
-| `--models` | Comma-separated list of models to evaluate (default: `fastai,orcahello,podsai,oldpodsai`) |
-| `--fastai-model-path` | Path to FastAI model directory. Defaults to `model` when not specified |
-| `--orcahello-model-path` | HuggingFace Hub ID or path for OrcaHello model. Defaults to `orcasound/orcahello-srkw-detector-v1` when not specified |
-| `--podsai-model-path` | Path or Hub ID for PODS-AI model. Used by both `podsai` (AST) and `oldpodsai` (Wav2Vec2). Defaults to `davethaler/whale-call-detector` when not specified |
-| `--category` | Only evaluate samples from this category (e.g. `resident`, `humpback`, `water`). If not specified, all categories are evaluated |
-
-**Example — compare all four models**
-
-```bash
-python src/compare_models.py \
-    --models fastai,orcahello,podsai,oldpodsai \
-    --fastai-model-path model \
-    --podsai-model-path /path/to/podsai-model
-```
-
-Example output layout (actual metric values vary with the evaluated dataset):
-```
-Loaded 144 test samples from output\csv\testing_60s_samples.csv
-WAV directory: output/testing-wav
-Models to evaluate: fastai, orcahello, podsai, oldpodsai
-
-  ...
-
-================================================================================================================
-Model Comparison Summary
-================================================================================================================
-Model           Evaluated   Correct  Accuracy      F1    RFP%    RFN%    TFP%    TFN%    HFP%    HFN%   Avg Time
-----------------------------------------------------------------------------------------------------------------
-fastai                144        58     40.3%   0.116   62.0%   55.8%    0.0%  100.0%    0.0%  100.0%     13.50s
-orcahello             144        36     25.0%   0.119   93.5%   42.3%    0.0%  100.0%    0.0%  100.0%      4.89s
-oldpodsai             144        72     50.0%   0.462   26.1%   46.2%   14.9%   63.3%   14.3%   38.9%      4.84s
-podsai                144        68     47.2%   0.507   16.3%   42.3%    4.4%   36.7%    0.0%   88.9%      7.52s
-================================================================================================================
-
-Definitions:
-  Accuracy     = Correct / Evaluated
-  Correct      = fastai/orcahello: resident vs other; oldpodsai/podsai: category in prediction set
-  F1           = macro F1 over humpback, resident, and transient classes that are present
-  [R|T|H]FP%   = among non-[R|T|H] samples, fraction predicted as that class
-  [R|T|H]FN%   = among actual samples of that class, fraction predicted as another class
-  Avg Time     = average time spent in model predict() per 60-second WAV file
-  Note         = compares end-to-end 60-second inference on testing_60s_samples.csv
-
-Confusion Matrix for fastai (rows=actual, cols=predicted):
-                other  resident     total
-       bird         6         4        10
-      human         6         4        10
-   humpback        10         8        18
-     jingle         7         0         7
-   resident        29        23        52
-  transient         4        26        30
-     vessel         2         5         7
-      water         0        10        10
-
-Confusion Matrix for orcahello (rows=actual, cols=predicted):
-                other  resident     total
-       bird         2         8        10
-      human         0        10        10
-   humpback         4        14        18
-     jingle         0         7         7
-   resident        22        30        52
-  transient         0        30        30
-     vessel         0         7         7
-      water         0        10        10
-
-Confusion Matrix for oldpodsai (rows=actual, cols=predicted):
-                 human   humpback     jingle   resident  transient     vessel      water      total
-       bird          0          0          1          8          0          1          0         10
-      human          7          1          0          1          1          0          0         10
-   humpback          1         11          0          4          2          0          0         18
-     jingle          0          7          0          0          0          0          0          7
-   resident          5          1          0         28         14          1          3         52
-  transient          1          9          0          9         11          0          0         30
-     vessel          0          0          0          2          0          5          0          7
-      water          0          0          0          0          0          0         10         10
-
-Confusion Matrix for podsai (rows=actual, cols=predicted):
-                 human   humpback   resident  transient     vessel      water      total
-       bird          0          0          3          0          7          0         10
-      human          9          0          0          1          0          0         10
-   humpback          0          2          3          1         11          1         18
-     jingle          0          0          0          0          7          0          7
-   resident          1          0         30          3         16          2         52
-  transient          0          0          9         19          2          0         30
-     vessel          0          0          0          0          7          0          7
-      water          0          0          0          0          9          1         10
-```
-
-Note: the potential of the podsai model is greater than shown above.  The same version used in the
-podsai matrix above showed the above when trained:
-
-```
-============================================================
-DETAILED EVALUATION METRICS
-============================================================
-Dataset: trainer test split from output/wav (80/20 split of training samples).
-
-Class Distribution:
-  water        - True:   9, Predicted:  12
-  resident     - True:  23, Predicted:  25
-  transient    - True:  12, Predicted:  10
-  humpback     - True:  12, Predicted:  12
-  vessel       - True:  11, Predicted:   9
-  jingle       - True:   6, Predicted:   4
-  human        - True:   9, Predicted:  10
-  bird         - True:  10, Predicted:  10
-
-Per-Class Performance:
-Class        Precision    Recall       F1          
-------------------------------------------------
-water        0.750        1.000        0.857       
-resident     0.920        1.000        0.958       
-transient    1.000        0.833        0.909       
-humpback     1.000        1.000        1.000       
-vessel       0.889        0.727        0.800       
-jingle       1.000        0.667        0.800       
-human        0.900        1.000        0.947       
-bird         1.000        1.000        1.000       
-
-Confusion Matrix (rows=true, cols=predicted):
-                 water  resident  transien  humpback    vessel    jingle     human      bird
-       water         9         0         0         0         0         0         0         0
-    resident         0        23         0         0         0         0         0         0
-   transient         0         2        10         0         0         0         0         0
-    humpback         0         0         0        12         0         0         0         0
-      vessel         3         0         0         0         8         0         0         0
-      jingle         0         0         0         0         1         4         1         0
-       human         0         0         0         0         0         0         9         0
-        bird         0         0         0         0         0         0         0        10
-============================================================
-```
-
-**Example - compare only fastai and orcahello**
-
-```bash
-python src/compare_models.py --models fastai,orcahello --fastai-model-path model
-```
-
-**Example - limit to 10 test samples**
-
-```bash
-python src/compare_models.py --max-samples 10 --fastai-model-path model
-```
-
-**Example - evaluate only resident samples**
-
-```bash
-python src/compare_models.py --category resident --fastai-model-path model
-```
-
-## LiveInferenceSystem Container
-
-`LiveInferenceSystem/` packages `src/LiveInferenceOrchestrator.py` as a Docker container for
-production deployment to Azure Kubernetes Service (AKS), following the same pattern used by
-[OrcaHello's InferenceSystem](https://github.com/orcasound/orcahello/tree/main/InferenceSystem).
-The two containers can run side-by-side in the same Kubernetes cluster without conflicts.
-
-### Quick Start
-
-Build the image from the repo root (requires the `external/orcahello` submodule):
-
-```bash
-git submodule update --init external/orcahello
-docker build -f LiveInferenceSystem/Dockerfile -t pods-ai-live-inference-system .
-```
-
-> **macOS M-series:** prefix with `docker buildx build --platform linux/amd64`
-
-Run locally by mounting an orchestrator config at `/config/config.yml`:
-
-```bash
-# Linux/Mac
-docker run --rm -it --env-file .env \
-  -v $PWD/LiveInferenceSystem/tests/orch_configs/LiveHLS/LiveHLS_OrcasoundLab.yml:/config/config.yml \
-  pods-ai-live-inference-system \
-  --max_live_iterations 2
-
-# Windows
-docker run --rm -it --env-file .env ^
-  -v %cd%/LiveInferenceSystem/tests/orch_configs/LiveHLS/LiveHLS_OrcasoundLab.yml:/config/config.yml ^
-  pods-ai-live-inference-system ^
-  --max_live_iterations 2
-```
-
-The `.env` file should contain Azure credentials (see `LiveInferenceOrchestrator.py` for required
-environment variables).
-
-### Deployment
-
-In production each hydrophone location runs as a separate deployment in its own Kubernetes
-namespace.  The `LiveInferenceSystem/deploy/` directory contains the Kubernetes manifests:
-
-- `<location>.yaml` — deployment spec
-- `<location>-configmap.yaml` — hydrophone-specific orchestrator configuration
-
-To release a new container image, push a tag of the form `LiveInferenceSystem.v#.#.#`.
-This triggers the `LiveInferenceSystem-deploy` workflow, which builds the image and pushes it to
-`orcaconservancycr.azurecr.io/pods-ai-live-inference-system`.
-
-To deploy to a hydrophone location:
-
-```bash
-NAMESPACE=orcasound-lab  # or andrews-bay, bush-point, etc.
-kubectl apply -f LiveInferenceSystem/deploy/$NAMESPACE-configmap.yaml
-# Scale to 0 first — required by the Recreate strategy on memory-constrained nodes
-# so that the old pod is fully terminated before the new pod starts.
-kubectl scale deployment pods-ai-inference-system -n $NAMESPACE --replicas=0
-kubectl apply -f LiveInferenceSystem/deploy/$NAMESPACE.yaml
-```
-
-To add a new hydrophone location, create `deploy/<namespace>-configmap.yaml` and
-`deploy/<namespace>.yaml` using an existing pair as a template, then create the namespace and
-secret:
-
-```bash
-kubectl create namespace <namespace>
-kubectl create secret generic pods-ai-inference-system -n <namespace> \
-    --from-literal=AZURE_COSMOSDB_PRIMARY_KEY='<key>' \
-    --from-literal=AZURE_STORAGE_CONNECTION_STRING='<string>' \
-    --from-literal=INFERENCESYSTEM_APPINSIGHTS_CONNECTION_STRING='<string>'
-```
-
-## Architecture
-
-The timestamp correction implementation follows the architecture described in the [aifororcas-livesystem](https://github.com/orcasound/aifororcas-livesystem):
-
-- Uses `DateRangeHLSStream` approach to download audio from specific time ranges
-- Downloads from Orcasound S3 buckets: `s3-us-west-2.amazonaws.com/audio-orcasound-net/`
-- Processes HLS streams with m3u8 playlists
-- Uses FFmpeg for audio format conversion
-- Returns `local_confidences` array with scores for each segment
-
-## Example Configuration
-
-Similar to [aifororcas-livesystem config files](https://github.com/orcasound/aifororcas-livesystem/blob/main/InferenceSystem/config/Test/Positive/FastAI_DateRangeHLS_AndrewsBay.yml):
-
-```yaml
-model_type: "FastAI"
-model_local_threshold: 0.5
-model_global_threshold: 3
-model_path: "./model"
-model_name: "model.pkl"
-```
-
-## GitHub CI configuration
-
-The following repository secrets must be configured using information obtained
-from HuggingFace:
-
-* HF_TOKEN — Get this from https://huggingface.co/settings/tokens after logging in as the account used to publish the model (e.g., "davethaler").  This is used by train_model.yml.
-
-or from portal.azure.com:
-
-* COSMOS_KEY — "aifororcasmetadatastore" CosmosDB account → "Keys" → "Read-only Keys" → primary key.  This is used by bootstrap make_csv.py and train_model.yml.
-* AZURE_COSMOSDB_PRIMARY_KEY — "aifororcasmetadatastore" CosmosDB account → "Keys" → "Read-write Keys" → primary key.  This is used by LiveInferenceOrchestrator.py.
-* AZURE_STORAGE_CONNECTION_STRING — "livemlaudiospecstorage" storage account. See the "Connection String" section in [these instructions](https://learn.microsoft.com/en-us/azure/storage/blobs/storage-quickstart-blobs-python?tabs=connection-string%2Croles-azure-portal%2Csign-in-azure-cli&pivots=blob-storage-quickstart-scratch#authenticate-to-azure-and-authorize-access-to-blob-data).  This is used by LiveInferenceOrchestrator.py.
-* INFERENCESYSTEM_APPINSIGHTS_CONNECTION_STRING — "InferenceSystemInsights" Application Insights → "Overview" → connection string.  This is used by LiveInferenceOrchestrator.py.
-* ACR_USERNAME — "orcaconservancycr" Container registry → "Access keys" → "Username".  This is used by LiveInferenceSystem-deploy.yaml.
-* ACR_PASSWORD — "orcaconservancycr" Container registry → "Access keys" → "password".  This is used by LiveInferenceSystem-deploy.yaml.
-* ACR_REGISTRY — "orcaconservancycr" Container registry → "Access keys" → "Registry name".  This is used by LiveInferenceSystem-deploy.yaml.
-* KUBE_CONFIG — This is used by LiveInferenceSystem-deploy-configmaps.yaml.  To obtain the KUBE_CONFIG value, run the following:
-
-```
-az aks get-credentials --resource-group LiveSRKWNotificationSystem --name inference-system-AKS --admin --file kubeconfig
-```
-
-This produces a file named `kubeconfig`, the contents of which can be used as the KUBE_CONFIG value.
