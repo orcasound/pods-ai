@@ -149,15 +149,16 @@ src/run_inference.py:PODSAI_AST_MODEL_REVISION = "36620370fd59c8a70f9b7be6060d4f
 tests/test_podsai_inference.py:PODSAI_TEST_MODEL_REVISION = "36620370fd59c8a70f9b7be6060d4f40717e796d"
 tests/test_run_inference.py:PODSAI_TEST_MODEL_REVISION = "36620370fd59c8a70f9b7be6060d4f40717e796d"
 ```
-8. Run `python src/compare_models.py --models podsai` to verify that the F1 does not regress from the latest model as shown at the top of this README.  Don't proceed further unless the F1 improves.
-9. Update README.md with the latest model comparison results.
-10. Generate a pull request with the changes
-11. Once the pull request is merged, add another tag to the main branch such as
+8. Push the changes to a separate branch in the main repository.
+9. Generate a model comparison as follows.  Go to https://github.com/orcasound/pods-ai/actions/workflows/generate_model_comparison.yml in a browser, click the "Run workflow" dropdown, select your branch in both the "Use workflow from" and the Branch to commit to, and click "Run workflow". This may take several hours to run.  You could instead run it locally using `python src/compare_models.py --models podsai` to verify that the F1 does not regress from the latest model as shown at the top of this README.  Don't proceed further unless the F1 improves.
+10. Update README.md with the latest model comparison results.
+11. Generate a pull request with the changes
+12. Once the pull request is merged, add another tag to the main branch such as
    `LiveInferenceSystem.v1.4.0` (bumping the version from the most recent such tag).
     This will cause the
     [LiveInferenceSystem-deploy.yaml](.github/workflows/LiveInferenceSystem-deploy.yaml)
     workflow to build a new container image and push it to the Azure Container Registry.
-12. Once that succeeds, update the `LiveInferenceSystem/deploy/<slug>.yaml` files to
+13. Once that succeeds, update the `LiveInferenceSystem/deploy/<slug>.yaml` files to
     reference the new image.  For example:
 ```
 image: orcaconservancycr.azurecr.io/pods-ai-live-inference-system:09-05-2026.v1.4.0
