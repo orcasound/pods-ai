@@ -35,14 +35,17 @@ from huggingface_hub import snapshot_download
 
 hf_token_path = Path("/run/secrets/HF_TOKEN")
 hf_token = hf_token_path.read_text(encoding="utf-8").strip() if hf_token_path.exists() else None
-snapshot_download(
-    repo_id="davethaler/whale-call-detector",
-    local_dir="/usr/src/hf_cache",
-    local_dir_use_symlinks=False,
-    revision="d1eedf5c614268da7551039a84dfc35d317168b9",
-    allow_patterns="*",
-    token=hf_token or None,
-)
+if hf_token:
+    snapshot_download(
+        repo_id="davethaler/whale-call-detector",
+        local_dir="/usr/src/hf_cache",
+        local_dir_use_symlinks=False,
+        revision="d1eedf5c614268da7551039a84dfc35d317168b9",
+        allow_patterns="*",
+        token=hf_token,
+    )
+else:
+    print("HF_TOKEN unavailable; skipping Hugging Face cache prewarm")
 PYCODE
 EOF
 
