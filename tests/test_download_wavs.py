@@ -497,6 +497,21 @@ class TestUriTimestampValidation:
         with patch("download_wavs.get_orcasite_feeds", side_effect=Exception("Read timed out")):
             validate_uri_timestamps(rows)
 
+    def test_validate_uri_timestamps_matches_summer_dst_rows(self):
+        rows = [
+            CSVRow(
+                "resident",
+                "rpi_sunset_bay",
+                "2024_07_19_12_50_08_PST",
+                "https://live.orcasound.net/bouts/new/sunset-bay?time=2024-07-19T19%3A50%3A08.000Z",
+                "desc",
+                "tp_human_only",
+                "100",
+            ),
+        ]
+
+        validate_uri_timestamps(rows)
+
 
 class TestValidateOnly:
     def test_run_download_wavs_validate_only_skips_download_processing(self):
