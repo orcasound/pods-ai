@@ -163,8 +163,8 @@ tests/test_run_inference.py:PODSAI_TEST_MODEL_REVISION = "36620370fd59c8a70f9b7b
 ```
 image: orcaconservancycr.azurecr.io/pods-ai-live-inference-system:09-05-2026.v1.4.0
 ```
-13. Generate a pull request with those changes.
-14. Once that pull request merges, apply the config, e.g., `kubectl apply -f deploy/andrews-bay.yaml` from the
+14. Generate a pull request with those changes.
+15. Once that pull request merges, apply the config, e.g., `kubectl apply -f deploy/andrews-bay.yaml` from the
     `LiveInferenceSystem` directory.
 
 You can instead train a model locally:
