@@ -358,19 +358,22 @@ def _default_slug_from_node_name(node_name: str) -> str:
     return node_name.removeprefix("rpi_").replace("_", "-")
 
 
-def _default_slug_validation_node_name(row: CSVRow, normalized_node: str) -> str:
+def _default_slug_validation_node_name(row: CSVRow, normalized_node: str) -> str | None:
     """Return the node name to use for URI slug fallback validation."""
-    if normalized_node != row.node_name or not row.node_name.startswith("dclde_") or not row.uri:
+    if normalized_node.startswith("rpi_"):
         return normalized_node
+
+    if normalized_node != row.node_name or not row.node_name.startswith("dclde_") or not row.uri:
+        return None
 
     uri_parts = [part for part in urlparse(row.uri).path.split("/") if part]
     try:
         audio_index = uri_parts.index("audio")
     except ValueError:
-        return normalized_node
+        return None
 
     if audio_index + 1 >= len(uri_parts):
-        return normalized_node
+        return None
 
     return uri_parts[audio_index + 1]
 
@@ -774,8 +777,15 @@ def validate_node_slug_in_uri(rows: list[CSVRow]) -> None:
             except Exception:
                 continue
 
-        fallback_node = _default_slug_validation_node_name(row, normalized_node)
-        expected_slug = node_to_slug.get(normalized_node, _default_slug_from_node_name(fallback_node))
+        expected_slug = node_to_slug.get(normalized_node)
+        if expected_slug is None:
+            fallback_node = _default_slug_validation_node_name(row, normalized_node)
+            if fallback_node is None:
+                mismatches.append(
+                    f"Unable to look up slug for node {row.node_name} (normalized to {normalized_node})"
+                )
+                continue
+            expected_slug = _default_slug_from_node_name(fallback_node)
 
         # Ensure the expected slug (e.g., 'orcasound-lab') appears somewhere in the URI.
         # Accept either hyphenated or underscored forms (orcasound-lab OR orcasound_lab).

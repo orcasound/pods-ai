@@ -495,6 +495,23 @@ class TestNodeSlugValidation:
         with patch("download_wavs.get_orcasite_feeds", side_effect=Exception("Read timed out")):
             validate_node_slug_in_uri(rows)
 
+    def test_validate_node_slug_raises_lookup_error_for_unknown_non_rpi_node(self):
+        rows = [
+            CSVRow(
+                "resident",
+                "unknown_station_name",
+                "2025_01_01_01_01_06_PST",
+                "https://live.orcasound.net/bouts/new/unknown-station-name?time=2025-01-01T09%3A01%3A06.000Z",
+                "desc",
+                "tp_human_only",
+                "100",
+            ),
+        ]
+
+        with patch("download_wavs.get_orcasite_feeds", side_effect=Exception("Read timed out")), \
+                pytest.raises(ValueError, match="Unable to look up slug for node unknown_station_name"):
+            validate_node_slug_in_uri(rows)
+
 
 class TestUriTimestampValidation:
     def test_validate_uri_timestamps_does_not_require_feed_lookup(self):
