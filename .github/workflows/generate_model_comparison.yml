@@ -98,6 +98,10 @@ jobs:
         if: steps.detect.outputs.should_run == 'true'
         run: pip install -r requirements.txt
 
+      - name: Verify pkg_resources is available
+        if: steps.detect.outputs.should_run == 'true'
+        run: python -c "import pkg_resources; print('pkg_resources available')"
+
       - name: Patch fastai_audio for Python 3.11+ compatibility
         if: steps.detect.outputs.should_run == 'true'
         run: bash patch_fastai_audio.sh
