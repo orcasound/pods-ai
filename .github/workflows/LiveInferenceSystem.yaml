@@ -77,8 +77,14 @@ jobs:
           df -h
 
       - name: Build Dockerfile image
+        env:
+          DOCKER_BUILDKIT: 1
         run: |
-          docker build -f LiveInferenceSystem/Dockerfile -t pods-ai-inference:ci .
+          build_args=()
+          if [ -n "${HF_TOKEN:-}" ]; then
+            build_args+=(--secret id=HF_TOKEN,env=HF_TOKEN)
+          fi
+          docker build "${build_args[@]}" -f LiveInferenceSystem/Dockerfile -t pods-ai-inference:ci .
 
       - name: Smoke test container (LiveHLS)
         run: |

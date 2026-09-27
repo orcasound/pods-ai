@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.7
 FROM ubuntu:26.04
 
 # System deps
@@ -27,15 +28,20 @@ RUN uv python install 3.12 && uv sync --no-dev
 # Bake HuggingFace model into image cache at build time
 ENV HF_HOME=/usr/src/hf_cache
 ENV TRANSFORMERS_CACHE=/usr/src/hf_cache
-RUN <<'EOF'
+RUN --mount=type=secret,id=HF_TOKEN,required=false <<'EOF'
 /usr/src/venv/bin/python - <<'PYCODE'
+from pathlib import Path
 from huggingface_hub import snapshot_download
+
+hf_token_path = Path("/run/secrets/HF_TOKEN")
+hf_token = hf_token_path.read_text(encoding="utf-8").strip() if hf_token_path.exists() else None
 snapshot_download(
     repo_id="davethaler/whale-call-detector",
     local_dir="/usr/src/hf_cache",
     local_dir_use_symlinks=False,
     revision="d1eedf5c614268da7551039a84dfc35d317168b9",
-    allow_patterns="*"
+    allow_patterns="*",
+    token=hf_token or None,
 )
 PYCODE
 EOF
