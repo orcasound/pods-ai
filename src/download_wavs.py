@@ -358,6 +358,23 @@ def _default_slug_from_node_name(node_name: str) -> str:
     return node_name.removeprefix("rpi_").replace("_", "-")
 
 
+def _default_slug_validation_node_name(row: CSVRow, normalized_node: str) -> str:
+    """Return the node name to use for URI slug fallback validation."""
+    if normalized_node != row.node_name or not row.node_name.startswith("dclde_") or not row.uri:
+        return normalized_node
+
+    uri_parts = [part for part in urlparse(row.uri).path.split("/") if part]
+    try:
+        audio_index = uri_parts.index("audio")
+    except ValueError:
+        return normalized_node
+
+    if audio_index + 1 >= len(uri_parts):
+        return normalized_node
+
+    return uri_parts[audio_index + 1]
+
+
 def _generate_testing_uri(row: CSVRow, timestamp_pst: str) -> str:
     """Build the Orcasound bouts URI for a testing row using the supplied CSV timestamp.
 
@@ -757,7 +774,8 @@ def validate_node_slug_in_uri(rows: list[CSVRow]) -> None:
             except Exception:
                 continue
 
-        expected_slug = node_to_slug.get(normalized_node, _default_slug_from_node_name(normalized_node))
+        fallback_node = _default_slug_validation_node_name(row, normalized_node)
+        expected_slug = node_to_slug.get(normalized_node, _default_slug_from_node_name(fallback_node))
 
         # Ensure the expected slug (e.g., 'orcasound-lab') appears somewhere in the URI.
         # Accept either hyphenated or underscored forms (orcasound-lab OR orcasound_lab).

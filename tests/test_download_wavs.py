@@ -479,6 +479,22 @@ class TestNodeSlugValidation:
                 pytest.raises(ValueError, match="Node slug not found in URI"):
             validate_node_slug_in_uri(rows)
 
+    def test_validate_node_slug_uses_dclde_station_slug_when_feed_lookup_fails(self):
+        rows = [
+            CSVRow(
+                "abiotic",
+                "dclde_orcasound_lab_os_9_27_2017_08_03_00_0002",
+                "2017_09_27_08_03_00_PST",
+                "https://storage.googleapis.com/noaa-passive-bioacoustic/dclde/2027/dclde_2027_killer_whales/orcasound/audio/orcasound_lab/OS_9_27_2017_08_03_00__0002.wav",
+                "desc",
+                "dclde_orcasound_full_recording",
+                "100",
+            ),
+        ]
+
+        with patch("download_wavs.get_orcasite_feeds", side_effect=Exception("Read timed out")):
+            validate_node_slug_in_uri(rows)
+
 
 class TestUriTimestampValidation:
     def test_validate_uri_timestamps_does_not_require_feed_lookup(self):
