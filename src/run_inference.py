@@ -42,7 +42,7 @@ from model_inference import get_model_inference
 
 PODSAI_MODEL_ID = "davethaler/whale-call-detector"
 # renovate: datasource=git-refs depName=https://huggingface.co/davethaler/whale-call-detector versioning=git.
-from model_revisions import from model_revisions import LATEST_PODSAI_MODEL_REVISION, PODSAI_WAV2VEC2_MODEL_REVISION
+from model_revisions import LATEST_PODSAI_MODEL_REVISION, PODSAI_WAV2VEC2_MODEL_REVISION
 
 # Preserve the existing exported constant name for compatibility.
 PODSAI_MODEL_REVISION = LATEST_PODSAI_MODEL_REVISION
