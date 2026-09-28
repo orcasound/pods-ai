@@ -90,9 +90,11 @@ jobs:
         shell: bash
         run: |
           build_args=()
-          if [ -n "${HF_TOKEN:-}" ]; then
-            build_args+=(--secret id=HF_TOKEN,env=HF_TOKEN)
+          if [ -z "${HF_TOKEN:-}" ]; then
+            echo "HF_TOKEN is required for the deployment image build" >&2
+            exit 1
           fi
+          build_args+=(--secret id=HF_TOKEN,env=HF_TOKEN)
           docker build "${build_args[@]}" -f LiveInferenceSystem/Dockerfile -t $IMAGE_NAME .
 
       - name: List Docker images
