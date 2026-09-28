@@ -122,7 +122,7 @@ jobs:
 
       - name: Generate model comparison results
         if: steps.detect.outputs.should_run == 'true'
-        run: python src/compare_models.py > model-comparison.txt
+        run: python src/compare_models.py --models orcahello,oldpodsai,podsai | tee model-comparison.txt
 
       - name: Commit and push model comparison updates
         if: steps.detect.outputs.should_run == 'true'
