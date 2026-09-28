@@ -32,7 +32,6 @@ jobs:
     env:
       IMAGE_NAME: pods-ai-live-inference-system
       ACR_REGISTRY: orcaconservancycr.azurecr.io
-      HF_TOKEN: ${{ secrets.HF_TOKEN }}
     steps:
       - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1  # v2.21.1
         with:
@@ -86,6 +85,7 @@ jobs:
 
       - name: Build Dockerfile image
         env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
           DOCKER_BUILDKIT: 1
         shell: bash
         run: |
