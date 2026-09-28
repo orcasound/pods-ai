@@ -103,12 +103,12 @@ jobs:
       - name: Install Python dependencies
         if: steps.skip_check.outputs.should_skip != 'true'
         run: |
-          pip install -r requirements.txt
-          pip install "setuptools>=84,<85"
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
 
       - name: Verify pkg_resources is available
         if: steps.skip_check.outputs.should_skip != 'true'
-        run: python -c "import pkg_resources; print('pkg_resources available')"
+        run: python -c "import pkg_resources; print(sys.executable); print('pkg_resources available')"
 
       - name: Patch fastai_audio for Python 3.11+ compatibility
         if: steps.skip_check.outputs.should_skip != 'true'
@@ -199,12 +199,12 @@ jobs:
       - name: Install Python dependencies
         if: steps.skip_check.outputs.should_skip != 'true'
         run: |
-          pip install -r requirements.txt
-          pip install "setuptools>=84,<85"
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
 
       - name: Verify pkg_resources is available
         if: steps.skip_check.outputs.should_skip != 'true'
-        run: python -c "import pkg_resources; print('pkg_resources available')"
+        run: python -c "import pkg_resources; print(sys.executable); print('pkg_resources available')"
 
       - name: Patch fastai_audio for Python 3.11+ compatibility
         if: steps.skip_check.outputs.should_skip != 'true'
