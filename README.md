@@ -6,7 +6,7 @@ and humpbacks, based on [training data](docs/csv-manifests.md).
 
 ## Model Comparison
 
-A comparison between the latest PODS-AI model and the current
+A comparison between the latest [PODS-AI model](https://huggingface.co/davethaler/whale-call-detector) and the current
 [OrcaHello](https://github.com/orcasound/orcahello) model is:
 
 ```
@@ -15,8 +15,8 @@ Model Comparison Summary
 ================================================================================================================
 Model           Evaluated   Correct  Accuracy      F1    RFP%    RFN%    TFP%    TFN%    HFP%    HFN%   Avg Time
 ----------------------------------------------------------------------------------------------------------------
-orcahello             144        36     25.0%   0.119   93.5%   42.3%    0.0%  100.0%    0.0%  100.0%      4.89s
-podsai                144        68     47.2%   0.507   16.3%   42.3%    4.4%   36.7%    0.0%   88.9%      7.52s
+orcahello             145        40     27.6%   0.129   92.5%   36.5%    0.0%  100.0%    0.0%  100.0%      5.92s
+podsai                145       100     69.0%   0.592   41.9%   32.7%    0.9%   35.7%    0.8%   68.8%     10.78s
 ================================================================================================================
 
 Definitions:
