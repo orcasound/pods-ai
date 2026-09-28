@@ -20,7 +20,9 @@ from download_wavs import (
     process_testing_csv,
     run_download_wavs,
     validate_aligned_entries,
+    validate_node_slug_in_uri,
     validate_no_overlaps,
+    validate_uri_timestamps,
 )
 
 
@@ -441,6 +443,107 @@ class TestCacheAndCleanup:
             assert expected.exists()
             assert expected.read_bytes() == b"cached"
             assert not stale.exists()
+
+
+class TestNodeSlugValidation:
+    def test_validate_node_slug_uses_default_mapping_when_feed_lookup_fails(self):
+        rows = [
+            CSVRow(
+                "resident",
+                "rpi_andrews_bay",
+                "2025_01_01_01_01_06_PST",
+                "https://live.orcasound.net/bouts/new/andrews-bay?time=2025-01-01T09%3A01%3A06.000Z",
+                "desc",
+                "tp_human_only",
+                "100",
+            ),
+        ]
+
+        with patch("download_wavs.get_orcasite_feeds", side_effect=Exception("Read timed out")):
+            validate_node_slug_in_uri(rows)
+
+    def test_validate_node_slug_still_rejects_mismatch_with_default_mapping(self):
+        rows = [
+            CSVRow(
+                "resident",
+                "rpi_andrews_bay",
+                "2025_01_01_01_01_06_PST",
+                "https://live.orcasound.net/bouts/new/sunset-bay?time=2025-01-01T09%3A01%3A06.000Z",
+                "desc",
+                "tp_human_only",
+                "100",
+            ),
+        ]
+
+        with patch("download_wavs.get_orcasite_feeds", side_effect=Exception("Read timed out")), \
+                pytest.raises(ValueError, match="Node slug not found in URI"):
+            validate_node_slug_in_uri(rows)
+
+    def test_validate_node_slug_uses_dclde_station_slug_when_feed_lookup_fails(self):
+        rows = [
+            CSVRow(
+                "abiotic",
+                "dclde_orcasound_lab_os_9_27_2017_08_03_00_0002",
+                "2017_09_27_08_03_00_PST",
+                "https://storage.googleapis.com/noaa-passive-bioacoustic/dclde/2027/dclde_2027_killer_whales/orcasound/audio/orcasound_lab/OS_9_27_2017_08_03_00__0002.wav",
+                "desc",
+                "dclde_orcasound_full_recording",
+                "100",
+            ),
+        ]
+
+        with patch("download_wavs.get_orcasite_feeds", side_effect=Exception("Read timed out")):
+            validate_node_slug_in_uri(rows)
+
+    def test_validate_node_slug_raises_lookup_error_for_unknown_non_rpi_node(self):
+        rows = [
+            CSVRow(
+                "resident",
+                "unknown_station_name",
+                "2025_01_01_01_01_06_PST",
+                "https://live.orcasound.net/bouts/new/unknown-station-name?time=2025-01-01T09%3A01%3A06.000Z",
+                "desc",
+                "tp_human_only",
+                "100",
+            ),
+        ]
+
+        with patch("download_wavs.get_orcasite_feeds", side_effect=Exception("Read timed out")), \
+                pytest.raises(ValueError, match="Unable to look up slug for node unknown_station_name"):
+            validate_node_slug_in_uri(rows)
+
+
+class TestUriTimestampValidation:
+    def test_validate_uri_timestamps_does_not_require_feed_lookup(self):
+        rows = [
+            CSVRow(
+                "resident",
+                "rpi_andrews_bay",
+                "2025_01_01_01_01_06_PST",
+                "https://live.orcasound.net/bouts/new/andrews-bay?time=2025-01-01T09%3A01%3A06.000Z",
+                "desc",
+                "tp_human_only",
+                "100",
+            ),
+        ]
+
+        with patch("download_wavs.get_orcasite_feeds", side_effect=Exception("Read timed out")):
+            validate_uri_timestamps(rows)
+
+    def test_validate_uri_timestamps_matches_summer_dst_rows(self):
+        rows = [
+            CSVRow(
+                "resident",
+                "rpi_sunset_bay",
+                "2024_07_19_12_50_08_PST",
+                "https://live.orcasound.net/bouts/new/sunset-bay?time=2024-07-19T19%3A50%3A08.000Z",
+                "desc",
+                "tp_human_only",
+                "100",
+            ),
+        ]
+
+        validate_uri_timestamps(rows)
 
 
 class TestValidateOnly:
