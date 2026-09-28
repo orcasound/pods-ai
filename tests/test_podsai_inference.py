@@ -23,7 +23,7 @@ from podsai_inference import NUM_SPECIAL_TOKENS
 # Pinned PODS-AI model revision for integration-test stability.
 PODSAI_TEST_MODEL_ID = "davethaler/whale-call-detector"
 # renovate: datasource=git-refs depName=https://huggingface.co/davethaler/whale-call-detector versioning=git.
-PODSAI_TEST_MODEL_REVISION = "36620370fd59c8a70f9b7be6060d4f40717e796d"
+PODSAI_TEST_MODEL_REVISION = "ddc62698a4225d4d7f18f23afe1eae915d5d0d93"
 # The repository retains training checkpoints; integration tests need only the
 # root model artifacts and should not download every historical checkpoint.
 PODSAI_MODEL_ALLOW_PATTERNS = [

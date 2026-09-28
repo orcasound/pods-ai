@@ -673,8 +673,8 @@ class TestMainCLI:
         assert "[podsai]" not in captured.out
 
     def test_default_models_include_oldpodsai(self, tmp_path):
-        """main() defaults to evaluating fastai, orcahello, oldpodsai, and podsai."""
-        from compare_models import ModelResult, OLD_PODSAI_MODEL_REVISION, PODSAI_MODEL_REVISION, main
+        """main() defaults to evaluating fastai, orcahello, wav2vec2, oldpodsai, and podsai."""
+        from compare_models import ModelResult, WAV2VEC2_PODSAI_MODEL_REVISION, OLD_PODSAI_MODEL_REVISION, PODSAI_MODEL_REVISION, main
 
         rows = _make_testing_rows()
         wav_dir = tmp_path / "testing-wav"
@@ -695,10 +695,10 @@ class TestMainCLI:
                     result = main()
 
         assert result == 0
-        assert mock_evaluate.call_count == 4
-        # Order matches default models: fastai, orcahello, oldpodsai, podsai.
+        assert mock_evaluate.call_count == 5
+        # Order matches default models: fastai, orcahello, wav2vec2, oldpodsai, podsai.
         called_revisions = [call.kwargs["model_revision"] for call in mock_evaluate.call_args_list]
-        assert called_revisions == [None, None, OLD_PODSAI_MODEL_REVISION, PODSAI_MODEL_REVISION]
+        assert called_revisions == [None, None, WAV2VEC2_PODSAI_MODEL_REVISION, OLD_PODSAI_MODEL_REVISION, PODSAI_MODEL_REVISION]
 
     def test_reuses_preloaded_model_for_each_sample(self, tmp_path):
         """main() preloads one model per type and reuses it for all samples."""
