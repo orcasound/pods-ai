@@ -8,31 +8,20 @@
     {
       "customType": "regex",
       "managerFilePatterns": [
-        "/^tests/test_run_inference\\.py$/"
+        "/^src\\/model_revisions\\.py$/"
       ],
       "matchStrings": [
-        "PODSAI_TEST_MODEL_REVISION = \"(?<currentValue>[a-f0-9]{7,64})\""
-      ],
-      "depNameTemplate": "https://huggingface.co/davethaler/whale-call-detector",
-      "datasourceTemplate": "git-refs",
-      "versioningTemplate": "git"
+        "# renovate: datasource=(?<datasource>[^\\s]+) depName=(?<depName>[^\\s]+) versioning=(?<versioning>[^\\s]+).*?LATEST_PODSAI_MODEL_REVISION = \"(?<currentValue>[a-f0-9]{40})\""
+      ]
     },
     {
       "customType": "regex",
       "managerFilePatterns": [
-        "/^src/run_inference\\.py$/",
-        "/^src/compare_models\\.py$/",
-        "/^src/add_samples\\.py$/",
-        "/^src/LiveInferenceOrchestrator\\.py$/"
+        "/^LiveInferenceSystem\\/Dockerfile$/"
       ],
       "matchStrings": [
-        "PODSAI_AST_MODEL_REVISION = \"(?<currentValue>[a-f0-9]{7,64})\"",
-        "PODSAI_MODEL_REVISION = \"(?<currentValue>[a-f0-9]{7,64})\"",
-        "DEFAULT_MODEL_REVISION = \"(?<currentValue>[a-f0-9]{7,64})\""
-      ],
-      "depNameTemplate": "https://huggingface.co/davethaler/whale-call-detector",
-      "datasourceTemplate": "git-refs",
-      "versioningTemplate": "git"
+        "# renovate: datasource=(?<datasource>[^\\s]+) depName=(?<depName>[^\\s]+) versioning=(?<versioning>[^\\s]+)[\\s\\S]*?revision=\"(?<currentValue>[a-f0-9]{40})\""
+      ]
     }
   ],
   "packageRules": [

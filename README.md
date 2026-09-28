@@ -141,13 +141,7 @@ To have GitHub train a new model from the latest `main` branch:
 6. Get the SHA hash of the latest commit, which will be a long string like `36620370fd59c8a70f9b7be6060d4f40717e796d`.    This can be found by clicking the short prefix to the right of "Model save", just above the list of files, and copying it from the path in the address bar.
 7. Update the SHA commit to the latest version in the following places:
 ```
-src/add_samples.py:DEFAULT_MODEL_REVISION = "36620370fd59c8a70f9b7be6060d4f40717e796d"  # Pinned Hub model revision.
-src/compare_models.py:PODSAI_MODEL_REVISION = "36620370fd59c8a70f9b7be6060d4f40717e796d"
-src/generate_embeddings.py:PODSAI_AST_MODEL_REVISION = "36620370fd59c8a70f9b7be6060d4f40717e796d"
-src/LiveInferenceOrchestrator.py:PODSAI_MODEL_REVISION = "36620370fd59c8a70f9b7be6060d4f40717e796d"
-src/run_inference.py:PODSAI_AST_MODEL_REVISION = "36620370fd59c8a70f9b7be6060d4f40717e796d"
-tests/test_podsai_inference.py:PODSAI_TEST_MODEL_REVISION = "36620370fd59c8a70f9b7be6060d4f40717e796d"
-tests/test_run_inference.py:PODSAI_TEST_MODEL_REVISION = "36620370fd59c8a70f9b7be6060d4f40717e796d"
+src/model_revisions.py:LATEST_PODSAI_MODEL_REVISION = "36620370fd59c8a70f9b7be6060d4f40717e796d"
 LiveInferenceSystem/Dockerfile:    revision="36620370fd59c8a70f9b7be6060d4f40717e796d",
 ```
 8. Push the changes to a separate branch in the main repository.

@@ -34,6 +34,7 @@ snapshot_download(
     repo_id="davethaler/whale-call-detector",
     local_dir="/usr/src/hf_cache",
     local_dir_use_symlinks=False,
+    # renovate: datasource=git-refs depName=davethaler/whale-call-detector versioning=git
     revision="ddc62698a4225d4d7f18f23afe1eae915d5d0d93",
     allow_patterns="*"
 )

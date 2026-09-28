@@ -5,7 +5,7 @@
 # renovate: datasource=git-refs depName=https://huggingface.co/davethaler/whale-call-detector versioning=git.
 LATEST_PODSAI_MODEL_REVISION = "ddc62698a4225d4d7f18f23afe1eae915d5d0d93"
 
-# Pevious PODS-AI revision deployed to production.
+# Previous PODS-AI revision deployed to production.
 PREVIOUS_PODSAI_MODEL_REVISION = "36620370fd59c8a70f9b7be6060d4f40717e796d"
 
 # Obsolete PODS-AI model using Wav2Vec2 instead of AST.
