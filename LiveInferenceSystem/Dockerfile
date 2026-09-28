@@ -39,7 +39,7 @@ snapshot_download(
     repo_id="davethaler/whale-call-detector",
     local_dir="/usr/src/hf_cache",
     local_dir_use_symlinks=False,
-    revision="d1eedf5c614268da7551039a84dfc35d317168b9",
+    revision="ddc62698a4225d4d7f18f23afe1eae915d5d0d93",
     allow_patterns="*",
     token=hf_token or None,
 )
