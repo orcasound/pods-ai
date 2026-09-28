@@ -108,7 +108,7 @@ jobs:
 
       - name: Verify pkg_resources is available
         if: steps.skip_check.outputs.should_skip != 'true'
-        run: python -c "import pkg_resources; print(sys.executable); print('pkg_resources available')"
+        run: python -c "import sys, pkg_resources; print(sys.executable); print('pkg_resources available')"
 
       - name: Patch fastai_audio for Python 3.11+ compatibility
         if: steps.skip_check.outputs.should_skip != 'true'
@@ -204,7 +204,7 @@ jobs:
 
       - name: Verify pkg_resources is available
         if: steps.skip_check.outputs.should_skip != 'true'
-        run: python -c "import pkg_resources; print(sys.executable); print('pkg_resources available')"
+        run: python -c "import sys, pkg_resources; print(sys.executable); print('pkg_resources available')"
 
       - name: Patch fastai_audio for Python 3.11+ compatibility
         if: steps.skip_check.outputs.should_skip != 'true'
