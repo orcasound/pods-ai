@@ -33,7 +33,7 @@ NEGATIVE_LABELS = {"other", "water", "vessel", "jingle", "human", "bird"}
 
 PODSAI_MODEL_ID = "davethaler/whale-call-detector"
 # renovate: datasource=git-refs depName=https://huggingface.co/davethaler/whale-call-detector versioning=git.
-PODSAI_MODEL_REVISION = "36620370fd59c8a70f9b7be6060d4f40717e796d"
+PODSAI_MODEL_REVISION = "ddc62698a4225d4d7f18f23afe1eae915d5d0d93"
 
 def get_hydro_attributes_from_feed() -> dict:
     hydrophone_location_data = {}
