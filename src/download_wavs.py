@@ -12,14 +12,14 @@ import os
 import shutil
 import sys
 from tempfile import TemporaryDirectory
-from urllib.parse import quote, urlparse
+from urllib.parse import quote, urlparse, parse_qs
 
 import ffmpeg
 import m3u8
 from pytz import timezone
 import requests
 
-from add_samples import parse_uri, get_node_slug, get_orcasite_feeds
+from add_samples import get_orcasite_feeds
 
 PACIFIC_TZ = timezone('US/Pacific')
 N_SECONDS = 3  # Create 3-second wav files.
@@ -353,6 +353,31 @@ def _format_timestamp_pst(dt: datetime) -> str:
     return dt.astimezone(PACIFIC_TZ).strftime("%Y_%m_%d_%H_%M_%S_PST")
 
 
+def _default_slug_from_node_name(node_name: str) -> str:
+    """Derive the default Orcasound URI slug from a CSV node name."""
+    return node_name.removeprefix("rpi_").replace("_", "-")
+
+
+def _default_slug_validation_node_name(row: CSVRow, normalized_node: str) -> str | None:
+    """Return the node name to use for URI slug fallback validation."""
+    if normalized_node.startswith("rpi_"):
+        return normalized_node
+
+    if normalized_node != row.node_name or not row.node_name.startswith("dclde_") or not row.uri:
+        return None
+
+    uri_parts = [part for part in urlparse(row.uri).path.split("/") if part]
+    try:
+        audio_index = uri_parts.index("audio")
+    except ValueError:
+        return None
+
+    if audio_index + 1 >= len(uri_parts):
+        return None
+
+    return uri_parts[audio_index + 1]
+
+
 def _generate_testing_uri(row: CSVRow, timestamp_pst: str) -> str:
     """Build the Orcasound bouts URI for a testing row using the supplied CSV timestamp.
 
@@ -366,7 +391,7 @@ def _generate_testing_uri(row: CSVRow, timestamp_pst: str) -> str:
     if row.uri:
         base_uri = row.uri.split("?", 1)[0]
     else:
-        node_slug = row.node_name.removeprefix("rpi_").replace("_", "-")
+        node_slug = _default_slug_from_node_name(row.node_name)
         base_uri = f"https://live.orcasound.net/bouts/new/{node_slug}"
     timestamp_utc = parse_timestamp_pst(timestamp_pst).astimezone(dt_timezone.utc)
     encoded_time = quote(timestamp_utc.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z", safe="")
@@ -637,6 +662,22 @@ def _find_matching_detection(row: CSVRow) -> tuple[dict, str]:
     )
 
 
+def _parse_uri_timestamp_pst(uri: str) -> str:
+    """Parse a bouts URI query timestamp and return it in PST CSV format."""
+    parsed = urlparse(uri)
+    query_params = parse_qs(parsed.query)
+    if "time" not in query_params:
+        raise ValueError(f"URI missing 'time' query parameter: {uri}")
+
+    time_str = query_params["time"][0]
+    try:
+        utc_dt = datetime.strptime(time_str, "%Y-%m-%dT%H:%M:%S.%fZ")
+    except ValueError:
+        utc_dt = datetime.strptime(time_str, "%Y-%m-%dT%H:%M:%SZ")
+    utc_dt = utc_dt.replace(tzinfo=dt_timezone.utc)
+    return _format_timestamp_pst(utc_dt)
+
+
 def validate_aligned_entries(testing_rows: list[CSVRow]) -> None:
     """Verify false-positive testing rows match the timestamps reconstructed from OrcaHello detections.
 
@@ -680,7 +721,7 @@ def validate_uri_timestamps(rows: list[CSVRow]) -> None:
         if not row.uri:
             continue
         try:
-            uri_node, uri_timestamp_pst = parse_uri(row.uri)
+            uri_timestamp_pst = _parse_uri_timestamp_pst(row.uri)
         except Exception as e:
             mismatches.append(
                 f"Unable to parse URI for row {row.node_name} {row.timestamp_pst}: {row.uri} ({type(e).__name__}: {e})"
@@ -738,12 +779,13 @@ def validate_node_slug_in_uri(rows: list[CSVRow]) -> None:
 
         expected_slug = node_to_slug.get(normalized_node)
         if expected_slug is None:
-            # Fallback: try to call get_node_slug (may trigger network) only when mapping not available.
-            try:
-                expected_slug = get_node_slug(normalized_node)
-            except Exception as e:
-                mismatches.append(f"Unable to look up slug for node {row.node_name} (normalized to {normalized_node}): {e}")
+            fallback_node = _default_slug_validation_node_name(row, normalized_node)
+            if fallback_node is None:
+                mismatches.append(
+                    f"Unable to look up slug for node {row.node_name} (normalized to {normalized_node})"
+                )
                 continue
+            expected_slug = _default_slug_from_node_name(fallback_node)
 
         # Ensure the expected slug (e.g., 'orcasound-lab') appears somewhere in the URI.
         # Accept either hyphenated or underscored forms (orcasound-lab OR orcasound_lab).
