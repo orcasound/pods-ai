@@ -41,10 +41,8 @@ SUMMARY_LABELS = [
 ]
 MATRIX_CELL_PADDING = 2
 PODSAI_MODEL_ID = "davethaler/whale-call-detector"
-# renovate: datasource=git-refs depName=https://huggingface.co/davethaler/whale-call-detector versioning=git.
-PODSAI_MODEL_REVISION = "ddc62698a4225d4d7f18f23afe1eae915d5d0d93"
-OLD_PODSAI_MODEL_REVISION = "36620370fd59c8a70f9b7be6060d4f40717e796d"
-WAV2VEC2_PODSAI_MODEL_REVISION = "cef82c6e9ee661646ea0c583aeb68f4f7ec6d9d8"
+from model_revisions import LATEST_PODSAI_MODEL_REVISION, PREVIOUS_PODSAI_MODEL_REVISION, PODSAI_WAV2VEC2_MODEL_REVISION
+
 # Maps user-facing model names to inference backends. wav2vec2 and oldpodsai reuse podsai
 # inference with a different pinned model revision.
 MODEL_TYPE_TO_INFERENCE_TYPE = {
@@ -546,11 +544,11 @@ def main() -> int:
     )
     parser.add_argument(
         "--podsai-model-revision",
-        default=PODSAI_MODEL_REVISION,
+        default=LATEST_PODSAI_MODEL_REVISION,
         help=(
             "Git commit hash to pin the PODS-AI HuggingFace Hub model revision. "
             "Only used when --podsai-model-path is a Hub model ID. "
-            f"Defaults to the pinned revision ({PODSAI_MODEL_REVISION})."
+            f"Defaults to the pinned revision ({LATEST_PODSAI_MODEL_REVISION})."
         ),
     )
     parser.add_argument(
@@ -603,8 +601,8 @@ def main() -> int:
     model_revisions: dict[str, Optional[str]] = {
         "fastai": None,
         "orcahello": None,
-        "wav2vec2": WAV2VEC2_PODSAI_MODEL_REVISION,
-        "oldpodsai": OLD_PODSAI_MODEL_REVISION,
+        "wav2vec2": PODSAI_WAV2VEC2_MODEL_REVISION,
+        "oldpodsai": PREVIOUS_PODSAI_MODEL_REVISION,
         "podsai": args.podsai_model_revision,
     }
 

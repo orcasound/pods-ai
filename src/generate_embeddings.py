@@ -13,7 +13,7 @@ from model_inference import get_model_inference
 
 
 PODSAI_MODEL_ID = "davethaler/whale-call-detector"
-PODSAI_AST_MODEL_REVISION = "ddc62698a4225d4d7f18f23afe1eae915d5d0d93"
+from model_revisions import LATEST_PODSAI_MODEL_REVISION
 
 EMBEDDING_CSV_BASE_FIELDS = [
     "manifest_row_index",
@@ -394,7 +394,7 @@ def main():
 
     parser.add_argument(
         "--model-revision",
-        default=PODSAI_AST_MODEL_REVISION,
+        default=LATEST_PODSAI_MODEL_REVISION,
     )
 
     parser.add_argument(
