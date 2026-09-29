@@ -13,7 +13,8 @@ on:
       - output/csv/dclde_60s_samples.csv
       - .github/workflows/download_wavs.yml
       - src/download_wavs.py
-      - audio_utils.py
+      - src/add_samples.py
+      - src/audio_utils.py
   workflow_dispatch:
 
 concurrency:

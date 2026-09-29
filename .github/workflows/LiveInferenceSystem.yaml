@@ -38,6 +38,7 @@ jobs:
             src:
               - LiveInferenceSystem/**
               - src/LiveInferenceOrchestrator.py
+              - src/model_revisions.py
               - src/model_inference.py
               - src/podsai_inference.py
               - src/orcahello_inference.py
