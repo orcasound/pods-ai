@@ -159,6 +159,24 @@ def _resolve_podsai_test_model_path() -> str:
         )
 
 
+def test_model_inference_helper(label: str, wav_file: str, model_type: str, model_path: str) -> dict:
+    """Download a specific testing WAV and run run_inference() against it.
+
+    This helper is used by the integration tests and must be module-level so
+    pytest test methods can call it directly.
+    """
+    from download_wavs import download_testing_file
+    from run_inference import run_inference
+
+    output_root = Path("output/testing-wav")
+    category_dir = output_root / label
+    wav_path = category_dir / wav_file
+    print(f"\nProcessing {wav_path}...")
+    download_testing_file(wav_path, output_root)
+    result = run_inference(str(wav_path), model_type=model_type, model_path=model_path)
+    return result
+
+
 
 def _verify_fastai_result_structure(result: dict) -> None:
     """Verify FastAI result has expected structure and valid values."""
@@ -1186,17 +1204,12 @@ class TestIntegrationWithRealModels:
         request: pytest.FixtureRequest
     ) -> None:
         """Test FastAI model inference on various audio types."""
-        from run_inference import run_inference
 
         # Apply xfail marker if this test case is expected to fail.
         if xfail_reason:
             request.node.add_marker(pytest.mark.xfail(reason=xfail_reason, strict=False))
 
-        output_root = Path("output/testing-wav")
-        category_dir = output_root / label
-        wav_path = category_dir / wav_file
-        print(f"\nProcessing {wav_path}...")
-        result = run_inference(str(wav_path), model_type="fastai", model_path=fastai_model_path)
+        result = test_model_inference_helper(label, wav_file, "fastai", fastai_model_path)
 
         _verify_fastai_result_structure(result)
         _verify_fastai_prediction(result, label)
@@ -1222,17 +1235,12 @@ class TestIntegrationWithRealModels:
         request: pytest.FixtureRequest
     ) -> None:
         """Test PODS-AI model inference on various audio types."""
-        from run_inference import run_inference
 
         # Apply xfail marker if this test case is expected to fail.
         if xfail_reason:
             request.node.add_marker(pytest.mark.xfail(reason=xfail_reason, strict=False))
 
-        output_root = Path("output/testing-wav")
-        category_dir = output_root / label
-        wav_path = category_dir / wav_file
-        print(f"\nProcessing {wav_path}...")
-        result = run_inference(str(wav_path), model_type="podsai", model_path=podsai_model_path)
+        result = test_model_inference_helper(label, wav_file, "podsai", podsai_model_path)
 
         _verify_podsai_result_structure(result)
         # Always require exact match - no category matching allowed.
@@ -1322,16 +1330,11 @@ class TestIntegrationWithRealModels:
         request: pytest.FixtureRequest,
     ) -> None:
         """Test OrcaHello SRKW detector inference on various audio types."""
-        from run_inference import run_inference
 
         if xfail_reason:
             request.node.add_marker(pytest.mark.xfail(reason=xfail_reason, strict=False))
 
-        output_root = Path("output/testing-wav")
-        category_dir = output_root / label
-        wav_path = category_dir / wav_file
-        print(f"\nProcessing {wav_path}...")
-        result = run_inference(str(wav_path), model_type="orcahello", model_path=orcahello_model_path)
+        result = test_model_inference_helper(label, wav_file, "orcahello", orcahello_model_path)
 
         # OrcaHello is a binary model: "resident" or "other".
         _verify_fastai_result_structure(result)
