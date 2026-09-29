@@ -13,15 +13,6 @@
       "matchStrings": [
         "# renovate: datasource=(?<datasource>[^\\s]+) depName=(?<depName>[^\\s]+) versioning=(?<versioning>[^\\s]+).*?LATEST_PODSAI_MODEL_REVISION = \"(?<currentValue>[a-f0-9]{40})\""
       ]
-    },
-    {
-      "customType": "regex",
-      "managerFilePatterns": [
-        "/^LiveInferenceSystem\\/Dockerfile$/"
-      ],
-      "matchStrings": [
-        "# renovate: datasource=(?<datasource>[^\\s]+) depName=(?<depName>[^\\s]+) versioning=(?<versioning>[^\\s]+)[\\s\\S]*?revision=\"(?<currentValue>[a-f0-9]{40})\""
-      ]
     }
   ],
   "packageRules": [
