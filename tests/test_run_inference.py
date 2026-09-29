@@ -1249,8 +1249,8 @@ class TestIntegrationWithRealModels:
 
     # Parametrized CLI integration tests.
     @pytest.mark.parametrize("label,wav_file,model_type,model_path_fixture", [
-        ("resident", "rpi-bush-point_2020_09_27_22_55_00_PST.wav", "fastai", "fastai_model_path"),
-        ("resident", "rpi-bush-point_2020_09_27_22_55_00_PST.wav", "podsai", "podsai_model_path"),
+        ("resident", "rpi-sunset-bay_2026_01_08_01_52_39_PST.wav", "fastai", "fastai_model_path"),
+        ("resident", "rpi-sunset-bay_2026_01_08_01_52_39_PST.wav", "podsai", "podsai_model_path"),
         ("transient", "rpi-orcasound-lab_2024_12_29_13_37_23_PST.wav", "fastai", "fastai_model_path"),
         ("transient", "rpi-orcasound-lab_2024_12_29_13_37_23_PST.wav", "podsai", "podsai_model_path"),
         ("humpback", "rpi-orcasound-lab_2023_10_28_08_08_03_PST.wav", "fastai", "fastai_model_path"),
