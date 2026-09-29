@@ -1032,7 +1032,7 @@ def download_testing_file(expected_path: Path, output_root: Path, cache_root: Pa
 
     from add_samples import parse_node_and_timestamp_from_filename
 
-    node, timestamp_pst = parse_node_and_timestamp_from_filename(wav_file)
+    node, timestamp_pst = parse_node_and_timestamp_from_filename(expected_path)
 
     min_end_timestamp_pst_str = add_seconds_to_timestamp_pst(
         timestamp_pst,
