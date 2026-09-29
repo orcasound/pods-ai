@@ -1166,22 +1166,21 @@ class TestIntegrationWithRealModels:
         return self._get_testing_wav_path("bird")
 
     # Parametrized tests for FastAI model on different audio types.
-    @pytest.mark.parametrize("wav_fixture,label,xfail_reason", [
-        ("resident_wav_path", "resident", None),
-        ("transient_wav_path", "transient",
+    @pytest.mark.parametrize("label,wav_file,xfail_reason", [
+        ("resident", "rpi-bush-point_2020_09_27_22_55_00_PST.wav", None),
+        ("transient", "rpi-orcasound-lab_2024_12_29_13_37_23_PST.wav",
          "FastAI binary model may predict resident on transient clips"),
-        ("humpback_wav_path", "humpback", "FastAI binary model may misclassify humpback as resident"),
-        ("vessel_wav_path", "vessel", "FastAI binary model may predict vessel as resident"),
-        ("water_wav_path", "water",
-         "FastAI binary model may predict resident on ambient water clips"),
-        ("human_wav_path", "human", None),
-        ("jingle_wav_path", "jingle", "FastAI binary model may predict jingle as resident"),
-        ("bird_wav_path", "bird", None),
+        ("humpback", "rpi-orcasound-lab_2023_10_28_08_08_03_PST.wav", None),
+        ("vessel", "rpi-orcasound-lab_2025_11_30_12_53_54_PST.wav", "FastAI binary model may predict vessel as resident"),
+        ("water", "rpi-andrews-bay_2026_08_30_02_22_52_PST.wav", None),
+        ("human", "rpi-sunset-bay_2024_07_19_12_50_08_PST.wav", None),
+        ("jingle", "rpi-bush-point_2026_07_19_09_54_48_PST.wav", "FastAI binary model may predict jingle as resident"),
+        ("bird", "rpi-bush-point_2026_08_09_17_36_48_PST.wav", None),
     ])
     def test_fastai_model_inference(
         self,
-        wav_fixture: str,
         label: str,
+        wav_file: str,
         xfail_reason: Optional[str],
         fastai_model_path: str,
         request: pytest.FixtureRequest
@@ -1193,7 +1192,9 @@ class TestIntegrationWithRealModels:
         if xfail_reason:
             request.node.add_marker(pytest.mark.xfail(reason=xfail_reason, strict=False))
 
-        wav_path = request.getfixturevalue(wav_fixture)
+        output_root = Path("output/testing-wav")
+        category_dir = output_root / label
+        wav_path = category_dir / wav_file
         print(f"\nProcessing {wav_path}...")
         result = run_inference(wav_path, model_type="fastai", model_path=fastai_model_path)
 
@@ -1202,21 +1203,20 @@ class TestIntegrationWithRealModels:
         _print_fastai_result(result, label)
 
     # Parametrized tests for PODS-AI model on different audio types.
-    @pytest.mark.parametrize("wav_fixture,label,xfail_reason", [
-        ("resident_wav_path", "resident", "PODS-AI model may misclassify resident as vessel"),
-        ("transient_wav_path", "transient",
-         "PODS-AI model may misclassify transient as resident"),
-        ("humpback_wav_path", "humpback", "PODS-AI model may misclassify humpback as resident"),
-        ("vessel_wav_path", "vessel", None),
-        ("water_wav_path", "water", "PODS-AI model may misclassify water as vessel"),
-        ("human_wav_path", "human", None),
-        ("jingle_wav_path", "jingle", "PODS-AI model may misclassify jingle as vessel"),
-        ("bird_wav_path", "bird", "PODS-AI model may misclassify bird as jingle"),
+    @pytest.mark.parametrize("label,wav_file,xfail_reason", [
+        ("resident", "rpi-bush-point_2020_09_27_23_09_00_PST.wav", None),
+        ("transient", "rpi-orcasound-lab_2025_01_02_10_12_24_PST.wav", None),
+        ("humpback", "rpi-orcasound-lab_2025_01_05_21_18_05_PST.wav", None),
+        ("vessel", "rpi-orcasound-lab_2025_11_30_12_53_54_PST.wav", None),
+        ("water", "rpi-bush-point_2025_06_29_18_23_17_PST.wav", None),
+        ("human", "rpi-sunset-bay_2024_07_19_12_50_08_PST.wav", None),
+        ("jingle", "rpi-bush-point_2026_07_19_09_54_48_PST.wav", None),
+        ("bird", "rpi-bush-point_2026_08_09_17_36_48_PST.wav", "PODS-AI model may misclassify bird as jingle"),
     ])
     def test_podsai_model_inference(
         self,
-        wav_fixture: str,
         label: str,
+        wav_file: str,
         xfail_reason: Optional[str],
         podsai_model_path: str,
         request: pytest.FixtureRequest
@@ -1228,7 +1228,9 @@ class TestIntegrationWithRealModels:
         if xfail_reason:
             request.node.add_marker(pytest.mark.xfail(reason=xfail_reason, strict=False))
 
-        wav_path = request.getfixturevalue(wav_fixture)
+        output_root = Path("output/testing-wav")
+        category_dir = output_root / label
+        wav_path = category_dir / wav_file
         print(f"\nProcessing {wav_path}...")
         result = run_inference(wav_path, model_type="podsai", model_path=podsai_model_path)
 
@@ -1238,27 +1240,28 @@ class TestIntegrationWithRealModels:
         _print_podsai_result(result, label)
 
     # Parametrized CLI integration tests.
-    @pytest.mark.parametrize("wav_fixture,model_type,model_path_fixture", [
-        ("resident_wav_path", "fastai", "fastai_model_path"),
-        ("resident_wav_path", "podsai", "podsai_model_path"),
-        ("transient_wav_path", "fastai", "fastai_model_path"),
-        ("transient_wav_path", "podsai", "podsai_model_path"),
-        ("humpback_wav_path", "fastai", "fastai_model_path"),
-        ("humpback_wav_path", "podsai", "podsai_model_path"),
-        ("vessel_wav_path", "fastai", "fastai_model_path"),
-        ("vessel_wav_path", "podsai", "podsai_model_path"),
-        ("water_wav_path", "fastai", "fastai_model_path"),
-        ("water_wav_path", "podsai", "podsai_model_path"),
-        ("human_wav_path", "fastai", "fastai_model_path"),
-        ("human_wav_path", "podsai", "podsai_model_path"),
-        ("jingle_wav_path", "fastai", "fastai_model_path"),
-        ("jingle_wav_path", "podsai", "podsai_model_path"),
-        ("bird_wav_path", "fastai", "fastai_model_path"),
-        ("bird_wav_path", "podsai", "podsai_model_path"),
+    @pytest.mark.parametrize("label,wav_file,model_type,model_path_fixture", [
+        ("resident", "rpi-bush-point_2020_09_27_22_55_00_PST.wav", "fastai", "fastai_model_path"),
+        ("resident", "rpi-bush-point_2020_09_27_22_55_00_PST.wav", "podsai", "podsai_model_path"),
+        ("transient", "rpi-orcasound-lab_2024_12_29_13_37_23_PST.wav", "fastai", "fastai_model_path"),
+        ("transient", "rpi-orcasound-lab_2024_12_29_13_37_23_PST.wav", "podsai", "podsai_model_path"),
+        ("humpback", "rpi-orcasound-lab_2023_10_28_08_08_03_PST.wav", "fastai", "fastai_model_path"),
+        ("humpback", "rpi-orcasound-lab_2023_10_28_08_08_03_PST.wav", "podsai", "podsai_model_path"),
+        ("vessel", "rpi-orcasound-lab_2025_11_30_12_53_54_PST.wav", "fastai", "fastai_model_path"),
+        ("vessel", "rpi-orcasound-lab_2025_11_30_12_53_54_PST.wav", "podsai", "podsai_model_path"),
+        ("water", "rpi-andrews-bay_2026_08_30_02_22_52_PST.wav", "fastai", "fastai_model_path"),
+        ("water", "rpi-andrews-bay_2026_08_30_02_22_52_PST.wav", "podsai", "podsai_model_path"),
+        ("human", "rpi-sunset-bay_2024_07_19_12_50_08_PST.wav", "fastai", "fastai_model_path"),
+        ("human", "rpi-sunset-bay_2024_07_19_12_50_08_PST.wav", "podsai", "podsai_model_path"),
+        ("jingle", "rpi-bush-point_2026_07_19_09_54_48_PST.wav", "fastai", "fastai_model_path"),
+        ("jingle", "rpi-bush-point_2026_07_19_09_54_48_PST.wav", "podsai", "podsai_model_path"),
+        ("bird", "rpi-bush-point_2026_08_09_17_36_48_PST.wav", "fastai", "fastai_model_path"),
+        ("bird", "rpi-bush-point_2026_08_09_17_36_48_PST.wav", "podsai", "podsai_model_path"),
     ])
     def test_cli_integration(
         self,
-        wav_fixture: str,
+        label: str,
+        wav_file: str,
         model_type: str,
         model_path_fixture: str,
         request: pytest.FixtureRequest
@@ -1266,7 +1269,9 @@ class TestIntegrationWithRealModels:
         """Test CLI integration with various audio types and models."""
         from run_inference import main
 
-        wav_path = request.getfixturevalue(wav_fixture)
+        output_root = Path("output/testing-wav")
+        category_dir = output_root / label
+        wav_path = category_dir / wav_file
         model_path = request.getfixturevalue(model_path_fixture)
 
         with patch("sys.argv", [
@@ -1294,28 +1299,24 @@ class TestIntegrationWithRealModels:
             pytest.skip(f"HuggingFace Hub is not reachable; cannot load model '{hub_id}'")
         return hub_id
 
-    @pytest.mark.parametrize("wav_fixture,label,xfail_reason", [
-        ("resident_wav_path", "resident",
-         "OrcaHello SRKW detector may predict 'other' for resident clips in some environments"),
-        ("transient_wav_path", "transient",
+    @pytest.mark.parametrize("label,wav_file,xfail_reason", [
+        ("resident", "rpi-bush-point_2020_09_27_22_55_00_PST.wav", None),
+        ("transient", "rpi-orcasound-lab_2024_12_29_13_37_23_PST.wav",
          "OrcaHello SRKW detector may predict resident on transient clips"),
-        ("humpback_wav_path", "humpback",
-         "OrcaHello SRKW detector may predict resident on humpback clips"),
-        ("vessel_wav_path", "vessel",
+        ("humpback", "rpi-orcasound-lab_2023_10_28_08_08_03_PST.wav", None),
+        ("vessel", "rpi-orcasound-lab_2025_11_30_12_53_54_PST.wav",
          "OrcaHello SRKW detector may predict resident on vessel noise clips"),
-        ("water_wav_path", "water",
-         "OrcaHello SRKW detector may predict resident on ambient water clips"),
-        ("human_wav_path", "human",
+        ("water", "rpi-andrews-bay_2026_08_30_02_22_52_PST.wav", None),
+        ("human", "rpi-sunset-bay_2024_07_19_12_50_08_PST.wav",
          "OrcaHello SRKW detector may predict resident on human voice clips"),
-        ("jingle_wav_path", "jingle",
+        ("jingle", "rpi-bush-point_2026_07_19_09_54_48_PST.wav",
          "OrcaHello SRKW detector may predict resident on jingle clips"),
-        ("bird_wav_path", "bird",
-         "OrcaHello SRKW detector may predict resident on bird clips"),
+        ("bird", "rpi-bush-point_2026_08_09_17_36_48_PST.wav", None),
     ])
     def test_orcahello_model_inference(
         self,
-        wav_fixture: str,
         label: str,
+        wav_file: str,
         xfail_reason: Optional[str],
         orcahello_model_path: str,
         request: pytest.FixtureRequest,
@@ -1326,7 +1327,9 @@ class TestIntegrationWithRealModels:
         if xfail_reason:
             request.node.add_marker(pytest.mark.xfail(reason=xfail_reason, strict=False))
 
-        wav_path = request.getfixturevalue(wav_fixture)
+        output_root = Path("output/testing-wav")
+        category_dir = output_root / label
+        wav_path = category_dir / wav_file
         print(f"\nProcessing {wav_path}...")
         result = run_inference(wav_path, model_type="orcahello", model_path=orcahello_model_path)
 
