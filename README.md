@@ -160,7 +160,7 @@ image: orcaconservancycr.azurecr.io/pods-ai-live-inference-system:09-05-2026.v1.
 ```
 14. Generate a pull request with those changes.
 15. Once that pull request merges, apply the config, e.g., `kubectl apply -f deploy/andrews-bay.yaml` from the
-    `LiveInferenceSystem` directory.
+    `LiveInferenceSystem` directory.  See [AzurePlaybook.md](https://github.com/orcasound/orcahello/blob/main/InferenceSystem/AzurePlaybook.md) for troubleshooting guidance if needed.
 
 You can instead train a model locally:
 
