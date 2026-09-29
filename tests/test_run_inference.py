@@ -1196,7 +1196,7 @@ class TestIntegrationWithRealModels:
         category_dir = output_root / label
         wav_path = category_dir / wav_file
         print(f"\nProcessing {wav_path}...")
-        result = run_inference(wav_path, model_type="fastai", model_path=fastai_model_path)
+        result = run_inference(str(wav_path), model_type="fastai", model_path=fastai_model_path)
 
         _verify_fastai_result_structure(result)
         _verify_fastai_prediction(result, label)
@@ -1232,7 +1232,7 @@ class TestIntegrationWithRealModels:
         category_dir = output_root / label
         wav_path = category_dir / wav_file
         print(f"\nProcessing {wav_path}...")
-        result = run_inference(wav_path, model_type="podsai", model_path=podsai_model_path)
+        result = run_inference(str(wav_path), model_type="podsai", model_path=podsai_model_path)
 
         _verify_podsai_result_structure(result)
         # Always require exact match - no category matching allowed.
@@ -1276,7 +1276,7 @@ class TestIntegrationWithRealModels:
 
         with patch("sys.argv", [
             "run_inference.py",
-            wav_path,
+            str(wav_path),
             "--model", model_type,
             "--model-path", model_path
         ]):
@@ -1331,7 +1331,7 @@ class TestIntegrationWithRealModels:
         category_dir = output_root / label
         wav_path = category_dir / wav_file
         print(f"\nProcessing {wav_path}...")
-        result = run_inference(wav_path, model_type="orcahello", model_path=orcahello_model_path)
+        result = run_inference(str(wav_path), model_type="orcahello", model_path=orcahello_model_path)
 
         # OrcaHello is a binary model: "resident" or "other".
         _verify_fastai_result_structure(result)
