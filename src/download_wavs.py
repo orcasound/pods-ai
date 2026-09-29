@@ -1032,7 +1032,7 @@ def download_testing_file(expected_path: Path, output_root: Path, cache_root: Pa
 
     from add_samples import parse_node_and_timestamp_from_filename
 
-    node, timestamp_pst = parse_node_and_timestamp_from_filename(expected_path)
+    node_name, timestamp_pst = parse_node_and_timestamp_from_filename(expected_path)
 
     min_end_timestamp_pst_str = add_seconds_to_timestamp_pst(
         timestamp_pst,
@@ -1045,12 +1045,12 @@ def download_testing_file(expected_path: Path, output_root: Path, cache_root: Pa
         from audio_utils import download_60s_audio
 
         wav_path = download_60s_audio(
-            node_name=row.node_name,
+            node_name=node_name,
             min_end_timestamp_pst_str=min_end_timestamp_pst_str,
             tmp_dir=tmp_dir,
         )
         if wav_path is None:
-            raise AssertionError(f"Error: Failed to download 60-second clip for {row.node_name} at {row.timestamp_pst}")
+            raise AssertionError(f"Error: Failed to download 60-second clip for {node_name} at {timestamp_pst}")
         shutil.move(wav_path, expected_path)
         print(f"  Downloaded: {expected_path}")
 
