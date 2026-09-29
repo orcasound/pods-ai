@@ -49,9 +49,6 @@ jobs:
     runs-on: ubuntu-latest
     needs: changes
     if: ${{ needs.changes.outputs.src == 'true' }}
-    env:
-      HF_TOKEN: ${{ secrets.HF_TOKEN }}
-
     permissions:
       contents: read
 
@@ -77,8 +74,23 @@ jobs:
           df -h
 
       - name: Build Dockerfile image
+        if: ${{ github.event_name == 'pull_request' }}
+        env:
+          DOCKER_BUILDKIT: 1
+        run: docker build -f LiveInferenceSystem/Dockerfile -t pods-ai-inference:ci .
+
+      - name: Build Dockerfile image
+        if: ${{ github.event_name != 'pull_request' }}
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          DOCKER_BUILDKIT: 1
+        shell: bash
         run: |
-          docker build -f LiveInferenceSystem/Dockerfile -t pods-ai-inference:ci .
+          build_args=()
+          if [ -n "${HF_TOKEN:-}" ]; then
+            build_args+=(--secret id=HF_TOKEN,env=HF_TOKEN)
+          fi
+          docker build "${build_args[@]}" -f LiveInferenceSystem/Dockerfile -t pods-ai-inference:ci .
 
       - name: Smoke test container (LiveHLS)
         run: |

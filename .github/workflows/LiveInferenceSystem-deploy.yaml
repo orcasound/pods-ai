@@ -84,8 +84,18 @@ jobs:
           df -h
 
       - name: Build Dockerfile image
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          DOCKER_BUILDKIT: 1
+        shell: bash
         run: |
-          docker build -f LiveInferenceSystem/Dockerfile -t $IMAGE_NAME .
+          build_args=()
+          if [ -z "${HF_TOKEN:-}" ]; then
+            echo "HF_TOKEN is required for the deployment image build" >&2
+            exit 1
+          fi
+          build_args+=(--secret id=HF_TOKEN,env=HF_TOKEN)
+          docker build "${build_args[@]}" -f LiveInferenceSystem/Dockerfile -t $IMAGE_NAME .
 
       - name: List Docker images
         run: docker images
