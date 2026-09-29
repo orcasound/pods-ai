@@ -15,6 +15,7 @@ on:
       - src/download_wavs.py
       - src/add_samples.py
       - src/audio_utils.py
+      - src/model_revisions.py
   workflow_dispatch:
 
 concurrency:
