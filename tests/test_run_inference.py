@@ -159,7 +159,7 @@ def _resolve_podsai_test_model_path() -> str:
         )
 
 
-def test_model_inference_helper(label: str, wav_file: str, model_type: str, model_path: str) -> dict:
+def model_inference_helper(label: str, wav_file: str, model_type: str, model_path: str) -> dict:
     """Download a specific testing WAV and run run_inference() against it.
 
     This helper is used by the integration tests and must be module-level so
@@ -1209,7 +1209,7 @@ class TestIntegrationWithRealModels:
         if xfail_reason:
             request.node.add_marker(pytest.mark.xfail(reason=xfail_reason, strict=False))
 
-        result = test_model_inference_helper(label, wav_file, "fastai", fastai_model_path)
+        result = model_inference_helper(label, wav_file, "fastai", fastai_model_path)
 
         _verify_fastai_result_structure(result)
         _verify_fastai_prediction(result, label)
@@ -1240,7 +1240,7 @@ class TestIntegrationWithRealModels:
         if xfail_reason:
             request.node.add_marker(pytest.mark.xfail(reason=xfail_reason, strict=False))
 
-        result = test_model_inference_helper(label, wav_file, "podsai", podsai_model_path)
+        result = model_inference_helper(label, wav_file, "podsai", podsai_model_path)
 
         _verify_podsai_result_structure(result)
         # Always require exact match - no category matching allowed.
@@ -1334,7 +1334,7 @@ class TestIntegrationWithRealModels:
         if xfail_reason:
             request.node.add_marker(pytest.mark.xfail(reason=xfail_reason, strict=False))
 
-        result = test_model_inference_helper(label, wav_file, "orcahello", orcahello_model_path)
+        result = model_inference_helper(label, wav_file, "orcahello", orcahello_model_path)
 
         # OrcaHello is a binary model: "resident" or "other".
         _verify_fastai_result_structure(result)
