@@ -1051,6 +1051,10 @@ def download_testing_file(expected_path: Path, output_root: Path, cache_root: Pa
         )
         if wav_path is None:
             raise AssertionError(f"Error: Failed to download 60-second clip for {node_name} at {timestamp_pst}")
+
+        # Ensure destination directory exists before moving the downloaded file.
+        expected_path.parent.mkdir(parents=True, exist_ok=True)
+
         shutil.move(wav_path, expected_path)
         print(f"  Downloaded: {expected_path}")
 
