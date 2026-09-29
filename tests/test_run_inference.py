@@ -1185,7 +1185,7 @@ class TestIntegrationWithRealModels:
 
     # Parametrized tests for FastAI model on different audio types.
     @pytest.mark.parametrize("label,wav_file,xfail_reason", [
-        ("resident", "rpi-bush-point_2020_09_27_22_55_00_PST.wav", None),
+        ("resident", "rpi-sunset-bay_2026_01_08_01_52_39_PST.wav", None),
         ("transient", "rpi-orcasound-lab_2024_12_29_13_37_23_PST.wav",
          "FastAI binary model may predict resident on transient clips"),
         ("humpback", "rpi-orcasound-lab_2023_10_28_08_08_03_PST.wav", None),
@@ -1217,7 +1217,7 @@ class TestIntegrationWithRealModels:
 
     # Parametrized tests for PODS-AI model on different audio types.
     @pytest.mark.parametrize("label,wav_file,xfail_reason", [
-        ("resident", "rpi-bush-point_2020_09_27_23_09_00_PST.wav", None),
+        ("resident", "rpi-sunset-bay_2026_01_08_01_52_39_PST.wav", None),
         ("transient", "rpi-orcasound-lab_2025_01_02_10_12_24_PST.wav", None),
         ("humpback", "rpi-orcasound-lab_2025_01_05_21_18_05_PST.wav", None),
         ("vessel", "rpi-orcasound-lab_2025_11_30_12_53_54_PST.wav", None),
@@ -1308,7 +1308,7 @@ class TestIntegrationWithRealModels:
         return hub_id
 
     @pytest.mark.parametrize("label,wav_file,xfail_reason", [
-        ("resident", "rpi-bush-point_2020_09_27_22_55_00_PST.wav", None),
+        ("resident", "rpi-sunset-bay_2026_01_08_01_52_39_PST.wav", None),
         ("transient", "rpi-orcasound-lab_2024_12_29_13_37_23_PST.wav",
          "OrcaHello SRKW detector may predict resident on transient clips"),
         ("humpback", "rpi-orcasound-lab_2023_10_28_08_08_03_PST.wav", None),
