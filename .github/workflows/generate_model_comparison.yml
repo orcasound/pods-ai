@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       branch:
-        description: Branch to commit model-comparison.txt updates to
+        description: Branch to check out
         required: true
         default: main
         type: string
@@ -49,17 +49,34 @@ jobs:
 
       - id: branch
         name: Determine checkout ref and push branch
+        env:
+          CHECKOUT_BRANCH: ${{ inputs.branch }}
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_SHA: ${{ github.sha }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "checkout_ref=${{ inputs.branch }}" >> "$GITHUB_OUTPUT"
-            echo "push_branch=${{ inputs.branch }}" >> "$GITHUB_OUTPUT"
-          elif [ "${{ github.ref_type }}" = "branch" ]; then
-            echo "checkout_ref=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
-            echo "push_branch=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            if ! git check-ref-format --branch "$CHECKOUT_BRANCH" >/dev/null; then
+              echo "Invalid branch name: $CHECKOUT_BRANCH" >&2
+              exit 1
+            fi
+            checkout_ref="$CHECKOUT_BRANCH"
+            push_branch="$CHECKOUT_BRANCH"
+          elif [ "$REF_TYPE" = "branch" ]; then
+            checkout_ref="$REF_NAME"
+            push_branch="$REF_NAME"
           else
-            echo "checkout_ref=${{ github.sha }}" >> "$GITHUB_OUTPUT"
-            echo "push_branch=" >> "$GITHUB_OUTPUT"
+            checkout_ref="$REF_SHA"
+            push_branch=""
           fi
+
+          if [ "$checkout_ref" = "main" ] && [ -n "$push_branch" ]; then
+            push_branch="update-model-comparison"
+          fi
+
+          echo "checkout_ref=$checkout_ref" >> "$GITHUB_OUTPUT"
+          echo "push_branch=$push_branch" >> "$GITHUB_OUTPUT"
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
