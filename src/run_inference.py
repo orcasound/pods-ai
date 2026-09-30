@@ -42,10 +42,10 @@ from model_inference import get_model_inference
 
 PODSAI_MODEL_ID = "davethaler/whale-call-detector"
 # renovate: datasource=git-refs depName=https://huggingface.co/davethaler/whale-call-detector versioning=git.
-PODSAI_AST_MODEL_REVISION = "ddc62698a4225d4d7f18f23afe1eae915d5d0d93"
-PODSAI_WAV2VEC2_MODEL_REVISION = "cef82c6e9ee661646ea0c583aeb68f4f7ec6d9d8"
+from model_revisions import LATEST_PODSAI_MODEL_REVISION, PODSAI_WAV2VEC2_MODEL_REVISION
+
 # Preserve the existing exported constant name for compatibility.
-PODSAI_MODEL_REVISION = PODSAI_AST_MODEL_REVISION
+PODSAI_MODEL_REVISION = LATEST_PODSAI_MODEL_REVISION
 PROPOSED_DESCRIPTION_EXTRA_CLASSES = {"vessel", "human", "jingle", "bird"}
 NEGATIVE_LABELS = {"other", "water", "vessel", "jingle", "human", "bird"}
 
@@ -206,7 +206,7 @@ def run_inference(wav_path: str, model_type: str = "podsai",
                     and PODSAI_MODEL_ID for podsai.
         model_revision: Git commit hash to pin the HuggingFace Hub model revision.
                         Only used when model_path is a Hub model ID (not a local path).
-                        Defaults to PODSAI_MODEL_REVISION when model_path is the default
+                        Defaults to LATEST_PODSAI_MODEL_REVISION when model_path is the default
                         PODS-AI Hub model.
         model_variant: PODS-AI model variant to use when model_type is "podsai"
                        and the default PODS-AI Hub model/revision is being used
@@ -319,7 +319,7 @@ def run_inference(wav_path: str, model_type: str = "podsai",
                 if model_variant == "wav2vec2":
                     model_revision = PODSAI_WAV2VEC2_MODEL_REVISION
                 else:
-                    model_revision = PODSAI_AST_MODEL_REVISION
+                    model_revision = LATEST_PODSAI_MODEL_REVISION
 
         model = (
             inference_model
@@ -516,7 +516,7 @@ def main() -> int:
         help=(
             "Git commit hash to pin the HuggingFace Hub model revision. "
             "Only used when --model-path is a Hub model ID. "
-            f"Defaults to the pinned revision ({PODSAI_MODEL_REVISION}) when using "
+            f"Defaults to the pinned revision ({LATEST_PODSAI_MODEL_REVISION}) when using "
             f"the default PODS-AI model ({PODSAI_MODEL_ID!r})."
         ),
     )

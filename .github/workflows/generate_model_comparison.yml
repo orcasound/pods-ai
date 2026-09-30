@@ -8,12 +8,6 @@ on:
     tags:
       - model-*
   workflow_dispatch:
-    inputs:
-      branch:
-        description: Branch to commit model-comparison.txt updates to
-        required: true
-        default: main
-        type: string
 
 permissions:
   contents: write
@@ -49,17 +43,25 @@ jobs:
 
       - id: branch
         name: Determine checkout ref and push branch
+        env:
+          REF_NAME: ${{ github.ref_name }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_SHA: ${{ github.sha }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "checkout_ref=${{ inputs.branch }}" >> "$GITHUB_OUTPUT"
-            echo "push_branch=${{ inputs.branch }}" >> "$GITHUB_OUTPUT"
-          elif [ "${{ github.ref_type }}" = "branch" ]; then
-            echo "checkout_ref=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
-            echo "push_branch=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          if [ "$REF_TYPE" = "branch" ]; then
+            checkout_ref="$REF_NAME"
+            push_branch="$REF_NAME"
           else
-            echo "checkout_ref=${{ github.sha }}" >> "$GITHUB_OUTPUT"
-            echo "push_branch=" >> "$GITHUB_OUTPUT"
+            checkout_ref="$REF_SHA"
+            push_branch=""
           fi
+
+          if [ "$checkout_ref" = "main" ] && [ -n "$push_branch" ]; then
+            push_branch="update-model-comparison"
+          fi
+
+          echo "checkout_ref=$checkout_ref" >> "$GITHUB_OUTPUT"
+          echo "push_branch=$push_branch" >> "$GITHUB_OUTPUT"
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
@@ -67,47 +69,26 @@ jobs:
           ref: ${{ steps.branch.outputs.checkout_ref }}
           submodules: 'recursive'
 
-      - id: detect
-        name: Detect model comparison inputs
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "should_run=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          if [ "${{ github.ref_type }}" = "tag" ]; then
-            echo "should_run=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          echo "should_run=false" >> "$GITHUB_OUTPUT"
-
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
-        if: steps.detect.outputs.should_run == 'true'
         with:
           python-version: '3.12'
 
       - name: Install FFmpeg
-        if: steps.detect.outputs.should_run == 'true'
         run: |
           # TODO: Re-evaluate setup-ffmpeg on Ubuntu when https://github.com/FedericoCarboni/setup-ffmpeg/issues/35 is resolved and revalidated; OrcaHello #642 currently validates native apt.
           sudo apt-get update
           sudo apt-get install -y ffmpeg
 
       - name: Install Python dependencies
-        if: steps.detect.outputs.should_run == 'true'
         run: pip install -r requirements.txt
 
       - name: Verify pkg_resources is available
-        if: steps.detect.outputs.should_run == 'true'
         run: python -c "import pkg_resources; print('pkg_resources available')"
 
       - name: Patch fastai_audio for Python 3.11+ compatibility
-        if: steps.detect.outputs.should_run == 'true'
         run: bash patch_fastai_audio.sh
 
       - name: Download testing WAV files
-        if: steps.detect.outputs.should_run == 'true'
         run: |
           cat > /tmp/empty_training_3s_samples.csv <<'CSV'
           WAV,Category,Node,StartTimestamp,Duration,Location,Latitude,Longitude,Model,Site,Notes,Tags
@@ -116,16 +97,10 @@ jobs:
             --training-csv-path /tmp/empty_training_3s_samples.csv \
             --testing-csv-path output/csv/testing_60s_samples.csv
 
-      - name: Process humpback signal wavs
-        if: steps.detect.outputs.should_run == 'true'
-        run: python src/process_humpback_wavs.py
-
       - name: Generate model comparison results
-        if: steps.detect.outputs.should_run == 'true'
-        run: python src/compare_models.py > model-comparison.txt
+        run: set -o pipefail; python src/compare_models.py --models orcahello,oldpodsai,podsai | tee model-comparison.txt
 
       - name: Commit and push model comparison updates
-        if: steps.detect.outputs.should_run == 'true'
         env:
           PUSH_BRANCH: ${{ steps.branch.outputs.push_branch }}
         run: |
@@ -144,7 +119,3 @@ jobs:
           git add model-comparison.txt
           git commit -m "Update model-comparison.txt"
           git push origin "HEAD:${PUSH_BRANCH}"
-
-      - name: Skip notice
-        if: steps.detect.outputs.should_run != 'true'
-        run: echo "No model comparison inputs changed; skipping."

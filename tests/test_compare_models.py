@@ -17,6 +17,7 @@ Tests cover:
 import sys
 from pathlib import Path
 from unittest.mock import patch
+from model_revisions import LATEST_PODSAI_MODEL_REVISION, PREVIOUS_PODSAI_MODEL_REVISION, PODSAI_WAV2VEC2_MODEL_REVISION
 
 import pytest
 
@@ -623,7 +624,7 @@ class TestMainCLI:
 
     def test_accepts_oldpodsai_model(self, tmp_path):
         """main() accepts oldpodsai and evaluates it using the podsai inference path."""
-        from compare_models import OLD_PODSAI_MODEL_REVISION, main
+        from compare_models import main
 
         rows = _make_testing_rows()
 
@@ -645,7 +646,7 @@ class TestMainCLI:
         assert result == 0
         mock_infer.assert_called_once()
         assert mock_infer.call_args.kwargs["model_type"] == "podsai"
-        assert mock_infer.call_args.kwargs["model_revision"] == OLD_PODSAI_MODEL_REVISION
+        assert mock_infer.call_args.kwargs["model_revision"] == PREVIOUS_PODSAI_MODEL_REVISION
 
     def test_oldpodsai_per_file_output_uses_oldpodsai_label(self, tmp_path, capsys):
         """Per-file output for oldpodsai should be labeled [oldpodsai], not [podsai]."""
@@ -674,7 +675,7 @@ class TestMainCLI:
 
     def test_default_models_include_oldpodsai(self, tmp_path):
         """main() defaults to evaluating fastai, orcahello, wav2vec2, oldpodsai, and podsai."""
-        from compare_models import ModelResult, WAV2VEC2_PODSAI_MODEL_REVISION, OLD_PODSAI_MODEL_REVISION, PODSAI_MODEL_REVISION, main
+        from compare_models import ModelResult, main
 
         rows = _make_testing_rows()
         wav_dir = tmp_path / "testing-wav"
@@ -698,7 +699,7 @@ class TestMainCLI:
         assert mock_evaluate.call_count == 5
         # Order matches default models: fastai, orcahello, wav2vec2, oldpodsai, podsai.
         called_revisions = [call.kwargs["model_revision"] for call in mock_evaluate.call_args_list]
-        assert called_revisions == [None, None, WAV2VEC2_PODSAI_MODEL_REVISION, OLD_PODSAI_MODEL_REVISION, PODSAI_MODEL_REVISION]
+        assert called_revisions == [None, None, PODSAI_WAV2VEC2_MODEL_REVISION, PREVIOUS_PODSAI_MODEL_REVISION, LATEST_PODSAI_MODEL_REVISION]
 
     def test_reuses_preloaded_model_for_each_sample(self, tmp_path):
         """main() preloads one model per type and reuses it for all samples."""
