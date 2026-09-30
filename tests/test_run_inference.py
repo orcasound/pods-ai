@@ -26,8 +26,7 @@ import soundfile as sf
 
 # Pinned PODS-AI model revision for integration-test stability.
 PODSAI_TEST_MODEL_ID = "davethaler/whale-call-detector"
-# renovate: datasource=git-refs depName=https://huggingface.co/davethaler/whale-call-detector versioning=git.
-PODSAI_TEST_MODEL_REVISION = "ddc62698a4225d4d7f18f23afe1eae915d5d0d93"
+from model_revisions import LATEST_PODSAI_MODEL_REVISION, PODSAI_WAV2VEC2_MODEL_REVISION
 
 
 # ---------------------------------------------------------------------------
@@ -136,15 +135,15 @@ def _resolve_podsai_test_model_path() -> str:
         if not hf_file_exists(
             PODSAI_TEST_MODEL_ID,
             "preprocessor_config.json",
-            revision=PODSAI_TEST_MODEL_REVISION,
+            revision=LATEST_PODSAI_MODEL_REVISION,
         ):
             pytest.skip(
                 f"Hub model '{PODSAI_TEST_MODEL_ID}' revision "
-                f"'{PODSAI_TEST_MODEL_REVISION}' is missing preprocessor_config.json."
+                f"'{LATEST_PODSAI_MODEL_REVISION}' is missing preprocessor_config.json."
             )
         return hf_snapshot_download(
             repo_id=PODSAI_TEST_MODEL_ID,
-            revision=PODSAI_TEST_MODEL_REVISION,
+            revision=LATEST_PODSAI_MODEL_REVISION,
             allow_patterns=[
                 "config.json",
                 "preprocessor_config.json",
@@ -155,7 +154,7 @@ def _resolve_podsai_test_model_path() -> str:
     except Exception:
         pytest.skip(
             f"HuggingFace Hub is not reachable; cannot load model "
-            f"'{PODSAI_TEST_MODEL_ID}' revision '{PODSAI_TEST_MODEL_REVISION}'"
+            f"'{PODSAI_TEST_MODEL_ID}' revision '{LATEST_PODSAI_MODEL_REVISION}'"
         )
 
 
@@ -456,7 +455,7 @@ class TestRunInferencePodsAI:
         try:
             mock_model = _make_podsai_model_mock()
             with patch("run_inference.get_model_inference", return_value=mock_model) as mock_factory:
-                from run_inference import run_inference, PODSAI_MODEL_ID, PODSAI_MODEL_REVISION
+                from run_inference import run_inference, PODSAI_MODEL_ID
                 run_inference(wav_path, model_type="podsai", model_path=None)
 
             mock_factory.assert_called_once()
@@ -465,7 +464,7 @@ class TestRunInferencePodsAI:
                 call_kwargs.args[0] if call_kwargs.args else None
             )
             assert model_path_arg == PODSAI_MODEL_ID
-            assert call_kwargs.kwargs.get("model_revision") == PODSAI_MODEL_REVISION
+            assert call_kwargs.kwargs.get("model_revision") == LATEST_PODSAI_MODEL_REVISION
         finally:
             Path(wav_path).unlink(missing_ok=True)
 
@@ -1040,11 +1039,11 @@ class TestPinnedPodsAIModelPath:
         mock_file_exists.assert_called_once_with(
             PODSAI_TEST_MODEL_ID,
             "preprocessor_config.json",
-            revision=PODSAI_TEST_MODEL_REVISION,
+            revision=LATEST_PODSAI_MODEL_REVISION,
         )
         mock_snapshot.assert_called_once_with(
             repo_id=PODSAI_TEST_MODEL_ID,
-            revision=PODSAI_TEST_MODEL_REVISION,
+            revision=LATEST_PODSAI_MODEL_REVISION,
             allow_patterns=[
                 "config.json",
                 "preprocessor_config.json",

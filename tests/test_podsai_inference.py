@@ -18,12 +18,11 @@ from pathlib import Path
 from unittest.mock import Mock, patch, MagicMock
 import torch
 from podsai_inference import NUM_SPECIAL_TOKENS
+from model_revisions import LATEST_PODSAI_MODEL_REVISION
 
 
 # Pinned PODS-AI model revision for integration-test stability.
 PODSAI_TEST_MODEL_ID = "davethaler/whale-call-detector"
-# renovate: datasource=git-refs depName=https://huggingface.co/davethaler/whale-call-detector versioning=git.
-PODSAI_TEST_MODEL_REVISION = "ddc62698a4225d4d7f18f23afe1eae915d5d0d93"
 # The repository retains training checkpoints; integration tests need only the
 # root model artifacts and should not download every historical checkpoint.
 PODSAI_MODEL_ALLOW_PATTERNS = [
@@ -46,21 +45,21 @@ def _resolve_podsai_test_model_path() -> str:
         if not hf_file_exists(
             PODSAI_TEST_MODEL_ID,
             "preprocessor_config.json",
-            revision=PODSAI_TEST_MODEL_REVISION,
+            revision=LATEST_PODSAI_MODEL_REVISION,
         ):
             pytest.skip(
                 f"Hub model '{PODSAI_TEST_MODEL_ID}' revision "
-                f"'{PODSAI_TEST_MODEL_REVISION}' is missing preprocessor_config.json."
+                f"'{LATEST_PODSAI_MODEL_REVISION}' is missing preprocessor_config.json."
             )
         return hf_snapshot_download(
             repo_id=PODSAI_TEST_MODEL_ID,
-            revision=PODSAI_TEST_MODEL_REVISION,
+            revision=LATEST_PODSAI_MODEL_REVISION,
             allow_patterns=PODSAI_MODEL_ALLOW_PATTERNS,
         )
     except Exception:
         pytest.skip(
             f"HuggingFace Hub is not reachable; cannot load model "
-            f"'{PODSAI_TEST_MODEL_ID}' revision '{PODSAI_TEST_MODEL_REVISION}'"
+            f"'{PODSAI_TEST_MODEL_ID}' revision '{LATEST_PODSAI_MODEL_REVISION}'"
         )
 
 
