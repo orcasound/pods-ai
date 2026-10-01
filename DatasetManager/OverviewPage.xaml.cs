@@ -18,12 +18,23 @@ namespace DatasetManager
         public string Description { get; set; } = "";
         public string Notes { get; set; } = "";
         public double? Confidence { get; set; }
+        public string WavFilePath
+        {
+            get
+            {
+                string slug = NodeName.Replace('_', '-');
+                string path = $"output\\testing-wav\\{Category}\\{slug}_{StartTimestamp}.wav";
+                return path;
+            }
+        }
     }
     public class StatsRow
     {
         public string Category { get; set; } = "";
         public int TrainingSampleCount { get; set; }
         public int TestingSampleCount { get; set; }
+        public int TrainingWavCount { get; set; }
+        public int TestingWavCount { get; set; }
     }
 
     /// <summary>
@@ -45,7 +56,9 @@ namespace DatasetManager
 
         private void PopulateStats(
             List<SampleRecord> trainingSamples,
-            List<SampleRecord> testingSamples)
+            List<SampleRecord> testingSamples,
+            List<string> trainingWavs,
+            List<string> testingWavs)
         {
             var categories =
                 trainingSamples.Select(s => s.Category)
@@ -54,6 +67,7 @@ namespace DatasetManager
 
             foreach (var category in categories)
             {
+
                 Stats.Add(new StatsRow
                 {
                     Category = category,
@@ -61,7 +75,13 @@ namespace DatasetManager
                         trainingSamples.Count(s => s.Category == category),
 
                     TestingSampleCount =
-                        testingSamples.Count(s => s.Category == category)
+                        testingSamples.Count(s => s.Category == category),
+
+                    TrainingWavCount =
+                        trainingWavs.Count(s => s.Contains(category)),
+
+                    TestingWavCount =
+                        testingWavs.Count(s => s.Contains(category)),
                 });
             }
         }
@@ -98,6 +118,8 @@ namespace DatasetManager
 
         private List<SampleRecord> _trainingSamples;
         private List<SampleRecord> _testingSamples;
+        private List<string> _trainingWavs;
+        private List<string> _testingWavs;
 
         public OverviewPage()
         {
@@ -132,7 +154,17 @@ namespace DatasetManager
                 Environment.Exit(1);
             }
 
-            PopulateStats(_trainingSamples, _testingSamples);
+            _trainingWavs = Directory.GetFiles(
+                Path.Combine(rootPath, "output", "wav"),
+                "*.wav",
+                SearchOption.AllDirectories).ToList();
+
+            _testingWavs = Directory.GetFiles(
+                Path.Combine(rootPath, "output", "testing-wav"),
+                "*.wav",
+                SearchOption.AllDirectories).ToList();
+
+            PopulateStats(_trainingSamples, _testingSamples, _trainingWavs, _testingWavs);
 
             DataContext = this;
         }

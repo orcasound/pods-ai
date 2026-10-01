@@ -9,22 +9,15 @@ namespace DatasetManager
     /// <summary>
     /// Interaction logic for TestingSamplesPage.xaml
     /// </summary>
-    public partial class TestingSamplesPage : Page
+    public partial class TestingSamplesPage : SamplesPageBase
     {
-        public string Category { get; }
-        private List<SampleRecord> _samples;
-        public List<SampleRecord> Samples => _samples.Where(s => s.Category == Category).ToList();
-
-        private void Back_Click(object sender, RoutedEventArgs e)
-        {
-            NavigationService?.GoBack();
-        }
+        protected override LogViewerControl LogViewer => LogViewerControl;
 
         public TestingSamplesPage(List<SampleRecord> samples, string category)
+            : base(samples, category)
         {
             InitializeComponent();
-            _samples = samples;
-            Category = category;
+            SamplesGridControl.InferenceRequested += SamplesGridControl_InferenceRequested;
             DataContext = this;
         }
     }
