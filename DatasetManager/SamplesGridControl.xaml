@@ -10,6 +10,14 @@
               ItemsSource="{Binding Samples}"
               AutoGenerateColumns="False"
               CanUserAddRows="False">
+        <DataGrid.Resources>
+            <Style x:Key="RightAlignedTextStyle" TargetType="TextBlock">
+                <Setter Property="TextAlignment" Value="Right"/>
+            </Style>
+            <Style x:Key="RightAlignedCellStyle" TargetType="DataGridCell">
+                <Setter Property="HorizontalContentAlignment" Value="Right"/>
+            </Style>
+        </DataGrid.Resources>
         <DataGrid.Columns>
             <DataGridTextColumn Header="Node" Binding="{Binding NodeName}" Width="Auto" />
             <DataGridTextColumn Header="Timestamp" Binding="{Binding StartTimestamp}" Width="Auto" />
@@ -21,6 +29,11 @@
                 </DataGridTemplateColumn.CellTemplate>
             </DataGridTemplateColumn>
             <DataGridTextColumn Header="Notes" Binding="{Binding Notes}" Width="Auto" />
+            <DataGridTextColumn Header="Confidence"
+                                Binding="{Binding ConfidenceRatio, StringFormat={}{0:P0}}"
+                                Width="Auto"
+                                ElementStyle="{StaticResource RightAlignedTextStyle}"
+                                CellStyle="{StaticResource RightAlignedCellStyle}" />
             <DataGridTemplateColumn Header="Audio" Width="Auto">
                 <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate>

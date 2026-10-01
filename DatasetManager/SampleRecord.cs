@@ -15,7 +15,23 @@ namespace DatasetManager
         public string URI { get; set; } = "";
         public string Description { get; set; } = "";
         public string Notes { get; set; } = "";
-        public double? Confidence { get; set; }
+        private double? _confidence = null;
+        public double? Confidence {
+            get => _confidence;
+            set
+            {
+                if (_confidence == value)
+                {
+                    return;
+                }
+
+                _confidence = value;
+
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(ConfidenceRatio));
+            }
+        }
+        public double? ConfidenceRatio => Confidence == null ? null : Confidence / 100.0;
 
         private string _tags = "";
         [Optional]

@@ -34,7 +34,7 @@ namespace DatasetManager
                     rootPath = commandLineArgs[1];
                 }
                 string fullArguments = $"\"{scriptPath}\" {args}";
-                LogViewer.AppendInfo($"python {fullArguments}");
+                LogViewer.AppendInfo($"> python {fullArguments}");
 
                 var psi = new ProcessStartInfo
                 {
@@ -88,8 +88,10 @@ namespace DatasetManager
             }
         }
 
-        private string FindTagsInOutput(string prefix, string output)
+        private string FindTagsInOutput(string prefix, string output, out double confidence)
         {
+            confidence = 0;
+
             string? line = output
                 .Split('\n')
                 .FirstOrDefault(l => l.StartsWith(prefix));
@@ -100,10 +102,23 @@ namespace DatasetManager
                 int paren = remainder.IndexOf('(');
                 if (paren < 0)
                 {
+                    confidence = 1.0;
                     return remainder.Trim();
                 }
 
                 string tags = remainder.Substring(0, paren);
+                string confidencePrefix = "confidence:";
+                int start = remainder.IndexOf(confidencePrefix);
+                int end = remainder.IndexOf(')', start);
+                if (start >= 0 && end > start)
+                {
+                    string value = remainder
+                        .Substring(start + confidencePrefix.Length,
+                                   end - start - confidencePrefix.Length)
+                        .Trim();
+
+                    double.TryParse(value, out confidence);
+                }
                 return tags.Trim();
             }
             return string.Empty;
@@ -113,14 +128,18 @@ namespace DatasetManager
         {
             await RunPythonAsync("src\\run_inference.py", sample.GetWavFilePath(WavFolderPath));
 
-            string tags = FindTagsInOutput("Global predictions: ", LogViewer.LogTextBox.Text);
-            if (string.IsNullOrEmpty(tags))
+            double confidence;
+            string tag = FindTagsInOutput("Global prediction: ", LogViewer.LogTextBox.Text, out confidence);
+            double dummyConfidence;
+            string tags = FindTagsInOutput("Global predictions: ", LogViewer.LogTextBox.Text, out dummyConfidence);
+            if (!string.IsNullOrEmpty(tags))
             {
-                tags = FindTagsInOutput("Global prediction: ", LogViewer.LogTextBox.Text);
+                tags = tag;
             }
             if (!string.IsNullOrEmpty(tags))
             {
                 sample.Tags = tags;
+                sample.Confidence = confidence * 100.0;
             }
         }
 
