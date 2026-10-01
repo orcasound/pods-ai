@@ -19,7 +19,9 @@
             <DataGrid.Columns>
                 <DataGridTextColumn Header="Category" Binding="{Binding Category}" />
                 <DataGridTextColumn Header="# Training Samples" Binding="{Binding TrainingSampleCount}" />
+                <DataGridTextColumn Header="# Training WAVs" Binding="{Binding TrainingWavCount}" />
                 <DataGridTextColumn Header="# Testing Samples" Binding="{Binding TestingSampleCount}" />
+                <DataGridTextColumn Header="# Testing WAVs" Binding="{Binding TestingWavCount}" />
             </DataGrid.Columns>
         </DataGrid>
     </Grid>
