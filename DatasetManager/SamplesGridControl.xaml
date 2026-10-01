@@ -6,7 +6,10 @@
              xmlns:local="clr-namespace:DatasetManager"
              mc:Ignorable="d" 
              d:DesignHeight="450" d:DesignWidth="800">
-    <DataGrid Grid.Row="1" ItemsSource="{Binding Samples}" AutoGenerateColumns="False">
+    <DataGrid Grid.Row="1"
+              ItemsSource="{Binding Samples}"
+              AutoGenerateColumns="False"
+              CanUserAddRows="False">
         <DataGrid.Columns>
             <DataGridTextColumn Header="Node" Binding="{Binding NodeName}" Width="Auto" />
             <DataGridTextColumn Header="Timestamp" Binding="{Binding StartTimestamp}" Width="Auto" />
