@@ -14,6 +14,27 @@
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
         <Button Content="Back" Click="Back_Click" Width="100" Margin="0,0,0,10"/>
-        <DataGrid Grid.Row="1" ItemsSource="{Binding Samples}" AutoGenerateColumns="True"/>
+        <DataGrid Grid.Row="1" ItemsSource="{Binding Samples}" AutoGenerateColumns="False">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="Category" Binding="{Binding Category}" Width="Auto" />
+                <DataGridTextColumn Header="Node" Binding="{Binding NodeName}" Width="Auto" />
+                <DataGridTextColumn Header="Timestamp" Binding="{Binding StartTimestamp}" Width="Auto" />
+                <DataGridTemplateColumn Header="Description" Width="*">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding Description}" TextWrapping="Wrap" />
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTextColumn Header="Notes" Binding="{Binding Notes}" Width="Auto" />
+                <DataGridTemplateColumn Header="Audio" Width="Auto">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <Button Content="Listen" Click="ListenButton_Click" />
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+            </DataGrid.Columns>
+        </DataGrid>
     </Grid>
 </Page>
