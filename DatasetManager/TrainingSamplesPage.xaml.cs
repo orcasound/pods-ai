@@ -1,9 +1,5 @@
 ﻿// Copyright (c) PODS-AI contributors
 // SPDX-License-Identifier: MIT
-using System.Diagnostics;
-using System.Windows;
-using System.Windows.Controls;
-
 namespace DatasetManager
 {
     /// <summary>
@@ -12,12 +8,13 @@ namespace DatasetManager
     public partial class TrainingSamplesPage : SamplesPageBase
     {
         protected override LogViewerControl LogViewer => LogViewerControl;
+        protected override SamplesGridControl SamplesGrid => SamplesGridControl;
+        protected override string WavFolderPath => @"output\wav";
 
         public TrainingSamplesPage(List<SampleRecord> samples, string category)
             : base(samples, category)
         {
             InitializeComponent();
-            SamplesGridControl.InferenceRequested += SamplesGridControl_InferenceRequested;
             DataContext = this;
         }
     }

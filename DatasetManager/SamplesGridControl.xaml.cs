@@ -13,6 +13,19 @@ namespace DatasetManager
     {
         public event EventHandler<SampleRecord>? InferenceRequested;
 
+        public static readonly DependencyProperty InferenceEnabledProperty =
+            DependencyProperty.Register(
+                nameof(InferenceEnabled),
+                typeof(bool),
+                typeof(SamplesGridControl),
+                new PropertyMetadata(true));
+
+        public bool InferenceEnabled
+        {
+            get => (bool)GetValue(InferenceEnabledProperty);
+            set => SetValue(InferenceEnabledProperty, value);
+        }
+
         private void ListenButton_Click(object sender, RoutedEventArgs e)
         {
             if (sender is not Button button)
@@ -35,7 +48,7 @@ namespace DatasetManager
         private void InferButton_Click(object sender, RoutedEventArgs e)
         {
             if (sender is Button button &&
-            button.DataContext is SampleRecord sample)
+                button.DataContext is SampleRecord sample)
             {
                 InferenceRequested?.Invoke(this, sample);
             }
