@@ -1,5 +1,5 @@
-﻿using System.Configuration;
-using System.Data;
+﻿// Copyright (c) PODS-AI contributors
+// SPDX-License-Identifier: MIT
 using System.Windows;
 
 namespace DatasetManager
@@ -10,5 +10,4 @@ namespace DatasetManager
     public partial class App : Application
     {
     }
-
 }

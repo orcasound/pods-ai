@@ -4,6 +4,7 @@ using CsvHelper;
 using System.Collections.ObjectModel;
 using System.Globalization;
 using System.IO;
+using System.Windows;
 using System.Windows.Controls;
 
 namespace DatasetManager
@@ -102,12 +103,34 @@ namespace DatasetManager
         {
             InitializeComponent();
 
+            string[] args = Environment.GetCommandLineArgs();
+            string rootPath = @".";
+            if (args.Length > 1)
+            {
+                rootPath = args[1];
+            }
 
-            _trainingSamples =
-                LoadSamples(@"C:\Users\dthal\git\orcasound\pods-ai\output\csv\training_3s_samples.csv");
+            try
+            {
+                _trainingSamples =
+                    LoadSamples(Path.Combine(rootPath, "output", "csv", "training_3s_samples.csv"));
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Could not load output\\csv\\training_3s_samples.csv. Please ensure the CSV file exists and is accessible, and either run this application from the pods-ai directory, or specify the path to it on the command line.\n\nError: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                Environment.Exit(1);
+            }
 
-            _testingSamples =
-                LoadSamples(@"C:\Users\dthal\git\orcasound\pods-ai\output\csv\testing_60s_samples.csv");
+            try
+            {
+                _testingSamples =
+                    LoadSamples(Path.Combine(rootPath, "output", "csv", "testing_60s_samples.csv"));
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Could not load testing samples. Please ensure the CSV file exists and is accessible, and either run this application from the pods-ai directory, or specify the path to it on the command line.\n\nError: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                Environment.Exit(1);
+            }
 
             PopulateStats(_trainingSamples, _testingSamples);
 
