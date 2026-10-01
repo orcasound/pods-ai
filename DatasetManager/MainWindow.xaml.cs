@@ -4,8 +4,6 @@ using System.Windows;
 
 namespace DatasetManager
 {
-
-
     /// <summary>
     /// Interaction logic for MainWindow.xaml
     /// </summary>
