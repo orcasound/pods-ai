@@ -1,8 +1,9 @@
-﻿using CsvHelper;
+﻿// Copyright (c) PODS-AI contributors
+// SPDX-License-Identifier: MIT
+using CsvHelper;
 using System.Collections.ObjectModel;
 using System.Globalization;
 using System.IO;
-using System.Windows;
 using System.Windows.Controls;
 
 namespace DatasetManager
