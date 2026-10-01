@@ -15,13 +15,45 @@
                   IsReadOnly="True" 
                   SelectionMode="Single"
                   SelectionUnit="Cell"
-                  SelectedCellsChanged="StatsGrid_SelectedCellsChanged"> 
+                  SelectedCellsChanged="StatsGrid_SelectedCellsChanged">
+            <DataGrid.Resources>
+                <Style x:Key="RightAlignedTextStyle" TargetType="TextBlock">
+                    <Setter Property="TextAlignment" Value="Right"/>
+                </Style>
+                <Style x:Key="RightAlignedCellStyle" TargetType="DataGridCell">
+                    <Setter Property="HorizontalContentAlignment" Value="Right"/>
+                </Style>
+            </DataGrid.Resources>
             <DataGrid.Columns>
                 <DataGridTextColumn Header="Category" Binding="{Binding Category}" />
-                <DataGridTextColumn Header="# Training Samples" Binding="{Binding TrainingSampleCount}" />
-                <DataGridTextColumn Header="# Training WAVs" Binding="{Binding TrainingWavCount}" />
-                <DataGridTextColumn Header="# Testing Samples" Binding="{Binding TestingSampleCount}" />
-                <DataGridTextColumn Header="# Testing WAVs" Binding="{Binding TestingWavCount}" />
+                <DataGridTextColumn Header="# Training Samples"
+                                    Binding="{Binding TrainingSampleCount}"
+                                    ElementStyle="{StaticResource RightAlignedTextStyle}"
+                                    CellStyle="{StaticResource RightAlignedCellStyle}" />
+                <DataGridTextColumn Header="# Training WAVs"
+                                    Binding="{Binding TrainingWavCount}"
+                                    ElementStyle="{StaticResource RightAlignedTextStyle}"
+                                    CellStyle="{StaticResource RightAlignedCellStyle}" />
+                <DataGridTextColumn Header="# Testing Samples"
+                                    Binding="{Binding TestingSampleCount}"
+                                    ElementStyle="{StaticResource RightAlignedTextStyle}"
+                                    CellStyle="{StaticResource RightAlignedCellStyle}" />
+                <DataGridTextColumn Header="# Testing WAVs"
+                                    Binding="{Binding TestingWavCount}"
+                                    ElementStyle="{StaticResource RightAlignedTextStyle}"
+                                    CellStyle="{StaticResource RightAlignedCellStyle}" />
+                <DataGridTextColumn Header="Correct Tests"
+                                    Binding="{Binding TestCorrectCount}"
+                                    ElementStyle="{StaticResource RightAlignedTextStyle}"
+                                    CellStyle="{StaticResource RightAlignedCellStyle}" />
+                <DataGridTextColumn Header="Total Tests"
+                                    Binding="{Binding TestTotalCount}"
+                                    ElementStyle="{StaticResource RightAlignedTextStyle}"
+                                    CellStyle="{StaticResource RightAlignedCellStyle}" />
+                <DataGridTextColumn Header="% Correct"
+                                    Binding="{Binding TestCorrectRatio, StringFormat={}{0:P0}}"
+                                    ElementStyle="{StaticResource RightAlignedTextStyle}"
+                                    CellStyle="{StaticResource RightAlignedCellStyle}" />
             </DataGrid.Columns>
         </DataGrid>
     </Grid>
