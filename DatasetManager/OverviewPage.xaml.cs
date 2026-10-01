@@ -9,25 +9,6 @@ using System.Windows.Controls;
 
 namespace DatasetManager
 {
-    public class SampleRecord
-    {
-        public string Category { get; set; } = "";
-        public string NodeName { get; set; } = "";
-        public string StartTimestamp { get; set; } = "";
-        public string URI { get; set; } = "";
-        public string Description { get; set; } = "";
-        public string Notes { get; set; } = "";
-        public double? Confidence { get; set; }
-        public string WavFilePath
-        {
-            get
-            {
-                string slug = NodeName.Replace('_', '-');
-                string path = $"output\\testing-wav\\{Category}\\{slug}_{StartTimestamp}.wav";
-                return path;
-            }
-        }
-    }
     public class StatsRow
     {
         public string Category { get; set; } = "";

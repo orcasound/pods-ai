@@ -28,10 +28,25 @@
                     </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
             </DataGridTemplateColumn>
-            <DataGridTemplateColumn Header="Audio" Width="Auto">
+            <DataGridTemplateColumn Header="Tags" Width="200">
                 <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate>
-                        <Button Content="Infer" Click="InferButton_Click" />
+                        <Grid>
+                            <TextBlock x:Name="TagsText"
+                                       Text="{Binding Tags}"
+                                       Visibility="Collapsed" />
+                            <Button x:Name="InferButton"
+                                    Content="Infer"
+                                    Click="InferButton_Click"
+                                    Visibility="Visible"
+                                    IsEnabled="{Binding RelativeSource={RelativeSource AncestorType=UserControl},Path=InferenceEnabled}"/>
+                        </Grid>
+                        <DataTemplate.Triggers>
+                            <DataTrigger Binding="{Binding HasTags}" Value="True">
+                                <Setter TargetName="TagsText" Property="Visibility" Value="Visible" />
+                                <Setter TargetName="InferButton" Property="Visibility" Value="Collapsed" />
+                            </DataTrigger>
+                        </DataTemplate.Triggers>
                     </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
             </DataGridTemplateColumn>
