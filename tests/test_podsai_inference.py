@@ -376,7 +376,7 @@ class TestPodsAIInferenceIndexing:
         self, mock_extractor_class, mock_model_class,
         mock_feature_extractor
     ):
-        """A clip containing two supported whale classes exposes both labels."""
+        """Positive labels remain ahead of negative labels, with event-count ordering."""
         mock_model = Mock()
         mock_config = Mock()
         mock_config.id2label = {
@@ -394,13 +394,16 @@ class TestPodsAIInferenceIndexing:
         mock_model.to = Mock(return_value=mock_model)
         mock_model.eval = Mock(return_value=mock_model)
 
+        predicted_ids = [
+            1, 1, 7, 2, 2, 7, 1, 1, 7, 2, 2, 7, 1, 1,
+        ]
+
         def mock_forward(**kwargs):
             batch_size = kwargs["input_values"].shape[0]
             logits = []
             for index in range(batch_size):
-                positive_class = 1 if index < 7 else 2
                 row = [-4.0] * 8
-                row[positive_class] = 4.0
+                row[predicted_ids[index]] = 4.0
                 logits.append(row)
             output = Mock()
             output.logits = torch.tensor(logits)
@@ -424,7 +427,7 @@ class TestPodsAIInferenceIndexing:
             Path(audio_path).unlink(missing_ok=True)
 
         assert result["global_prediction_label"] == "resident"
-        assert result["global_prediction_labels"] == ["resident", "transient"]
+        assert result["global_prediction_labels"] == ["resident", "transient", "bird"]
         assert len(result["global_prediction_labels"]) == len(
             set(result["global_prediction_labels"])
         )

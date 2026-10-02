@@ -817,7 +817,8 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
             if non_adj_count >= effective_threshold:
                 qualifying_ids.append(cid)
 
-        # Split qualifying ids into groups: positive, negative, background; order each by mean probability desc.
+        # Keep positive, negative, and background groups in priority order;
+        # order each group by event count, mean confidence, then label name.
         positives = [cid for cid in qualifying_ids if cid in positive_ids_set]
         negatives = [cid for cid in qualifying_ids if cid in negative_ids_set]
         backgrounds = [cid for cid in qualifying_ids if cid in background_ids_set or (cid not in positive_ids_set and cid not in negative_ids_set)]

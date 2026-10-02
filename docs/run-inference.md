@@ -59,7 +59,8 @@ class that independently meets the evidence threshold. The legacy
   contain multiple classes.
 - `global_prediction_label` is retained for single-label compatibility and selects
   the first class in the priority order: whale classes, then bird/jingle, then
-  background classes, with each group ordered by mean class probability.
+  background classes. Within each group, labels are ordered by event count, then
+  mean confidence, then label name.
 - Empty or error responses always return `global_prediction_labels: []`, which
   clients should interpret as no classes.
 
