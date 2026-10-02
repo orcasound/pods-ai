@@ -794,10 +794,13 @@ class TestPodsAIInferenceIndexing:
 
     @patch('podsai_inference.AutoModelForAudioClassification')
     @patch('podsai_inference.AutoFeatureExtractor')
-    def test_deterministic_logits_background_global_confidence_matches_per_class_mean(
+    def test_deterministic_logits_background_global_confidence_matches_selected_class_probability(
         self, mock_extractor_class, mock_model_class, mock_feature_extractor
     ):
-        """When only background classes are present, global_confidence must match per-class mean."""
+        """When only background classes are present, global_confidence should
+        equal the mean probability of the selected background class while
+        per_class_probabilities remain whale-likelihood statistics.
+        """
         mock_model = Mock()
         mock_config = Mock()
         mock_config.id2label = {

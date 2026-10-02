@@ -1,10 +1,18 @@
 # run_inference.py
 
 Run model inference on a wav file and display the global prediction, confidence score,
-and per-class probabilities.  For PODS-AI models the per-class probability is the
-mean of all `local_confidence` values (from windows predicting that class) that exceed
-the model's threshold — the same statistic used for `global_confidence`.  For the FastAI
-binary model, `resident = global_confidence` and `other = 1 - global_confidence`.
+and per-class probabilities.
+
+For PODS-AI models:
+
+- `global_confidence` is the average confidence of the winning class across
+windows predicted as that class.
+- `per_class_probabilities` reports the average whale-call likelihood
+(`local_confidence`) for windows predicted as each class.
+- Whale-likelihood values are diagnostic statistics and should not be interpreted
+as class probabilities.
+
+For the FastAI binary model, `resident = global_confidence` and `other = 1 - global_confidence`.
 
 ```
 usage: python run_inference.py [wav_file]
@@ -36,17 +44,17 @@ python run_inference.py sample.wav --model podsai
 Output:
 ```
 Model type: podsai
-Global prediction: resident (confidence: 0.7000)
+Global prediction: resident (confidence: 0.9200)
 Prediction time: 1.23s
 
-Per-class probabilities:
+Average whale likelihood by predicted class:
   humpback: 0.0000
   human: 0.0000
-  jingle: 0.0000
+  jingle: 0.0500
   resident: 0.7000
   transient: 0.0000
-  vessel: 0.0000
-  water: 0.0000
+  vessel: 0.0800
+  water: 0.0600
 ```
 
 For multi-class PODS-AI inference, `global_prediction_labels` also reports every
@@ -60,7 +68,7 @@ class that independently meets the evidence threshold. The legacy
 - `global_prediction_label` is retained for single-label compatibility and selects
   the first class in the priority order: whale classes, then bird/jingle, then
   background classes. Within each group, labels are ordered by event count, then
-  mean confidence, then label name.
+  average whale-call likelihood, then label name.
 - Empty or error responses always return `global_prediction_labels: []`, which
   clients should interpret as no classes.
 
