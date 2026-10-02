@@ -843,16 +843,22 @@ class TestPodsAIInferenceIndexing:
         finally:
             Path(audio_path).unlink(missing_ok=True)
 
-        # For background-only case, per-class probability for 'water' is mean of local_confidences
+        # Per-class values remain whale-call likelihoods; global background confidence
+        # is the mean model probability for the selected background class.
         neg_ids = {model.label2id[l] for l in ("water", "vessel", "jingle", "human", "bird") if l in model.label2id}
         def call_like(p):
             return 1.0 - float(sum(p[list(neg_ids)]))
 
         expected_water_mean = (call_like(probs_w0) + call_like(probs_w1) + call_like(probs_w2)) / 3.0
+        expected_water_probability = float(np.mean([
+            probs_w0[model.label2id["water"]],
+            probs_w1[model.label2id["water"]],
+            probs_w2[model.label2id["water"]],
+        ]))
 
         assert result["global_prediction_label"] == "water"
         assert pytest.approx(result["per_class_probabilities"]["water"], rel=1e-6) == expected_water_mean
-        assert pytest.approx(result["global_confidence"], rel=1e-6) == expected_water_mean
+        assert pytest.approx(result["global_confidence"], rel=1e-6) == expected_water_probability
 
     @patch('podsai_inference.AutoModelForAudioClassification')
     @patch('podsai_inference.AutoFeatureExtractor')
