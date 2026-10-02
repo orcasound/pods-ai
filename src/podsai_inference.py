@@ -821,10 +821,32 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
         positives = [cid for cid in qualifying_ids if cid in positive_ids_set]
         negatives = [cid for cid in qualifying_ids if cid in negative_ids_set]
         backgrounds = [cid for cid in qualifying_ids if cid in background_ids_set or (cid not in positive_ids_set and cid not in negative_ids_set)]
+        class_event_counts = {} 
+        for cid in unique_local_ids:
+            mask = [1 if p == cid else 0 for p in local_predictions]
+            class_event_counts[cid] = count_non_adjacent_positive_events(mask)
 
-        positives.sort(key=lambda cid: class_means.get(cid, 0.0), reverse=True)
-        negatives.sort(key=lambda cid: class_means.get(cid, 0.0), reverse=True)
-        backgrounds.sort(key=lambda cid: class_means.get(cid, 0.0), reverse=True)
+        positives.sort(
+            key=lambda cid: (
+                -class_event_counts.get(cid, 0),
+                -class_means.get(cid, 0.0),
+                self.id2label[cid],
+            )
+        )
+        negatives.sort(
+            key=lambda cid: (
+                -class_event_counts.get(cid, 0),
+                -class_means.get(cid, 0.0),
+                self.id2label[cid],
+            )
+        )
+        backgrounds.sort(
+            key=lambda cid: (
+                -class_event_counts.get(cid, 0),
+                -class_means.get(cid, 0.0),
+                self.id2label[cid],
+            )
+        )
 
         ordered_ids = positives + negatives + backgrounds
         # Build `global_prediction_labels` from ordered_ids (unchanged).
@@ -835,6 +857,7 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
         if ordered_ids:
             global_prediction_id = ordered_ids[0]
             global_prediction_label = self.id2label.get(global_prediction_id, str(global_prediction_id))
+            global_confidence = class_means.get(global_prediction_id, 0.0)
         # else keep previously computed global_prediction_id/global_prediction_label.
 
         return {
