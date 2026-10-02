@@ -126,13 +126,16 @@ namespace DatasetManager
 
         protected async void SamplesGrid_InferenceRequested(object? sender, SampleRecord sample)
         {
+            // Clear textbox.
+            LogViewer.LogTextBox.Text = string.Empty;
+
             await RunPythonAsync("src\\run_inference.py", sample.GetWavFilePath(WavFolderPath));
 
             double confidence;
             string tag = FindTagsInOutput("Global prediction: ", LogViewer.LogTextBox.Text, out confidence);
             double dummyConfidence;
             string tags = FindTagsInOutput("Global predictions: ", LogViewer.LogTextBox.Text, out dummyConfidence);
-            if (!string.IsNullOrEmpty(tags))
+            if (string.IsNullOrEmpty(tags))
             {
                 tags = tag;
             }

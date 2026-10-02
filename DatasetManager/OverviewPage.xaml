@@ -54,6 +54,15 @@
                                     Binding="{Binding TestCorrectRatio, StringFormat={}{0:P0}}"
                                     ElementStyle="{StaticResource RightAlignedTextStyle}"
                                     CellStyle="{StaticResource RightAlignedCellStyle}" />
+                <DataGridTextColumn Header="% FP"
+                                    Binding="{Binding TestFalsePositiveRatio, StringFormat={}{0:P0}}"
+                                    ElementStyle="{StaticResource RightAlignedTextStyle}"
+                                    CellStyle="{StaticResource RightAlignedCellStyle}" />
+                <DataGridTextColumn Header="% FN"
+                                    Binding="{Binding TestFalseNegativeRatio, StringFormat={}{0:P0}}"
+                                    ElementStyle="{StaticResource RightAlignedTextStyle}"
+                                    CellStyle="{StaticResource RightAlignedCellStyle}" />
+
             </DataGrid.Columns>
         </DataGrid>
     </Grid>

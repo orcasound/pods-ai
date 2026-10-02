@@ -34,13 +34,6 @@
                                 Width="Auto"
                                 ElementStyle="{StaticResource RightAlignedTextStyle}"
                                 CellStyle="{StaticResource RightAlignedCellStyle}" />
-            <DataGridTemplateColumn Header="Audio" Width="Auto">
-                <DataGridTemplateColumn.CellTemplate>
-                    <DataTemplate>
-                        <Button Content="Listen" Click="ListenButton_Click" />
-                    </DataTemplate>
-                </DataGridTemplateColumn.CellTemplate>
-            </DataGridTemplateColumn>
             <DataGridTemplateColumn Header="Tags" Width="200">
                 <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate>
@@ -60,6 +53,13 @@
                                 <Setter TargetName="InferButton" Property="Visibility" Value="Collapsed" />
                             </DataTrigger>
                         </DataTemplate.Triggers>
+                    </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+            </DataGridTemplateColumn>
+            <DataGridTemplateColumn Header="Audio" Width="Auto">
+                <DataGridTemplateColumn.CellTemplate>
+                    <DataTemplate>
+                        <Button Content="Listen" Click="ListenButton_Click" />
                     </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
             </DataGridTemplateColumn>
