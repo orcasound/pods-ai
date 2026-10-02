@@ -821,7 +821,7 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
         positives = [cid for cid in qualifying_ids if cid in positive_ids_set]
         negatives = [cid for cid in qualifying_ids if cid in negative_ids_set]
         backgrounds = [cid for cid in qualifying_ids if cid in background_ids_set or (cid not in positive_ids_set and cid not in negative_ids_set)]
-        class_event_counts = {} 
+        class_event_counts = {}
         for cid in unique_local_ids:
             mask = [1 if p == cid else 0 for p in local_predictions]
             class_event_counts[cid] = count_non_adjacent_positive_events(mask)
