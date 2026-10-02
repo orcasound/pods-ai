@@ -48,6 +48,7 @@ MODEL_URL=https://trainedproductionmodels.blob.core.windows.net/dnnmodel/11-15-2
     <Compile Include="bootstrap\src\merge_training_samples.py" />
     <Compile Include="src\mcp_server.py" />
     <Compile Include="src\model_inference.py" />
+    <Compile Include="src\model_revisions.py" />
     <Compile Include="src\orcahello_inference.py" />
     <Compile Include="src\orcasite_feeds.py" />
     <Compile Include="src\podsai_inference.py" />

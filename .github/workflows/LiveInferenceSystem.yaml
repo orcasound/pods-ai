@@ -37,12 +37,13 @@ jobs:
           filters: |
             src:
               - LiveInferenceSystem/**
+              - src/audio_utils.py
               - src/LiveInferenceOrchestrator.py
               - src/model_inference.py
-              - src/podsai_inference.py
+              - src/model_revisions.py
               - src/orcahello_inference.py
+              - src/podsai_inference.py
               - src/spectrogram_visualizer.py
-              - src/audio_utils.py
               - .github/workflows/LiveInferenceSystem.yaml
 
   test-docker:

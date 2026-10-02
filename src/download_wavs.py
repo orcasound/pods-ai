@@ -1018,15 +1018,24 @@ def download_testing_sample(row: CSVRow, output_root: Path, cache_root: Path | N
     label_dir = output_root / row.category
     label_dir.mkdir(parents=True, exist_ok=True)
     wav_filename = _get_wav_filename(row.node_name, row.timestamp_pst)
+
     expected_path = label_dir / wav_filename
+    download_testing_file(expected_path, output_root, cache_root)
+
+
+def download_testing_file(expected_path: Path, output_root: Path, cache_root: Path | None = None):
     if expected_path.exists():
         print(f"  Skipping (already exists): {expected_path}")
         return
     if _copy_wav_from_cache_if_exists(expected_path, output_root, cache_root):
         return
 
+    from add_samples import parse_node_and_timestamp_from_filename
+
+    node_name, timestamp_pst = parse_node_and_timestamp_from_filename(expected_path)
+
     min_end_timestamp_pst_str = add_seconds_to_timestamp_pst(
-        row.timestamp_pst,
+        timestamp_pst,
         TESTING_WINDOW_SECONDS,
     )
 
@@ -1036,12 +1045,16 @@ def download_testing_sample(row: CSVRow, output_root: Path, cache_root: Path | N
         from audio_utils import download_60s_audio
 
         wav_path = download_60s_audio(
-            node_name=row.node_name,
+            node_name=node_name,
             min_end_timestamp_pst_str=min_end_timestamp_pst_str,
             tmp_dir=tmp_dir,
         )
         if wav_path is None:
-            raise AssertionError(f"Error: Failed to download 60-second clip for {row.node_name} at {row.timestamp_pst}")
+            raise AssertionError(f"Error: Failed to download 60-second clip for {node_name} at {timestamp_pst}")
+
+        # Ensure destination directory exists before moving the downloaded file.
+        expected_path.parent.mkdir(parents=True, exist_ok=True)
+
         shutil.move(wav_path, expected_path)
         print(f"  Downloaded: {expected_path}")
 

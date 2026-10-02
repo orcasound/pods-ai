@@ -25,16 +25,19 @@ ENV UV_PYTHON=3.12
 RUN uv python install 3.12 && uv sync --no-dev
 
 # Bake HuggingFace model into image cache at build time
+COPY ./src/model_revisions.py ./model_revisions.py
 ENV HF_HOME=/usr/src/hf_cache
 ENV TRANSFORMERS_CACHE=/usr/src/hf_cache
 RUN <<'EOF'
 /usr/src/venv/bin/python - <<'PYCODE'
 from huggingface_hub import snapshot_download
+from model_revisions import LATEST_PODSAI_MODEL_REVISION
+
 snapshot_download(
     repo_id="davethaler/whale-call-detector",
     local_dir="/usr/src/hf_cache",
     local_dir_use_symlinks=False,
-    revision="ddc62698a4225d4d7f18f23afe1eae915d5d0d93",
+    revision=LATEST_PODSAI_MODEL_REVISION,
     allow_patterns="*"
 )
 PYCODE
