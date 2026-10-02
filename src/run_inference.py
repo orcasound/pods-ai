@@ -428,16 +428,16 @@ def print_results(results: dict, model_type: str) -> None:
         if local_prediction_labels:
             for idx, (pred_label, conf) in enumerate(zip(local_prediction_labels, local_confidences)):
                 start_seconds = idx * hop_duration
-                print(f"  +{start_seconds:.1f}s: {pred_label} (confidence: {conf:.3f})")
+                print(f"  +{start_seconds:.1f}s: {pred_label} (whale confidence: {conf:.3f})")
         else:
             # FastAI and OrcaHello use binary predictions (0=other, 1=resident).
             for idx, (pred, conf) in enumerate(zip(local_predictions, local_confidences)):
                 start_seconds = idx * hop_duration
                 pred_label = "resident" if int(pred) == 1 else "other"
-                print(f"  +{start_seconds:.1f}s: {pred_label} (confidence: {conf:.3f})")
+                print(f"  +{start_seconds:.1f}s: {pred_label} (whale confidence: {conf:.3f})")
 
     print()
-    print("Per-class probabilities:")
+    print("Average whale likelihood by predicted class:")
     for class_name, prob in sorted(probabilities.items()):
         print(f"  {class_name}: {prob:.4f}")
 

@@ -764,16 +764,33 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
         # Convert global prediction ID to label name.
         global_prediction_label = self.id2label[global_prediction_id]
 
-        # Calculate per-class probabilities for display purposes.
-        # These represent the mean probability for every id2label key across all
-        # windows. Missing model output classes were padded with zeros above.
-        per_class_probabilities = {}
+        # Calculate per-class global probabilities.
+        # For each class, only include segments whose local prediction
+        # matches that class.
+        #
+        # class_means[class_id] is therefore:
+        #   mean(P(class_id) for segments locally predicted as class_id)
         class_means: dict[int, float] = {}
+        per_class_probabilities: dict[str, float] = {}
+
         for class_id, label in self.id2label.items():
-            class_probs = [float(probs[class_id]) for probs in segment_probs]
-            mean_prob = float(np.mean(class_probs))
-            per_class_probabilities[label] = mean_prob
-            class_means[class_id] = mean_prob
+            matching_confidences = [
+                confidence
+                for confidence, predicted_id in zip(
+                    local_confidences,
+                    local_predictions,
+                )
+                if predicted_id == class_id
+            ]
+
+            class_mean = (
+                float(np.mean(matching_confidences))
+                if matching_confidences
+                else 0.0
+            )
+
+            class_means[class_id] = class_mean
+            per_class_probabilities[label] = class_mean
 
         # Build the set of unique classes seen in local_predictions in first-seen order.
         seen_local = dict.fromkeys(local_predictions)
@@ -818,7 +835,6 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
         if ordered_ids:
             global_prediction_id = ordered_ids[0]
             global_prediction_label = self.id2label.get(global_prediction_id, str(global_prediction_id))
-            global_confidence = class_means.get(global_prediction_id, 0.0)
         # else keep previously computed global_prediction_id/global_prediction_label.
 
         return {
