@@ -769,7 +769,7 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
         # matches that class.
         #
         # class_means[class_id] is therefore:
-        #   mean(P(class_id) for segments locally predicted as class_id)
+        #   mean(whale-call likelihood for segments locally predicted as class_id)
         class_means: dict[int, float] = {}
         per_class_probabilities: dict[str, float] = {}
 
