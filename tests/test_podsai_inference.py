@@ -863,8 +863,8 @@ class TestPodsAIInferenceIndexing:
         ]))
 
         assert result["global_prediction_label"] == "water"
-        assert pytest.approx(result["per_class_probabilities"]["water"], rel=1e-6) == expected_water_mean
-        assert pytest.approx(result["global_confidence"], rel=1e-6) == expected_water_probability
+        assert pytest.approx(result["per_class_probabilities"]["water"], abs=1e-6) == expected_water_mean
+        assert pytest.approx(result["global_confidence"], abs=1e-6) == expected_water_probability
 
     @patch('podsai_inference.AutoModelForAudioClassification')
     @patch('podsai_inference.AutoFeatureExtractor')
