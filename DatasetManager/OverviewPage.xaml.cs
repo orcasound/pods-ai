@@ -18,7 +18,12 @@ namespace DatasetManager
         public int TestingWavCount { get; set; }
         public int TestCorrectCount { get; set; }
         public int TestTotalCount { get; set; }
+        public int TestFalsePositiveCount { get; set; }
+        public int TestFalseNegativeCount { get; set; }
+
         public double TestCorrectRatio => 1.0 * TestCorrectCount / TestTotalCount;
+        public double TestFalsePositiveRatio => 1.0 * TestFalsePositiveCount / TestTotalCount;
+        public double TestFalseNegativeRatio => 1.0 * TestFalseNegativeCount / TestTotalCount;
     }
 
     /// <summary>
@@ -146,13 +151,31 @@ namespace DatasetManager
                     string category = parts[0];
                     int column = Array.IndexOf(headers, category);
                     int correct = column >= 0 ? int.Parse(parts[column + 1]) : 0;
+                    int falsePositives = 0;
+                    int falseNegatives = 0;
                     int total = int.Parse(parts[^1]); // last value
+                    if (category == "resident" || category == "transient" || category == "humpback")
+                    {
+                        falseNegatives = total - correct;
+                    }
+                    else
+                    {
+                        int residentColumn = Array.IndexOf(headers, "resident");
+                        int residents = (category != "resident" && residentColumn >= 0) ? int.Parse(parts[1 + residentColumn]) : 0;
+                        int transientColumn = Array.IndexOf(headers, "transient");
+                        int transients = (category != "transient" && transientColumn >= 0) ? int.Parse(parts[1 + transientColumn]) : 0;
+                        int humpbackColumn = Array.IndexOf(headers, "humpback");
+                        int humpbacks = (category != "humpback" && humpbackColumn >= 0) ? int.Parse(parts[1 + humpbackColumn]) : 0;
+                        falsePositives = residents + transients + humpbacks;
+                    }
 
                     StatsRow? row = Stats.FirstOrDefault(s => s.Category == category);
                     if (row != null)
                     {
                         row.TestCorrectCount = correct;
                         row.TestTotalCount = total;
+                        row.TestFalsePositiveCount = falsePositives;
+                        row.TestFalseNegativeCount = falseNegatives;
                     }
                     else
                     {
@@ -160,7 +183,9 @@ namespace DatasetManager
                         {
                             Category = category,
                             TestCorrectCount = correct,
-                            TestTotalCount = total
+                            TestTotalCount = total,
+                            TestFalsePositiveCount = falsePositives,
+                            TestFalseNegativeCount = falseNegatives,
                         });
                     }
                 }
