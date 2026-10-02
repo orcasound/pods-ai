@@ -736,7 +736,7 @@ class TestPodsAIInferenceIndexing:
         # Build three explicit probability vectors (they must be >0 and sum to 1).
         probs0 = np.array([0.05, 0.7, 0.05, 0.05, 0.05, 0.05, 0.03, 0.02], dtype=np.float32)
         probs1 = np.array([0.1, 0.5, 0.0, 0.0, 0.1, 0.05, 0.05, 0.2], dtype=np.float32)
-        probs2 = np.array([0.6, 0.05, 0.05, 0.05, 0.2, 0.02, 0.02, 0.01], dtype=np.float32)
+        probs2 = np.array([0.1, 0.05, 0.05, 0.05, 0.6, 0.02, 0.02, 0.11], dtype=np.float32)
 
         def mock_forward(**kwargs):
             batch_size = kwargs["input_values"].shape[0]
