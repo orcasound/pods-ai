@@ -5,8 +5,8 @@ and per-class probabilities.
 
 For PODS-AI models:
 
-- `global_confidence` is the average confidence of the winning class across
-windows predicted as that class.
+- For a whale-class winner, `global_confidence` is the average whale-call likelihood across windows predicted as that class.
+- For a negative/background winner, `global_confidence` is the average model probability for that class across all windows.
 - `per_class_probabilities` reports the average whale-call likelihood
 (`local_confidence`) for windows predicted as each class.
 - Whale-likelihood values are diagnostic statistics and should not be interpreted
