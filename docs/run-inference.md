@@ -44,7 +44,7 @@ python run_inference.py sample.wav --model podsai
 Output:
 ```
 Model type: podsai
-Global prediction: resident (confidence: 0.9200)
+Global prediction: resident (confidence: 0.7000)
 Prediction time: 1.23s
 
 Average whale likelihood by predicted class:
