@@ -834,7 +834,7 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
         # without modifying ordered_ids itself.
         if ordered_ids:
             global_prediction_id = ordered_ids[0]
-            global_prediction_label = self.id2label.get(global_prediction_id, str(global_prediction_id))
+            global_confidence = class_means.get(global_prediction_id, 0.0)
         # else keep previously computed global_prediction_id/global_prediction_label.
 
         return {
