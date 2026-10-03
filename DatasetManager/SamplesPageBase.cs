@@ -37,7 +37,7 @@ namespace DatasetManager
                     rootPath = commandLineArgs[1];
                 }
                 string fullArguments = $"\"{scriptPath}\" {args}";
-                LogViewer.AppendInfo($"> python {fullArguments}");
+                LogViewer.AppendInfo($"> python {fullArguments.Trim()}");
 
                 var psi = new ProcessStartInfo
                 {

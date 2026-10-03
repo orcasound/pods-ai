@@ -171,6 +171,7 @@ def triage_testing_set_mispredictions(
     model_path: str,
     model_revision: Optional[str] = None,
     min_confidence: float = 0.80,
+    actual_category_filter: Optional[str] = None,
 ) -> tuple[list[dict[str, str]], list[dict[str, str]], dict[str, int]]:
     """Return proposed training rows and testing rows to remove."""
     proposals_for_training: list[dict[str, str]] = []
@@ -182,6 +183,9 @@ def triage_testing_set_mispredictions(
         "proposed_training_rows": 0,
         "proposed_testing_removals": 0,
     }
+    normalized_category_filter = (
+        actual_category_filter.strip().lower() if actual_category_filter else None
+    )
 
     with open(testing_csv, newline="", encoding="utf-8") as handle:
         rows = list(csv.DictReader(handle))
@@ -194,10 +198,22 @@ def triage_testing_set_mispredictions(
         model_revision=model_revision,
     )
     id2label = getattr(model, "id2label", {}) or {}
-    total = len(rows)
+
+    # Count the number of rows to process for progress reporting, after filtering by category if applicable.
+    if normalized_category_filter:
+        total = sum(
+            1
+            for row in rows
+            if normalize_label(row.get("Category", "")) == normalized_category_filter
+        )
+    else:
+        total = len(rows)
 
     removal_keys: set[tuple[str, str, str]] = set()
     for testing_row in rows:
+        actual_class = normalize_label(testing_row.get("Category", ""))
+        if normalized_category_filter and actual_class != normalized_category_filter:
+                continue
         summary["rows_seen"] += 1
         print(f"Processing row {summary['rows_seen']} of {total}...")
         wav_path = find_wav_file(testing_row, wav_dir)
@@ -321,6 +337,13 @@ def main() -> int:
         default=0.80,
         help="Minimum local segment confidence required for proposal generation.",
     )
+    parser.add_argument(
+        "--category",
+        type=str,
+        default=None,
+        metavar="CATEGORY",
+        help="Process only detections whose actual category matches this value.",
+    )
     args = parser.parse_args()
 
     testing_csv = Path(args.testing_csv)
@@ -338,6 +361,7 @@ def main() -> int:
         model_path=args.model_path,
         model_revision=args.model_revision,
         min_confidence=args.min_confidence,
+        actual_category_filter=args.category,
     )
 
     print_rows(
