@@ -12,7 +12,8 @@ namespace DatasetManager
         public MainWindow()
         {
             InitializeComponent();
-            MainFrame.Navigate(new OverviewPage());
+            var repository = DatasetRepository.Load();
+            MainFrame.Navigate(new OverviewPage(repository));
         }
     }
 }
