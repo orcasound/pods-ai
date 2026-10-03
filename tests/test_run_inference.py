@@ -1030,8 +1030,8 @@ class TestMainCLI:
         print_results(results, "podsai")
         captured = capsys.readouterr()
         assert "Positive segments: 2/4" in captured.out
-        assert "  +2.0s: resident (confidence: 0.700)" in captured.out
-        assert "  +4.0s: transient (confidence: 0.800)" in captured.out
+        assert "  +2.0s: resident (whale confidence: 0.700)" in captured.out
+        assert "  +4.0s: transient (whale confidence: 0.800)" in captured.out
 
 
 class TestPinnedPodsAIModelPath:

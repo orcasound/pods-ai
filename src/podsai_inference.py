@@ -764,16 +764,33 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
         # Convert global prediction ID to label name.
         global_prediction_label = self.id2label[global_prediction_id]
 
-        # Calculate per-class probabilities for display purposes.
-        # These represent the mean probability for every id2label key across all
-        # windows. Missing model output classes were padded with zeros above.
-        per_class_probabilities = {}
+        # Calculate per-class global probabilities.
+        # For each class, only include segments whose local prediction
+        # matches that class.
+        #
+        # class_means[class_id] is therefore:
+        #   mean(whale-call likelihood for segments locally predicted as class_id)
         class_means: dict[int, float] = {}
+        per_class_probabilities: dict[str, float] = {}
+
         for class_id, label in self.id2label.items():
-            class_probs = [float(probs[class_id]) for probs in segment_probs]
-            mean_prob = float(np.mean(class_probs))
-            per_class_probabilities[label] = mean_prob
-            class_means[class_id] = mean_prob
+            matching_confidences = [
+                confidence
+                for confidence, predicted_id in zip(
+                    local_confidences,
+                    local_predictions,
+                )
+                if predicted_id == class_id
+            ]
+
+            class_mean = (
+                float(np.mean(matching_confidences))
+                if matching_confidences
+                else 0.0
+            )
+
+            class_means[class_id] = class_mean
+            per_class_probabilities[label] = class_mean
 
         # Build the set of unique classes seen in local_predictions in first-seen order.
         seen_local = dict.fromkeys(local_predictions)
@@ -800,14 +817,37 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
             if non_adj_count >= effective_threshold:
                 qualifying_ids.append(cid)
 
-        # Split qualifying ids into groups: positive, negative, background; order each by mean probability desc.
+        # Keep positive, negative, and background groups in priority order;
+        # order each group by event count, mean confidence, then label name.
         positives = [cid for cid in qualifying_ids if cid in positive_ids_set]
         negatives = [cid for cid in qualifying_ids if cid in negative_ids_set]
         backgrounds = [cid for cid in qualifying_ids if cid in background_ids_set or (cid not in positive_ids_set and cid not in negative_ids_set)]
+        class_event_counts = {}
+        for cid in unique_local_ids:
+            mask = [1 if p == cid else 0 for p in local_predictions]
+            class_event_counts[cid] = count_non_adjacent_positive_events(mask)
 
-        positives.sort(key=lambda cid: class_means.get(cid, 0.0), reverse=True)
-        negatives.sort(key=lambda cid: class_means.get(cid, 0.0), reverse=True)
-        backgrounds.sort(key=lambda cid: class_means.get(cid, 0.0), reverse=True)
+        positives.sort(
+            key=lambda cid: (
+                -class_event_counts.get(cid, 0),
+                -class_means.get(cid, 0.0),
+                self.id2label[cid],
+            )
+        )
+        negatives.sort(
+            key=lambda cid: (
+                -class_event_counts.get(cid, 0),
+                -class_means.get(cid, 0.0),
+                self.id2label[cid],
+            )
+        )
+        backgrounds.sort(
+            key=lambda cid: (
+                -class_event_counts.get(cid, 0),
+                -class_means.get(cid, 0.0),
+                self.id2label[cid],
+            )
+        )
 
         ordered_ids = positives + negatives + backgrounds
         # Build `global_prediction_labels` from ordered_ids (unchanged).
@@ -818,7 +858,12 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
         if ordered_ids:
             global_prediction_id = ordered_ids[0]
             global_prediction_label = self.id2label.get(global_prediction_id, str(global_prediction_id))
-            global_confidence = class_means.get(global_prediction_id, 0.0)
+            if global_prediction_id in self.negative_class_ids:
+                global_confidence = float(np.mean([
+                    probs[global_prediction_id] for probs in segment_probs
+                ]))
+            else:
+                global_confidence = class_means.get(global_prediction_id, 0.0)
         # else keep previously computed global_prediction_id/global_prediction_label.
 
         return {

@@ -376,7 +376,7 @@ class TestPodsAIInferenceIndexing:
         self, mock_extractor_class, mock_model_class,
         mock_feature_extractor
     ):
-        """A clip containing two supported whale classes exposes both labels."""
+        """Positive labels remain ahead of negative labels, with event-count ordering."""
         mock_model = Mock()
         mock_config = Mock()
         mock_config.id2label = {
@@ -394,13 +394,16 @@ class TestPodsAIInferenceIndexing:
         mock_model.to = Mock(return_value=mock_model)
         mock_model.eval = Mock(return_value=mock_model)
 
+        predicted_ids = [
+            1, 1, 7, 2, 2, 7, 1, 1, 7, 2, 2, 7, 1, 1,
+        ]
+
         def mock_forward(**kwargs):
             batch_size = kwargs["input_values"].shape[0]
             logits = []
             for index in range(batch_size):
-                positive_class = 1 if index < 7 else 2
                 row = [-4.0] * 8
-                row[positive_class] = 4.0
+                row[predicted_ids[index]] = 4.0
                 logits.append(row)
             output = Mock()
             output.logits = torch.tensor(logits)
@@ -424,7 +427,7 @@ class TestPodsAIInferenceIndexing:
             Path(audio_path).unlink(missing_ok=True)
 
         assert result["global_prediction_label"] == "resident"
-        assert result["global_prediction_labels"] == ["resident", "transient"]
+        assert result["global_prediction_labels"] == ["resident", "transient", "bird"]
         assert len(result["global_prediction_labels"]) == len(
             set(result["global_prediction_labels"])
         )
@@ -702,6 +705,166 @@ class TestPodsAIInferenceIndexing:
         # For this test, we just verify that confidences are in valid range.
         assert all(0.0 <= c <= 1.0 for c in result["local_confidences"])
         assert len(result["local_confidences"]) == 29  # 60s audio, 2s hop
+
+    @patch('podsai_inference.AutoModelForAudioClassification')
+    @patch('podsai_inference.AutoFeatureExtractor')
+    def test_deterministic_logits_per_class_probabilities_and_global_confidence(
+        self, mock_extractor_class, mock_model_class, mock_feature_extractor
+    ):
+        """Deterministic logits should produce expected per-class probabilities and global confidence.
+
+        This test creates three sliding-window segments and returns controlled logits
+        so that two segments predict a positive class (resident) and one predicts
+        a background class (vessel). We assert that per_class_probabilities for the
+        matching class equals the mean of the segment call-likelihoods for segments
+        locally predicted as that class, and that global_confidence equals the
+        resident class mean when resident qualifies.
+        """
+        mock_model = Mock()
+        mock_config = Mock()
+        mock_config.id2label = {
+            0: "water", 1: "resident", 2: "transient", 3: "humpback",
+            4: "vessel", 5: "jingle", 6: "human", 7: "bird",
+        }
+        mock_config.label2id = {label: cid for cid, label in mock_config.id2label.items()}
+        mock_config._name_or_path = "test-model"
+        mock_config.architectures = ["Wav2Vec2ForSequenceClassification"]
+        mock_config.model_type = "wav2vec2"
+        mock_config._commit_hash = None
+
+        mock_model.config = mock_config
+        mock_model.to = Mock(return_value=mock_model)
+        mock_model.eval = Mock(return_value=mock_model)
+
+        # Build three explicit probability vectors (they must be >0 and sum to 1).
+        probs0 = np.array([0.05, 0.7, 0.05, 0.05, 0.05, 0.05, 0.03, 0.02], dtype=np.float32)
+        probs1 = np.array([0.1, 0.5, 0.0, 0.0, 0.1, 0.05, 0.05, 0.2], dtype=np.float32)
+        probs2 = np.array([0.1, 0.05, 0.05, 0.05, 0.6, 0.02, 0.02, 0.11], dtype=np.float32)
+
+        def mock_forward(**kwargs):
+            batch_size = kwargs["input_values"].shape[0]
+            # Repeat the three-probability rows for the batch size (should equal 3)
+            logits = torch.log(torch.tensor([probs0, probs1, probs2], dtype=torch.float32))
+            # If the batch_size somehow differs, tile or slice appropriately.
+            if batch_size != logits.shape[0]:
+                logits = logits.repeat(int(np.ceil(batch_size / 3)), 1)[:batch_size]
+            output = Mock()
+            output.logits = logits
+            return output
+
+        mock_model.side_effect = mock_forward
+        mock_extractor_class.from_pretrained = Mock(return_value=mock_feature_extractor)
+        mock_model_class.from_pretrained = Mock(return_value=mock_model)
+
+        from podsai_inference import PodsAIInference
+
+        model = PodsAIInference("test-model-path")
+
+        # Create a short 6-second silent WAV that yields 3 positions with segment=2, hop=2
+        sr = 16000
+        audio = np.zeros(6 * sr, dtype=np.float32)
+        with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as audio_file:
+            sf.write(audio_file.name, audio, sr)
+            audio_path = audio_file.name
+        try:
+            result = model.predict(audio_path, segment_duration=2, hop_duration=2)
+        finally:
+            Path(audio_path).unlink(missing_ok=True)
+
+        # Compute expected call-likelihoods: 1 - sum(negative_class_probs)
+        neg_ids = {model.label2id[l] for l in ("water", "vessel", "jingle", "human", "bird") if l in model.label2id}
+        # helper to compute call-likelihood
+        def call_like(p):
+            return 1.0 - float(sum(p[list(neg_ids)]))
+
+        expected_cl0 = call_like(probs0)
+        expected_cl1 = call_like(probs1)
+        expected_cl2 = call_like(probs2)
+
+        # resident appears in segments 0 and 1; its per-class probability is the mean of those call-likelihoods
+        expected_resident_mean = (expected_cl0 + expected_cl1) / 2.0
+        # vessel appears only in segment 2; its per-class probability equals that segment's call-likelihood
+        expected_vessel_mean = expected_cl2
+
+        assert pytest.approx(result["per_class_probabilities"]["resident"], rel=1e-6) == expected_resident_mean
+        assert pytest.approx(result["per_class_probabilities"]["vessel"], rel=1e-6) == expected_vessel_mean
+        # resident should qualify and be chosen as global prediction with matching confidence
+        assert result["global_prediction_label"] == "resident"
+        assert pytest.approx(result["global_confidence"], rel=1e-6) == expected_resident_mean
+
+    @patch('podsai_inference.AutoModelForAudioClassification')
+    @patch('podsai_inference.AutoFeatureExtractor')
+    def test_deterministic_logits_background_global_confidence_matches_selected_class_probability(
+        self, mock_extractor_class, mock_model_class, mock_feature_extractor
+    ):
+        """When only background classes are present, global_confidence should
+        equal the mean probability of the selected background class while
+        per_class_probabilities remain whale-likelihood statistics.
+        """
+        mock_model = Mock()
+        mock_config = Mock()
+        mock_config.id2label = {
+            0: "water", 1: "resident", 2: "transient", 3: "humpback",
+            4: "vessel", 5: "jingle", 6: "human", 7: "bird",
+        }
+        mock_config.label2id = {label: cid for cid, label in mock_config.id2label.items()}
+        mock_config._name_or_path = "test-model"
+        mock_config.architectures = ["Wav2Vec2ForSequenceClassification"]
+        mock_config.model_type = "wav2vec2"
+        mock_config._commit_hash = None
+
+        mock_model.config = mock_config
+        mock_model.to = Mock(return_value=mock_model)
+        mock_model.eval = Mock(return_value=mock_model)
+
+        # All three segments predict water with high probability.
+        probs_w0 = np.array([0.9, 0.02, 0.02, 0.02, 0.02, 0.01, 0.01, 0.0], dtype=np.float32)
+        probs_w1 = probs_w0.copy()
+        probs_w2 = probs_w0.copy()
+
+        def mock_forward_background(**kwargs):
+            batch_size = kwargs["input_values"].shape[0]
+            logits = torch.log(torch.tensor([probs_w0, probs_w1, probs_w2], dtype=torch.float32))
+            if batch_size != logits.shape[0]:
+                logits = logits.repeat(int(np.ceil(batch_size / 3)), 1)[:batch_size]
+            output = Mock()
+            output.logits = logits
+            return output
+
+        mock_model.side_effect = mock_forward_background
+        mock_extractor_class.from_pretrained = Mock(return_value=mock_feature_extractor)
+        mock_model_class.from_pretrained = Mock(return_value=mock_model)
+
+        from podsai_inference import PodsAIInference
+
+        model = PodsAIInference("test-model-path")
+
+        sr = 16000
+        audio = np.zeros(6 * sr, dtype=np.float32)
+        with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as audio_file:
+            sf.write(audio_file.name, audio, sr)
+            audio_path = audio_file.name
+        try:
+            result = model.predict(audio_path, segment_duration=2, hop_duration=2)
+        finally:
+            Path(audio_path).unlink(missing_ok=True)
+
+        # Per-class values remain whale-call likelihoods; global background confidence
+        # is the mean model probability for the selected background class.
+        neg_ids = {model.label2id[l] for l in ("water", "vessel", "jingle", "human", "bird") if l in model.label2id}
+        def call_like(p):
+            return 1.0 - float(sum(p[list(neg_ids)]))
+
+        expected_water_mean = (call_like(probs_w0) + call_like(probs_w1) + call_like(probs_w2)) / 3.0
+        expected_water_probability = float(np.mean([
+            probs_w0[model.label2id["water"]],
+            probs_w1[model.label2id["water"]],
+            probs_w2[model.label2id["water"]],
+        ]))
+
+        assert result["global_prediction_label"] == "water"
+        assert pytest.approx(result["per_class_probabilities"]["water"], abs=1e-6) == expected_water_mean
+        assert pytest.approx(result["global_confidence"], abs=1e-6) == expected_water_probability
 
     @patch('podsai_inference.AutoModelForAudioClassification')
     @patch('podsai_inference.AutoFeatureExtractor')
