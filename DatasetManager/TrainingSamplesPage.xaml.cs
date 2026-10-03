@@ -1,5 +1,7 @@
 ﻿// Copyright (c) PODS-AI contributors
 // SPDX-License-Identifier: MIT
+using System.Windows;
+
 namespace DatasetManager
 {
     /// <summary>
@@ -16,6 +18,11 @@ namespace DatasetManager
         {
             InitializeComponent();
             DataContext = this;
+        }
+
+        protected async void MoreMispredictions_Click(object sender, RoutedEventArgs e)
+        {
+            await RunPythonAsync(@"src\process_testing_set_mispredictions.py", $"--category {Category}");
         }
     }
 }

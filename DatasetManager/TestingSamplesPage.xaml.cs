@@ -34,14 +34,14 @@ namespace DatasetManager
         {
             string timestamp = GetStartTimePSTStringForPastWeek();
 
-            await RunPythonAsync("src\\process_false_positives.py", $"--set testing --start {timestamp} --end now --category {Category}");
+            await RunPythonAsync(@"src\process_false_positives.py", $"--set testing --start {timestamp} --end now --category {Category}");
         }
 
         protected async void MoreFalseNegatives_Click(object sender, RoutedEventArgs e)
         {
             string timestamp = GetStartTimePSTStringForPastWeek();
 
-            await RunPythonAsync("src\\process_false_negatives.py", $"--set testing --start {timestamp} --end now --category {Category}");
+            await RunPythonAsync(@"src\process_false_negatives.py", $"--set testing --start {timestamp} --end now --category {Category}");
         }
     }
 }
