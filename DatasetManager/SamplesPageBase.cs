@@ -21,11 +21,14 @@ namespace DatasetManager
             NavigationService?.GoBack();
         }
 
-        private async Task RunPythonAsync(string scriptPath, string args)
+        protected async Task RunPythonAsync(string scriptPath, string args)
         {
             try
             {
                 SamplesGrid.InferenceEnabled = false;
+
+                // Clear textbox.
+                LogViewer.LogTextBox.Text = string.Empty;
 
                 string[] commandLineArgs = Environment.GetCommandLineArgs();
                 string rootPath = @".";
@@ -126,9 +129,6 @@ namespace DatasetManager
 
         protected async void SamplesGrid_InferenceRequested(object? sender, SampleRecord sample)
         {
-            // Clear textbox.
-            LogViewer.LogTextBox.Text = string.Empty;
-
             await RunPythonAsync("src\\run_inference.py", sample.GetWavFilePath(WavFolderPath));
 
             double confidence;
