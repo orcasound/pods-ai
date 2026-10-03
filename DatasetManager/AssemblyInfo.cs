@@ -1,5 +1,6 @@
 // Copyright (c) PODS-AI contributors
 // SPDX-License-Identifier: MIT
+
 using System.Windows;
 
 [assembly: ThemeInfo(

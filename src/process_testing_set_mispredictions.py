@@ -91,8 +91,8 @@ def to_local_prediction_labels(local_predictions: list[Any], id2label: dict[int,
     return labels
 
 
-def get_global_labels(inference: dict[str, Any]) -> list[str]:
-    """Return normalized global labels from inference output."""
+def get_global_whale_labels(inference: dict[str, Any]) -> list[str]:
+    """Return normalized global whale labels from inference output."""
     global_labels = inference.get("global_prediction_labels")
     if global_labels is None:
         global_label = normalize_label(inference.get("global_prediction_label", ""))
@@ -211,8 +211,8 @@ def triage_testing_set_mispredictions(
 
     removal_keys: set[tuple[str, str, str]] = set()
     for testing_row in rows:
-        actual_class = normalize_label(testing_row.get("Category", ""))
-        if normalized_category_filter and actual_class != normalized_category_filter:
+        category = normalize_label(testing_row.get("Category", ""))
+        if normalized_category_filter and category != normalized_category_filter:
                 continue
         summary["rows_seen"] += 1
         print(f"Processing row {summary['rows_seen']} of {total}...")
@@ -231,10 +231,10 @@ def triage_testing_set_mispredictions(
             summary["inference_errors"] += 1
             continue
 
-        category = normalize_label(testing_row.get("Category", ""))
-        global_labels = get_global_labels(inference)
+        global_labels = get_global_whale_labels(inference)
         if not global_labels:
             continue
+        print(f"   Global whale predictions: {', '.join(global_labels)}")
 
         local_prediction_labels = to_local_prediction_labels(
             inference.get("local_predictions", []),
@@ -364,6 +364,7 @@ def main() -> int:
         actual_category_filter=args.category,
     )
 
+    print()
     print_rows(
         "Proposed rows for output/csv/training_3s_samples.csv:",
         training_rows,

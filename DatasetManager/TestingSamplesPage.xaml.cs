@@ -14,8 +14,17 @@ namespace DatasetManager
         protected override SamplesGridControl SamplesGrid => SamplesGridControl;
         protected override string WavFolderPath => @"output\testing-wav";
 
-        public TestingSamplesPage(List<SampleRecord> samples, string category)
-            : base(samples, category)
+        public bool HasFalsePositives
+        {
+            get
+            {
+                StatsRow? row = _repository.Stats.FirstOrDefault(s => s.Category == Category);
+                return (row != null) && (row.TestFalsePositiveCount > 0);
+            }
+        }
+
+        public TestingSamplesPage(DatasetRepository repository, string category)
+            : base(repository, repository.TestingSamples, category)
         {
             InitializeComponent();
             DataContext = this;
@@ -42,6 +51,11 @@ namespace DatasetManager
             string timestamp = GetStartTimePSTStringForPastWeek();
 
             await RunPythonAsync(@"src\process_false_negatives.py", $"--set testing --start {timestamp} --end now --category {Category}");
+        }
+
+        protected async void FindMispredictions_Click(object sender, RoutedEventArgs e)
+        {
+            await RunPythonAsync(@"src\process_testing_set_mispredictions.py", $"--category {Category}");
         }
     }
 }

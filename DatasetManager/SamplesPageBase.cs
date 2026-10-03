@@ -1,14 +1,15 @@
 ﻿// Copyright (c) PODS-AI contributors
 // SPDX-License-Identifier: MIT
+
 using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Shapes;
 
 namespace DatasetManager
 {
     public abstract class SamplesPageBase : Page
     {
+        protected readonly DatasetRepository _repository;
         protected abstract string WavFolderPath { get; }
         protected abstract LogViewerControl LogViewer { get; }
         protected abstract SamplesGridControl SamplesGrid { get; }
@@ -146,8 +147,9 @@ namespace DatasetManager
             }
         }
 
-        protected SamplesPageBase(List<SampleRecord> samples, string category)
+        protected SamplesPageBase(DatasetRepository repository, List<SampleRecord> samples, string category)
         {
+            _repository = repository;
             Category = category;
             _filteredSamples = samples.Where(s => s.Category == category).ToList();
         }

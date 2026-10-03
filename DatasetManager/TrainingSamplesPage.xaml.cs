@@ -1,6 +1,5 @@
 ﻿// Copyright (c) PODS-AI contributors
 // SPDX-License-Identifier: MIT
-using System.Windows;
 
 namespace DatasetManager
 {
@@ -13,16 +12,11 @@ namespace DatasetManager
         protected override SamplesGridControl SamplesGrid => SamplesGridControl;
         protected override string WavFolderPath => @"output\wav";
 
-        public TrainingSamplesPage(List<SampleRecord> samples, string category)
-            : base(samples, category)
+        public TrainingSamplesPage(DatasetRepository repository, string category)
+            : base(repository, repository.TrainingSamples, category)
         {
             InitializeComponent();
             DataContext = this;
-        }
-
-        protected async void MoreMispredictions_Click(object sender, RoutedEventArgs e)
-        {
-            await RunPythonAsync(@"src\process_testing_set_mispredictions.py", $"--category {Category}");
         }
     }
 }
