@@ -13,21 +13,21 @@ namespace DatasetManager
         protected override LogViewerControl LogViewer => LogViewerControl;
         protected override SamplesGridControl SamplesGrid => SamplesGridControl;
         protected override string WavFolderPath => @"output\testing-wav";
-
-        public bool HasFalsePositives
+        public int FalsePositiveCount
         {
             get
             {
-                StatsRow? row = _repository.Stats.FirstOrDefault(s => s.Category == Category);
-                return (row != null) && (row.TestFalsePositiveCount > 0);
+                StatsRow? row = Repository.Stats.FirstOrDefault(s => s.Category == Category);
+                return (row != null) ? row.TestFalsePositiveCount : 0;
             }
         }
+
+        public bool HasFalsePositives => FalsePositiveCount > 0;
 
         public TestingSamplesPage(DatasetRepository repository, string category)
             : base(repository, repository.TestingSamples, category)
         {
             InitializeComponent();
-            DataContext = this;
         }
 
         private string GetStartTimePSTStringForPastWeek()
@@ -41,21 +41,54 @@ namespace DatasetManager
 
         protected async void MoreFalsePositives_Click(object sender, RoutedEventArgs e)
         {
-            string timestamp = GetStartTimePSTStringForPastWeek();
+            if (Repository.ProposedTestingSamples.Count == 0)
+            {
+                string timestamp = GetStartTimePSTStringForPastWeek();
 
-            await RunPythonAsync(@"src\process_false_positives.py", $"--set testing --start {timestamp} --end now --category {Category}");
+                var result = await RunPythonAsync(@"src\process_false_positives.py", $"--set testing --start {timestamp} --end now --category {Category}");
+
+                string? testingCsvSection = DatasetRepository.ExtractCsvSection(result, "Proposed rows for output/csv/testing_60s_samples.csv:");
+                List<SampleRecord> newTestingSamples = (testingCsvSection != null)
+                    ? DatasetRepository.LoadSamplesFromText(testingCsvSection)
+                    : new();
+                Repository.ProposeTestingSamples(newTestingSamples);
+            }
+
+            NavigationService?.Navigate(new AddTestingSamplesPage(Repository, Category));
         }
 
         protected async void MoreFalseNegatives_Click(object sender, RoutedEventArgs e)
         {
             string timestamp = GetStartTimePSTStringForPastWeek();
 
-            await RunPythonAsync(@"src\process_false_negatives.py", $"--set testing --start {timestamp} --end now --category {Category}");
+            var result = await RunPythonAsync(@"src\process_false_negatives.py", $"--set testing --start {timestamp} --end now --category {Category}");
+
+            string? testingCsvSection = DatasetRepository.ExtractCsvSection(result, "Proposed rows for output/csv/testing_60s_samples.csv:");
+            List<SampleRecord> newTestingSamples = (testingCsvSection != null)
+                ? DatasetRepository.LoadSamplesFromText(testingCsvSection)
+                : new();
+            Repository.ProposeTestingSamples(newTestingSamples);
+
+            NavigationService?.Navigate(new AddTestingSamplesPage(Repository, Category));
         }
 
         protected async void FindMispredictions_Click(object sender, RoutedEventArgs e)
         {
-            await RunPythonAsync(@"src\process_testing_set_mispredictions.py", $"--category {Category}");
+            var result = await RunPythonAsync(@"src\process_testing_set_mispredictions.py", $"--category {Category}");
+
+            string ? trainingCsvSection = DatasetRepository.ExtractCsvSection(result, "Proposed rows for output/csv/training_3s_samples.csv:");
+            List<SampleRecord> newTrainingSamples = (trainingCsvSection != null)
+                ? DatasetRepository.LoadSamplesFromText(trainingCsvSection)
+                : new();
+
+            string? testingCsvSection = DatasetRepository.ExtractCsvSection(result, "Proposed rows to remove from output/csv/testing_60s_samples.csv:");
+            List<SampleRecord> oldTestingSamples = (testingCsvSection != null)
+                ? DatasetRepository.LoadSamplesFromText(testingCsvSection)
+                : new();
+
+            Repository.ProposeTrainingSamples(newTrainingSamples);
+
+            NavigationService?.Navigate(new AddTrainingSamplesPage(Repository, Category));
         }
     }
 }

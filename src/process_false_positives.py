@@ -161,12 +161,13 @@ def process_false_positives(
         print(f"Loading podsai model from {model_path}...")
         model = get_model_inference(model_type="podsai", model_path=model_path)
 
+    print("Proposed rows for output/csv/testing_60s_samples.csv:")
+    csv_writer = csv.writer(sys.stdout, lineterminator="\n")
+    csv_writer.writerow(
+        ["Category", "NodeName", "StartTimestamp", "URI", "Description", "Notes", "Confidence", "Tags"]
+    )
+
     for feed in feeds:
-        print(f"Processing feed {feed.node_name}")
-        csv_writer = csv.writer(sys.stdout, lineterminator="\n")
-        csv_writer.writerow(
-            ["Category", "NodeName", "StartTimestamp", "URI", "Description", "Notes", "Confidence", "Tags"]
-        )
         for detection in get_orcahello_detections(feed, start_time, end_time):
             if detection.timestamp is None:
                 continue

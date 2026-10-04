@@ -12,6 +12,8 @@ namespace DatasetManager
     public partial class SamplesGridControl : UserControl
     {
         public event EventHandler<SampleRecord>? InferenceRequested;
+        public event EventHandler<SampleRecord>? AcceptRequested;
+        public event EventHandler<SampleRecord>? RejectRequested;
 
         public static readonly DependencyProperty InferenceEnabledProperty =
             DependencyProperty.Register(
@@ -52,6 +54,37 @@ namespace DatasetManager
             {
                 InferenceRequested?.Invoke(this, sample);
             }
+        }
+
+        private void AcceptButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button button &&
+                button.DataContext is SampleRecord sample)
+            {
+                AcceptRequested?.Invoke(this, sample);
+            }
+        }
+
+        private void RejectButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button button &&
+                button.DataContext is SampleRecord sample)
+            {
+                RejectRequested?.Invoke(this, sample);
+            }
+        }
+
+        public static readonly DependencyProperty ShowReviewButtonsProperty =
+            DependencyProperty.Register(
+                nameof(ShowReviewButtons),
+                typeof(bool),
+                typeof(SamplesGridControl),
+                new PropertyMetadata(false));
+
+        public bool ShowReviewButtons
+        {
+            get => (bool)GetValue(ShowReviewButtonsProperty);
+            set => SetValue(ShowReviewButtonsProperty, value);
         }
 
         public SamplesGridControl()

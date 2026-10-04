@@ -30,18 +30,53 @@ namespace DatasetManager
     {
         public List<SampleRecord> TrainingSamples = new();
         public List<SampleRecord> TestingSamples = new();
+        public List<SampleRecord> ProposedTrainingSamples = new();
+        public List<SampleRecord> ProposedTestingSamples = new();
+        public List<SampleRecord> RejectedTrainingSamples = new();
+        public List<SampleRecord> RejectedTestingSamples = new();
         private List<string> _trainingWavs = new();
         private List<string> _testingWavs = new();
         public ObservableCollection<StatsRow> Stats { get; } = new ObservableCollection<StatsRow>();
 
+        private static List<SampleRecord> LoadSamplesFromCsv(CsvReader csv)
+        {
+            var records = csv.GetRecords<SampleRecord>();
+            return records.ToList();
+        }
+        public static List<SampleRecord> LoadSamplesFromText(string csvText)
+        {
+            using var reader = new StringReader(csvText);
+            using var csv = new CsvReader(reader, CultureInfo.InvariantCulture);
+            return LoadSamplesFromCsv(csv);
+        }
         private static List<SampleRecord> LoadSamples(string path)
         {
             using var reader = new StreamReader(path);
             using var csv = new CsvReader(reader, CultureInfo.InvariantCulture);
+            return LoadSamplesFromCsv(csv);
+        }
+        public static string? ExtractCsvSection(string text, string header)
+        {
+            string marker = header + Environment.NewLine;
 
-            var records = csv.GetRecords<SampleRecord>();
+            int start = text.IndexOf(marker, StringComparison.Ordinal);
+            if (start < 0)
+            {
+                return null;
+            }
 
-            return records.ToList();
+            start += marker.Length;
+
+            int end = text.IndexOf(
+                Environment.NewLine + Environment.NewLine,
+                start,
+                StringComparison.Ordinal);
+            if (end < 0)
+            {
+                end = text.Length;
+            }
+
+            return text[start..end].Trim();
         }
 
         private void ReadModelComparison()
@@ -206,6 +241,40 @@ namespace DatasetManager
             repository.ReadModelComparison();
 
             return repository;
+        }
+
+        public void ProposeTrainingSamples(List<SampleRecord> newTrainingSamples)
+        {
+            ProposedTrainingSamples.AddRange(newTrainingSamples);
+        }
+
+        public void ProposeTestingSamples(List<SampleRecord> newTestingSamples)
+        {
+            ProposedTestingSamples.AddRange(newTestingSamples);
+        }
+
+        public void AcceptTestingSample(SampleRecord testingSample)
+        {
+            TestingSamples.Add(testingSample);
+            ProposedTestingSamples.Remove(testingSample);
+        }
+
+        public void RejectTestingSample(SampleRecord testingSample)
+        {
+            RejectedTestingSamples.Add(testingSample);
+            ProposedTestingSamples.Remove(testingSample);
+        }
+
+        public void AcceptTrainingSample(SampleRecord trainingSample)
+        {
+            TrainingSamples.Add(trainingSample);
+            ProposedTrainingSamples.Remove(trainingSample);
+        }
+
+        public void RejectTrainingSample(SampleRecord trainingSample)
+        {
+            RejectedTrainingSamples.Add(trainingSample);
+            ProposedTrainingSamples.Remove(trainingSample);
         }
     }
 }

@@ -16,7 +16,6 @@ namespace DatasetManager
             : base(repository, repository.TrainingSamples, category)
         {
             InitializeComponent();
-            DataContext = this;
         }
     }
 }

@@ -1,6 +1,7 @@
 ﻿// Copyright (c) PODS-AI contributors
 // SPDX-License-Identifier: MIT
 
+using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
@@ -9,20 +10,21 @@ namespace DatasetManager
 {
     public abstract class SamplesPageBase : Page
     {
-        protected readonly DatasetRepository _repository;
+        protected readonly DatasetRepository Repository;
         protected abstract string WavFolderPath { get; }
         protected abstract LogViewerControl LogViewer { get; }
         protected abstract SamplesGridControl SamplesGrid { get; }
         public string Category { get; }
-        private readonly List<SampleRecord> _filteredSamples;
-        public List<SampleRecord> Samples => _filteredSamples;
+        private readonly ObservableCollection<SampleRecord> _filteredSamples;
+        public ObservableCollection<SampleRecord> Samples => _filteredSamples;
 
         protected void Back_Click(object sender, RoutedEventArgs e)
         {
             NavigationService?.GoBack();
         }
 
-        protected async Task RunPythonAsync(string scriptPath, string args)
+
+        protected async Task<string> RunPythonAsync(string scriptPath, string args)
         {
             try
             {
@@ -90,6 +92,8 @@ namespace DatasetManager
             {
                 SamplesGrid.InferenceEnabled = true;
             }
+
+            return LogViewer.LogTextBox.Text;
         }
 
         private string FindTagsInOutput(string prefix, string output, out double confidence)
@@ -147,11 +151,21 @@ namespace DatasetManager
             }
         }
 
+        protected void UpdateFilteredSamples(List<SampleRecord> samples)
+        {
+            _filteredSamples.Clear();
+            foreach (var sample in samples.Where(s => s.Category == Category))
+            {
+                _filteredSamples.Add(sample);
+            }
+        }
+
         protected SamplesPageBase(DatasetRepository repository, List<SampleRecord> samples, string category)
         {
-            _repository = repository;
+            Repository = repository;
             Category = category;
-            _filteredSamples = samples.Where(s => s.Category == category).ToList();
+            _filteredSamples = new ObservableCollection<SampleRecord>(samples.Where(s => s.Category == category));
+            DataContext = this;
         }
     }
 }

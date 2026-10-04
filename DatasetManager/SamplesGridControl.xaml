@@ -6,6 +6,9 @@
              xmlns:local="clr-namespace:DatasetManager"
              mc:Ignorable="d" 
              d:DesignHeight="450" d:DesignWidth="800">
+    <UserControl.Resources>
+        <local:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
+    </UserControl.Resources>
     <DataGrid Grid.Row="1"
               ItemsSource="{Binding Samples}"
               AutoGenerateColumns="False"
@@ -60,6 +63,36 @@
                 <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate>
                         <Button Content="Listen" Click="ListenButton_Click" />
+                    </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+            </DataGridTemplateColumn>
+            <DataGridTemplateColumn Header="Accept">
+                <DataGridTemplateColumn.CellStyle>
+                    <Style TargetType="DataGridCell">
+                        <Setter Property="Visibility"
+                                Value="{Binding RelativeSource={RelativeSource AncestorType=UserControl},
+                                Path=ShowReviewButtons,
+                                Converter={StaticResource BoolToVisibilityConverter}}" />
+                    </Style>
+                </DataGridTemplateColumn.CellStyle>
+                <DataGridTemplateColumn.CellTemplate>
+                    <DataTemplate>
+                        <Button Content="Accept" Click="AcceptButton_Click"/>
+                    </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+            </DataGridTemplateColumn>
+            <DataGridTemplateColumn Header="Reject">
+                <DataGridTemplateColumn.CellStyle>
+                    <Style TargetType="DataGridCell">
+                        <Setter Property="Visibility"
+                                Value="{Binding RelativeSource={RelativeSource AncestorType=UserControl},
+                                Path=ShowReviewButtons,
+                                Converter={StaticResource BoolToVisibilityConverter}}" />
+                    </Style>
+                </DataGridTemplateColumn.CellStyle>
+                <DataGridTemplateColumn.CellTemplate>
+                    <DataTemplate>
+                        <Button Content="Reject" Click="RejectButton_Click"/>
                     </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
             </DataGridTemplateColumn>
