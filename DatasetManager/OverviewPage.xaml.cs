@@ -1,6 +1,7 @@
 ﻿// Copyright (c) PODS-AI contributors
 // SPDX-License-Identifier: MIT
 
+using System.Windows;
 using System.Windows.Controls;
 
 namespace DatasetManager
@@ -47,6 +48,11 @@ namespace DatasetManager
             Repository = repository;
             InitializeComponent();
             DataContext = repository;
+        }
+
+        protected void Save_Click(object sender, RoutedEventArgs e)
+        {
+            Repository.Save();
         }
     }
 }

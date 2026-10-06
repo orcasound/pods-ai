@@ -56,7 +56,7 @@ namespace DatasetManager
         /// </summary>
         /// <param name="result">The result string containing CSV sections.</param>
         /// <param name="header">The header of the CSV section to extract.</param>
-        private void ProposeSamplesFromText(string? result, string header)
+        private void ProposeSamplesFromText(string result, string header)
         {
             string? testingCsvSection = DatasetRepository.ExtractCsvSection(result, header);
 
@@ -109,7 +109,7 @@ namespace DatasetManager
             {
                 string timestamp = GetStartTimePSTStringForPastWeek();
 
-                var result = await RunPythonAsync(@"src\process_false_positives.py", $"--set testing --start {timestamp} --end now --category {Category}");
+                string result = await RunPythonAsync(@"src\process_false_positives.py", $"--set testing --start {timestamp} --end now --category {Category}");
 
                 ProposeSamplesFromText(result, $"Proposed rows for output/csv/testing_60s_samples.csv:");
             }
@@ -131,7 +131,7 @@ namespace DatasetManager
             {
                 string timestamp = GetStartTimePSTStringForPastWeek();
 
-                var result = await RunPythonAsync(@"src\process_false_negatives.py", $"--start {timestamp} --end now --category {Category}");
+                string result = await RunPythonAsync(@"src\process_false_negatives.py", $"--start {timestamp} --end now --category {Category}");
 
                 ProposeSamplesFromText(result, $"Proposed rows for output/csv/testing_60s_samples.csv:");
             }

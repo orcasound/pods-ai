@@ -75,6 +75,18 @@ namespace DatasetManager
         }
 
         /// <summary>
+        /// Saves the provided sample records to a CSV file at the specified path.
+        /// </summary>
+        /// <param name="samples">The sample records to save.</param>
+        /// <param name="path">The path to the CSV file.</param>
+        private void SaveSamples(IEnumerable<SampleRecord> samples, string path)
+        {
+            using var writer = new StreamWriter(path);
+            using var csv = new CsvWriter(writer, CultureInfo.InvariantCulture);
+            csv.WriteRecords(samples);
+        }
+
+        /// <summary>
         /// Extracts a section of CSV text from the given text based on the specified header.
         /// </summary>
         /// <param name="text">The text containing the CSV data.</param>
@@ -105,9 +117,10 @@ namespace DatasetManager
         }
 
         /// <summary>
-        /// Reads the model comparison file and processes the confusion matrix.
+        /// Get the root filesystem path for dataset files.
         /// </summary>
-        private void ReadModelComparison()
+        /// <returns>The root path</returns>
+        private string GetRootPath()
         {
             string[] args = Environment.GetCommandLineArgs();
             string rootPath = @".";
@@ -115,6 +128,15 @@ namespace DatasetManager
             {
                 rootPath = args[1];
             }
+            return rootPath;
+        }
+
+        /// <summary>
+        /// Reads the model comparison file and processes the confusion matrix.
+        /// </summary>
+        private void ReadModelComparison()
+        {
+            string rootPath = GetRootPath();
             string modelComparisonPath = Path.Combine(rootPath, "model-comparison.txt");
             if (File.Exists(modelComparisonPath))
             {
@@ -241,12 +263,7 @@ namespace DatasetManager
         {
             var repository = new DatasetRepository();
 
-            string[] args = Environment.GetCommandLineArgs();
-            string rootPath = @".";
-            if (args.Length > 1)
-            {
-                rootPath = args[1];
-            }
+            string rootPath = repository.GetRootPath();
 
             try
             {
@@ -286,6 +303,41 @@ namespace DatasetManager
             repository.ReadModelComparison();
 
             return repository;
+        }
+
+        /// <summary>
+        /// Saves the training and testing samples to their respective CSV files.
+        /// </summary>
+        public void Save()
+        {
+            string rootPath = GetRootPath();
+            try
+            {
+                SaveSamples(TrainingSamples, Path.Combine(rootPath, "output", "csv", "training_3s_samples.csv"));
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    $"Could not save output\\csv\\training_3s_samples.csv. Either run this application from the pods-ai directory, or specify the path to it on the command line.\n\nError: {ex.Message}",
+                    "Error",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+                Environment.Exit(1);
+            }
+
+            try
+            {
+                SaveSamples(TestingSamples, Path.Combine(rootPath, "output", "csv", "testing_60s_samples.csv"));
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    $"Could not save testing samples. Either run this application from the pods-ai directory, or specify the path to it on the command line.\n\nError: {ex.Message}",
+                    "Error",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+                Environment.Exit(1);
+            }
         }
 
         /// <summary>

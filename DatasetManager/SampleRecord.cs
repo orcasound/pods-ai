@@ -16,6 +16,8 @@ namespace DatasetManager
         public string NodeName { get; set; } = "";
         public string StartTimestamp { get; set; } = "";
         public string URI { get; set; } = "";
+
+        [Ignore]
         public DateTime StartTimestampUtc
         {
             get
@@ -55,6 +57,8 @@ namespace DatasetManager
                 OnPropertyChanged(nameof(ConfidenceRatio));
             }
         }
+
+        [Ignore]
         public double? ConfidenceRatio => Confidence == null ? null : Confidence / 100.0;
 
         private string _tags = "";
@@ -75,11 +79,19 @@ namespace DatasetManager
                 OnPropertyChanged(nameof(HasTags));
             }
         }
+        [Ignore]
         public bool HasTags => !string.IsNullOrWhiteSpace(Tags);
         protected void OnPropertyChanged([CallerMemberName] string? propertyName = null)
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
+
+        /// <summary>
+        /// Construct the WAV file pat from a base directory, the category, node slug,
+        /// and start timestamp.
+        /// </summary>
+        /// <param name="baseDirectory">Base filesystem directory</param>
+        /// <returns></returns>
         public string GetWavFilePath(string baseDirectory)
         {
             string slug = NodeName.Replace('_', '-');
