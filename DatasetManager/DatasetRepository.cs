@@ -370,7 +370,12 @@ namespace DatasetManager
         /// <param name="testingSample">The testing sample to accept.</param>
         public void AcceptTestingSample(SampleRecord testingSample)
         {
-            TestingSamples.Add(testingSample);
+            int index = 0;
+            while (index < TestingSamples.Count && CompareSamples(TestingSamples[index], testingSample) < 0)
+            {
+                index++;
+            }
+            TestingSamples.Insert(index, testingSample);
             ProposedTestingSamples.Remove(testingSample);
         }
 
@@ -382,6 +387,29 @@ namespace DatasetManager
         {
             RejectedTestingSamples.Add(testingSample);
             ProposedTestingSamples.Remove(testingSample);
+        }
+
+        /// <summary>
+        /// Compares two SampleRecord objects based on their Category, NodeName, and StartTimestampUtc properties.
+        /// </summary>
+        /// <param name="left">The first SampleRecord to compare.</param>
+        /// <param name="right">The second SampleRecord to compare.</param>
+        /// <returns>An integer that indicates the relative order of the objects being compared.</returns>
+        private static int CompareSamples(SampleRecord left, SampleRecord right)
+        {
+            int result = string.Compare(left.Category, right.Category, StringComparison.OrdinalIgnoreCase);
+            if (result != 0)
+            {
+                return result;
+            }
+
+            result = string.Compare(left.NodeName, right.NodeName, StringComparison.OrdinalIgnoreCase);
+            if (result != 0)
+            {
+                return result;
+            }
+
+            return DateTime.Compare(left.StartTimestampUtc, right.StartTimestampUtc);
         }
 
         /// <summary>
@@ -417,7 +445,12 @@ namespace DatasetManager
         /// <param name="trainingSample">The training sample to accept.</param>
         public void AcceptTrainingSample(SampleRecord trainingSample)
         {
-            TrainingSamples.Add(trainingSample);
+            int index = 0;
+            while (index < TrainingSamples.Count && CompareSamples(TrainingSamples[index], trainingSample) < 0)
+            {
+                index++;
+            }
+            TrainingSamples.Insert(index, trainingSample);
             ProposedTrainingSamples.Remove(trainingSample);
 
             // Remove any overlapping samples from testing samples.
