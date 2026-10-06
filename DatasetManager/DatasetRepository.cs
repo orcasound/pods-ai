@@ -38,23 +38,48 @@ namespace DatasetManager
         private List<string> _testingWavs = new();
         public ObservableCollection<StatsRow> Stats { get; } = new ObservableCollection<StatsRow>();
 
+        /// <summary>
+        /// Loads sample records from a CsvReader instance and returns them
+        /// as a list of SampleRecord objects.
+        /// </summary>
+        /// <param name="csv">The CsvReader instance containing the sample records.</param>
+        /// <returns>A list of sample records loaded from the CsvReader instance.</returns>
         private static List<SampleRecord> LoadSamplesFromCsv(CsvReader csv)
         {
             var records = csv.GetRecords<SampleRecord>();
             return records.ToList();
         }
+
+        /// <summary>
+        /// Loads sample records from a CSV-formatted string.
+        /// </summary>
+        /// <param name="csvText">The CSV-formatted string containing the sample records.</param>
+        /// <returns>A list of sample records loaded from the CSV string.</returns>
         public static List<SampleRecord> LoadSamplesFromText(string csvText)
         {
             using var reader = new StringReader(csvText);
             using var csv = new CsvReader(reader, CultureInfo.InvariantCulture);
             return LoadSamplesFromCsv(csv);
         }
+
+        /// <summary>
+        /// Loads sample records from a CSV file at the specified path.
+        /// </summary>
+        /// <param name="path">The path to the CSV file.</param>
+        /// <returns>A list of sample records loaded from the CSV file.</returns>
         private static List<SampleRecord> LoadSamples(string path)
         {
             using var reader = new StreamReader(path);
             using var csv = new CsvReader(reader, CultureInfo.InvariantCulture);
             return LoadSamplesFromCsv(csv);
         }
+
+        /// <summary>
+        /// Extracts a section of CSV text from the given text based on the specified header.
+        /// </summary>
+        /// <param name="text">The text containing the CSV data.</param>
+        /// <param name="header">The header indicating the start of the CSV section.</param>
+        /// <returns>The extracted CSV section, or null if the header is not found.</returns>
         public static string? ExtractCsvSection(string text, string header)
         {
             string marker = header + Environment.NewLine;
@@ -79,6 +104,9 @@ namespace DatasetManager
             return text[start..end].Trim();
         }
 
+        /// <summary>
+        /// Reads the model comparison file and processes the confusion matrix.
+        /// </summary>
         private void ReadModelComparison()
         {
             string[] args = Environment.GetCommandLineArgs();
@@ -161,6 +189,14 @@ namespace DatasetManager
             }
         }
 
+        /// <summary>
+        /// Populates the Stats collection with statistics for each category
+        /// based on the provided training and testing samples and WAV files.
+        /// </summary>
+        /// <param name="trainingSamples">The collection of training samples.</param>
+        /// <param name="testingSamples">The collection of testing samples.</param>
+        /// <param name="trainingWavs">The list of training WAV file paths.</param>
+        /// <param name="testingWavs">The list of testing WAV file paths.</param>
         private void PopulateStats(
             ObservableCollection<SampleRecord> trainingSamples,
             ObservableCollection<SampleRecord> testingSamples,
@@ -193,6 +229,14 @@ namespace DatasetManager
             }
         }
 
+        /// <summary>
+        /// Loads the dataset repository from the specified root path,
+        /// reading training and testing samples from CSV files and
+        /// populating the corresponding collections. If the CSV files
+        /// cannot be loaded, an error message is displayed, and the
+        /// application exits.
+        /// </summary>
+        /// <returns>The loaded DatasetRepository instance.</returns>
         public static DatasetRepository Load()
         {
             var repository = new DatasetRepository();
@@ -244,6 +288,10 @@ namespace DatasetManager
             return repository;
         }
 
+        /// <summary>
+        /// Proposes new training samples by adding them to the ProposedTrainingSamples collection.
+        /// </summary>
+        /// <param name="newTrainingSamples">The list of new training samples to propose.</param>
         public void ProposeTrainingSamples(List<SampleRecord> newTrainingSamples)
         {
             foreach (var sample in newTrainingSamples)
@@ -252,6 +300,10 @@ namespace DatasetManager
             }
         }
 
+        /// <summary>
+        /// Proposes new testing samples by adding them to the ProposedTestingSamples collection.
+        /// </summary>
+        /// <param name="newTestingSamples">The list of new testing samples to propose.</param>
         public void ProposeTestingSamples(List<SampleRecord> newTestingSamples)
         {
             foreach (var sample in newTestingSamples)
@@ -260,26 +312,73 @@ namespace DatasetManager
             }
         }
 
+        /// <summary>
+        /// Accepts a testing sample by adding it to the TestingSamples collection.
+        /// </summary>
+        /// <param name="testingSample">The testing sample to accept.</param>
         public void AcceptTestingSample(SampleRecord testingSample)
         {
             TestingSamples.Add(testingSample);
             ProposedTestingSamples.Remove(testingSample);
         }
 
+        /// <summary>
+        /// Rejects a testing sample by adding it to the RejectedTestingSamples collection.
+        /// </summary>
+        /// <param name="testingSample">The testing sample to reject.</param>
         public void RejectTestingSample(SampleRecord testingSample)
         {
             RejectedTestingSamples.Add(testingSample);
             ProposedTestingSamples.Remove(testingSample);
         }
 
+        /// <summary>
+        /// Finds overlapping samples in the given list of samples based on the specified sample and time window in seconds.
+        /// </summary>
+        /// <param name="samples">The list of samples to search for overlaps.</param>
+        /// <param name="sample">The sample to find overlaps for.</param>
+        /// <param name="seconds">The time window in seconds to consider for overlaps.</param>
+        /// <returns>A list of overlapping samples.</returns>
+        public List<SampleRecord> FindOverlapsIn(IEnumerable<SampleRecord> samples, SampleRecord sample, int seconds)
+        {
+            DateTime sampleStart = sample.StartTimestampUtc;
+            DateTime sampleEnd = sampleStart.AddSeconds(seconds);
+
+            return samples.Where(s =>
+            {
+                if (s.NodeName != sample.NodeName)
+                    return false;
+
+                DateTime otherStart = s.StartTimestampUtc;
+                DateTime otherEnd = otherStart.AddSeconds(seconds);
+
+                return sampleStart < otherEnd && otherStart < sampleEnd;
+            }).ToList();
+        }
+
+        /// <summary>
+        /// Accepts a training sample by adding it to the TrainingSamples collection
+        /// and removing it from the ProposedTrainingSamples collection.
+        /// </summary>
+        /// <param name="trainingSample">The training sample to accept.</param>
         public void AcceptTrainingSample(SampleRecord trainingSample)
         {
             TrainingSamples.Add(trainingSample);
             ProposedTrainingSamples.Remove(trainingSample);
 
-            // TODO: remove any overlap from testing samples
+            // Remove any overlapping samples from testing samples.
+            var overlaps = FindOverlapsIn(TestingSamples, trainingSample, 60);
+            foreach (var overlap in overlaps)
+            {
+                TestingSamples.Remove(overlap);
+            }
         }
 
+        /// <summary>
+        /// Rejects a training sample by adding it to the RejectedTrainingSamples
+        /// collection and removing it from the ProposedTrainingSamples collection.
+        /// </summary>
+        /// <param name="trainingSample">The training sample to reject.</param>
         public void RejectTrainingSample(SampleRecord trainingSample)
         {
             RejectedTrainingSamples.Add(trainingSample);
