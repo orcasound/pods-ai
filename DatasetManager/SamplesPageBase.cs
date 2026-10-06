@@ -23,7 +23,13 @@ namespace DatasetManager
             NavigationService?.GoBack();
         }
 
-
+        /// <summary>
+        /// Runs a Python script asynchronously with the specified
+        /// arguments and captures its output.
+        /// </summary>
+        /// <param name="scriptPath">The path to the Python script to run.</param>
+        /// <param name="args">The arguments to pass to the Python script.</param>
+        /// <returns>The captured output from the Python script.</returns>
         protected async Task<string> RunPythonAsync(string scriptPath, string args)
         {
             try
@@ -96,6 +102,14 @@ namespace DatasetManager
             return LogViewer.LogTextBox.Text;
         }
 
+        /// <summary>
+        /// Finds tags in the output string that start with the specified
+        /// prefix and extracts the confidence value if present.
+        /// </summary>
+        /// <param name="prefix">The prefix to search for in the output string.</param>
+        /// <param name="output">The output string to search.</param>
+        /// <param name="confidence">The extracted confidence value, if present.</param>
+        /// <returns>The extracted tags string.</returns>
         private string FindTagsInOutput(string prefix, string output, out double confidence)
         {
             confidence = 0;
@@ -132,6 +146,14 @@ namespace DatasetManager
             return string.Empty;
         }
 
+        /// <summary>
+        /// Handles the InferenceRequested event from the SamplesGrid
+        /// control.  It runs a Python script to perform inference on
+        /// the selected sample and updates the sample's tags and
+        /// confidence based on the output.
+        /// </summary>
+        /// <param name="sender">The source of the event.</param>
+        /// <param name="sample">The sample record for which inference is requested.</param>
         protected async void SamplesGrid_InferenceRequested(object? sender, SampleRecord sample)
         {
             await RunPythonAsync("src\\run_inference.py", sample.GetWavFilePath(WavFolderPath));

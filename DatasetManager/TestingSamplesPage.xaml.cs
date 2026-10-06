@@ -13,6 +13,11 @@ namespace DatasetManager
         protected override LogViewerControl LogViewer => LogViewerControl;
         protected override SamplesGridControl SamplesGrid => SamplesGridControl;
         protected override string WavFolderPath => @"output\testing-wav";
+
+        /// <summary>
+        /// Gets the count of false positives for the current category
+        /// from the repository's statistics.
+        /// </summary>
         public int FalsePositiveCount
         {
             get
@@ -30,6 +35,11 @@ namespace DatasetManager
             InitializeComponent();
         }
 
+        /// <summary>
+        /// Gets the start time in Pacific Standard Time (PST) for the past week
+        /// and returns it as a formatted string.
+        /// </summary>
+        /// <returns>A formatted string representing the start time in PST for the past week.</returns>
         private string GetStartTimePSTStringForPastWeek()
         {
             TimeZoneInfo pacificZone = TimeZoneInfo.FindSystemTimeZoneById("Pacific Standard Time");
@@ -39,6 +49,60 @@ namespace DatasetManager
             return oneWeekAgoPacific.ToString("yyyy_MM_dd_HH_mm_ss") + "_PST";
         }
 
+        /// <summary>
+        /// Proposes new testing samples from the given result string and header.
+        /// It extracts the CSV section, loads the samples, and removes any duplicates
+        /// that overlap with existing training, proposed, or rejected samples.
+        /// </summary>
+        /// <param name="result">The result string containing CSV sections.</param>
+        /// <param name="header">The header of the CSV section to extract.</param>
+        private void ProposeSamplesFromText(string? result, string header)
+        {
+            string? testingCsvSection = DatasetRepository.ExtractCsvSection(result, header);
+
+            List <SampleRecord> newTestingSamples = (testingCsvSection != null)
+                   ? DatasetRepository.LoadSamplesFromText(testingCsvSection)
+                   : new();
+
+            // Remove any samples that overlap any samples already in the training set to avoid duplicates.
+            newTestingSamples.RemoveAll(sample =>
+                Repository.FindOverlapsIn(
+                    Repository.TrainingSamples,
+                    sample,
+                    seconds: 3).Any());
+
+            // Remove any samples that overlap any samples already the testing set to avoid duplicates.
+            newTestingSamples.RemoveAll(sample =>
+                Repository.FindOverlapsIn(
+                    Repository.TestingSamples,
+                    sample,
+                    seconds: 60).Any());
+
+            // Now remove any that overlap with any samples already proposed to avoid duplicates.
+            newTestingSamples.RemoveAll(sample =>
+                Repository.FindOverlapsIn(
+                    Repository.ProposedTestingSamples,
+                    sample,
+                    seconds: 60).Any());
+
+            // Finally, remove any that overlap with any samples already in the rejected set.
+            newTestingSamples.RemoveAll(sample =>
+                Repository.FindOverlapsIn(
+                    Repository.RejectedTestingSamples,
+                    sample,
+                    seconds: 60).Any());
+
+            Repository.ProposeTestingSamples(newTestingSamples);
+        }
+
+        /// <summary>
+        /// Handles the click event for the "More False Positives" button.  If
+        /// there are no proposed testing samples for the current category, it
+        /// runs a Python script to process false positives and proposes new
+        /// testing samples.  Finally, it navigates to the AddTestingSamplesPage.
+        /// </summary>
+        /// <param name="sender">The source of the event.</param>
+        /// <param name="e">The event data.</param>
         protected async void MoreFalsePositives_Click(object sender, RoutedEventArgs e)
         {
             if (Repository.ProposedTestingSamples.Count(sample => sample.Category == Category) == 0)
@@ -47,16 +111,20 @@ namespace DatasetManager
 
                 var result = await RunPythonAsync(@"src\process_false_positives.py", $"--set testing --start {timestamp} --end now --category {Category}");
 
-                string? testingCsvSection = DatasetRepository.ExtractCsvSection(result, "Proposed rows for output/csv/testing_60s_samples.csv:");
-                List<SampleRecord> newTestingSamples = (testingCsvSection != null)
-                    ? DatasetRepository.LoadSamplesFromText(testingCsvSection)
-                    : new();
-                Repository.ProposeTestingSamples(newTestingSamples);
+                ProposeSamplesFromText(result, $"Proposed rows for output/csv/testing_60s_samples.csv:");
             }
 
             NavigationService?.Navigate(new AddTestingSamplesPage(Repository, Category));
         }
 
+        /// <summary>
+        /// Handles the click event for the "More False Negatives" button.
+        /// If there are no proposed testing samples for the "resident"
+        /// category, it runs a Python script to process false negatives
+        /// and proposes new testing samples.
+        /// </summary>
+        /// <param name="sender">The source of the event.</param>
+        /// <param name="e">The event data.</param>
         protected async void MoreFalseNegatives_Click(object sender, RoutedEventArgs e)
         {
             if (Repository.ProposedTestingSamples.Count(sample => sample.Category == "resident") == 0)
@@ -65,15 +133,20 @@ namespace DatasetManager
 
                 var result = await RunPythonAsync(@"src\process_false_negatives.py", $"--start {timestamp} --end now --category {Category}");
 
-                string? testingCsvSection = DatasetRepository.ExtractCsvSection(result, "Proposed rows for output/csv/testing_60s_samples.csv:");
-                List<SampleRecord> newTestingSamples = (testingCsvSection != null)
-                    ? DatasetRepository.LoadSamplesFromText(testingCsvSection)
-                    : new();
-                Repository.ProposeTestingSamples(newTestingSamples);
+                ProposeSamplesFromText(result, $"Proposed rows for output/csv/testing_60s_samples.csv:");
             }
             NavigationService?.Navigate(new AddTestingSamplesPage(Repository, Category));
         }
 
+        /// <summary>
+        /// Handles the click event for the "Find Mispredictions" button.
+        /// If there are no proposed training samples for the current
+        /// category, it runs a Python script to process mispredictions
+        /// and proposes new training samples. Finally, it navigates to
+        /// the AddTrainingSamplesPage.
+        /// </summary>
+        /// <param name="sender">The source of the event.</param>
+        /// <param name="e">The event data.</param>
         protected async void FindMispredictions_Click(object sender, RoutedEventArgs e)
         {
             if (Repository.ProposedTrainingSamples.Count(sample => sample.Category == Category) == 0)
@@ -85,10 +158,26 @@ namespace DatasetManager
                     ? DatasetRepository.LoadSamplesFromText(trainingCsvSection)
                     : new();
 
-                string? testingCsvSection = DatasetRepository.ExtractCsvSection(result, "Proposed rows to remove from output/csv/testing_60s_samples.csv:");
-                List<SampleRecord> oldTestingSamples = (testingCsvSection != null)
-                    ? DatasetRepository.LoadSamplesFromText(testingCsvSection)
-                    : new();
+                // Remove any samples that overlap any samples already in the training set to avoid duplicates.
+                newTrainingSamples.RemoveAll(sample =>
+                    Repository.FindOverlapsIn(
+                        Repository.TrainingSamples,
+                        sample,
+                        seconds: 3).Any());
+
+                // Now remove any that overlap with any samples already proposed to avoid duplicates.
+                newTrainingSamples.RemoveAll(sample =>
+                    Repository.FindOverlapsIn(
+                        Repository.ProposedTrainingSamples,
+                        sample,
+                        seconds: 3).Any());
+
+                // Finally, remove any that overlap with any samples already in the rejected set.
+                newTrainingSamples.RemoveAll(sample =>
+                    Repository.FindOverlapsIn(
+                        Repository.RejectedTrainingSamples,
+                        sample,
+                        seconds: 3).Any());
 
                 Repository.ProposeTrainingSamples(newTrainingSamples);
             }

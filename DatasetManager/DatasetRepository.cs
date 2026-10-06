@@ -347,7 +347,9 @@ namespace DatasetManager
             return samples.Where(s =>
             {
                 if (s.NodeName != sample.NodeName)
+                {
                     return false;
+                }
 
                 DateTime otherStart = s.StartTimestampUtc;
                 DateTime otherEnd = otherStart.AddSeconds(seconds);
