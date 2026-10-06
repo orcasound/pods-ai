@@ -28,12 +28,12 @@ namespace DatasetManager
 
     public class DatasetRepository
     {
-        public List<SampleRecord> TrainingSamples = new();
-        public List<SampleRecord> TestingSamples = new();
-        public List<SampleRecord> ProposedTrainingSamples = new();
-        public List<SampleRecord> ProposedTestingSamples = new();
-        public List<SampleRecord> RejectedTrainingSamples = new();
-        public List<SampleRecord> RejectedTestingSamples = new();
+        public ObservableCollection<SampleRecord> TrainingSamples = new();
+        public ObservableCollection<SampleRecord> TestingSamples = new();
+        public ObservableCollection<SampleRecord> ProposedTrainingSamples = new();
+        public ObservableCollection<SampleRecord> ProposedTestingSamples = new();
+        public ObservableCollection<SampleRecord> RejectedTrainingSamples = new();
+        public ObservableCollection<SampleRecord> RejectedTestingSamples = new();
         private List<string> _trainingWavs = new();
         private List<string> _testingWavs = new();
         public ObservableCollection<StatsRow> Stats { get; } = new ObservableCollection<StatsRow>();
@@ -162,8 +162,8 @@ namespace DatasetManager
         }
 
         private void PopulateStats(
-            List<SampleRecord> trainingSamples,
-            List<SampleRecord> testingSamples,
+            ObservableCollection<SampleRecord> trainingSamples,
+            ObservableCollection<SampleRecord> testingSamples,
             List<string> trainingWavs,
             List<string> testingWavs)
         {
@@ -206,8 +206,8 @@ namespace DatasetManager
 
             try
             {
-                repository.TrainingSamples =
-                    LoadSamples(Path.Combine(rootPath, "output", "csv", "training_3s_samples.csv"));
+                List<SampleRecord> samples = LoadSamples(Path.Combine(rootPath, "output", "csv", "training_3s_samples.csv"));
+                repository.TrainingSamples = new ObservableCollection<SampleRecord>(samples);
             }
             catch (Exception ex)
             {
@@ -217,8 +217,9 @@ namespace DatasetManager
 
             try
             {
-                repository.TestingSamples =
+                List<SampleRecord> samples =
                     LoadSamples(Path.Combine(rootPath, "output", "csv", "testing_60s_samples.csv"));
+                repository.TestingSamples = new ObservableCollection<SampleRecord>(samples);
             }
             catch (Exception ex)
             {
@@ -245,12 +246,18 @@ namespace DatasetManager
 
         public void ProposeTrainingSamples(List<SampleRecord> newTrainingSamples)
         {
-            ProposedTrainingSamples.AddRange(newTrainingSamples);
+            foreach (var sample in newTrainingSamples)
+            {
+                ProposedTrainingSamples.Add(sample);
+            }
         }
 
         public void ProposeTestingSamples(List<SampleRecord> newTestingSamples)
         {
-            ProposedTestingSamples.AddRange(newTestingSamples);
+            foreach (var sample in newTestingSamples)
+            {
+                ProposedTestingSamples.Add(sample);
+            }
         }
 
         public void AcceptTestingSample(SampleRecord testingSample)

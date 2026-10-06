@@ -28,13 +28,11 @@ namespace DatasetManager
         private void SamplesGrid_AcceptRequested(object? sender, SampleRecord sample)
         {
             Repository.AcceptTrainingSample(sample);
-            UpdateFilteredSamples(Repository.ProposedTrainingSamples);
         }
 
         private void SamplesGrid_RejectRequested(object? sender, SampleRecord sample)
         {
             Repository.RejectTrainingSample(sample);
-            UpdateFilteredSamples(Repository.ProposedTrainingSamples);
         }
 
         public AddTrainingSamplesPage(DatasetRepository repository, string category)

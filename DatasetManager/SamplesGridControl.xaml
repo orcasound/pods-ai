@@ -9,7 +9,8 @@
     <UserControl.Resources>
         <local:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
     </UserControl.Resources>
-    <DataGrid Grid.Row="1"
+    <DataGrid x:Name="SamplesDataGrid"
+              Grid.Row="1"
               ItemsSource="{Binding Samples}"
               AutoGenerateColumns="False"
               CanUserAddRows="False">

@@ -79,7 +79,14 @@ namespace DatasetManager
                 nameof(ShowReviewButtons),
                 typeof(bool),
                 typeof(SamplesGridControl),
-                new PropertyMetadata(false));
+                new PropertyMetadata(false, OnShowReviewButtonsChanged));
+
+        private static void OnShowReviewButtonsChanged(
+        DependencyObject d,
+        DependencyPropertyChangedEventArgs e)
+        {
+            ((SamplesGridControl)d).UpdateColumnVisibility();
+        }
 
         public bool ShowReviewButtons
         {
@@ -87,9 +94,23 @@ namespace DatasetManager
             set => SetValue(ShowReviewButtonsProperty, value);
         }
 
+        private void UpdateColumnVisibility()
+        {
+            if (SamplesDataGrid.Columns.Count < 2)
+            {
+                return;
+            }
+
+            var visibility = ShowReviewButtons ? Visibility.Visible : Visibility.Collapsed;
+
+            SamplesDataGrid.Columns[^1].Visibility = visibility; // Reject
+            SamplesDataGrid.Columns[^2].Visibility = visibility; // Accept
+        }
+
         public SamplesGridControl()
         {
             InitializeComponent();
+            UpdateColumnVisibility();
         }
     }
 }

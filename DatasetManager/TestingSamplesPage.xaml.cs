@@ -41,7 +41,7 @@ namespace DatasetManager
 
         protected async void MoreFalsePositives_Click(object sender, RoutedEventArgs e)
         {
-            if (Repository.ProposedTestingSamples.Count == 0)
+            if (Repository.ProposedTestingSamples.Count(sample => sample.Category == Category) == 0)
             {
                 string timestamp = GetStartTimePSTStringForPastWeek();
 

@@ -2,9 +2,11 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
 
 namespace DatasetManager
 {
@@ -15,8 +17,6 @@ namespace DatasetManager
         protected abstract LogViewerControl LogViewer { get; }
         protected abstract SamplesGridControl SamplesGrid { get; }
         public string Category { get; }
-        private readonly ObservableCollection<SampleRecord> _filteredSamples;
-        public ObservableCollection<SampleRecord> Samples => _filteredSamples;
 
         protected void Back_Click(object sender, RoutedEventArgs e)
         {
@@ -151,20 +151,16 @@ namespace DatasetManager
             }
         }
 
-        protected void UpdateFilteredSamples(List<SampleRecord> samples)
-        {
-            _filteredSamples.Clear();
-            foreach (var sample in samples.Where(s => s.Category == Category))
-            {
-                _filteredSamples.Add(sample);
-            }
-        }
+        public ICollectionView Samples { get; }
 
-        protected SamplesPageBase(DatasetRepository repository, List<SampleRecord> samples, string category)
+        protected SamplesPageBase(DatasetRepository repository, ObservableCollection<SampleRecord> samples, string category)
         {
             Repository = repository;
             Category = category;
-            _filteredSamples = new ObservableCollection<SampleRecord>(samples.Where(s => s.Category == category));
+
+            Samples = CollectionViewSource.GetDefaultView(samples);
+            Samples.Filter = o => o is SampleRecord sample && sample.Category == category;
+
             DataContext = this;
         }
     }
