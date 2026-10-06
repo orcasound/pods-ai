@@ -151,6 +151,8 @@ namespace DatasetManager
             }
         }
 
+        public bool IsNotResident => !string.Equals(Category, "resident", StringComparison.OrdinalIgnoreCase);
+
         public ICollectionView Samples { get; }
 
         protected SamplesPageBase(DatasetRepository repository, ObservableCollection<SampleRecord> samples, string category)

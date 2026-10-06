@@ -59,35 +59,39 @@ namespace DatasetManager
 
         protected async void MoreFalseNegatives_Click(object sender, RoutedEventArgs e)
         {
-            string timestamp = GetStartTimePSTStringForPastWeek();
+            if (Repository.ProposedTestingSamples.Count(sample => sample.Category == "resident") == 0)
+            {
+                string timestamp = GetStartTimePSTStringForPastWeek();
 
-            var result = await RunPythonAsync(@"src\process_false_negatives.py", $"--set testing --start {timestamp} --end now --category {Category}");
+                var result = await RunPythonAsync(@"src\process_false_negatives.py", $"--start {timestamp} --end now --category {Category}");
 
-            string? testingCsvSection = DatasetRepository.ExtractCsvSection(result, "Proposed rows for output/csv/testing_60s_samples.csv:");
-            List<SampleRecord> newTestingSamples = (testingCsvSection != null)
-                ? DatasetRepository.LoadSamplesFromText(testingCsvSection)
-                : new();
-            Repository.ProposeTestingSamples(newTestingSamples);
-
+                string? testingCsvSection = DatasetRepository.ExtractCsvSection(result, "Proposed rows for output/csv/testing_60s_samples.csv:");
+                List<SampleRecord> newTestingSamples = (testingCsvSection != null)
+                    ? DatasetRepository.LoadSamplesFromText(testingCsvSection)
+                    : new();
+                Repository.ProposeTestingSamples(newTestingSamples);
+            }
             NavigationService?.Navigate(new AddTestingSamplesPage(Repository, Category));
         }
 
         protected async void FindMispredictions_Click(object sender, RoutedEventArgs e)
         {
-            var result = await RunPythonAsync(@"src\process_testing_set_mispredictions.py", $"--category {Category}");
+            if (Repository.ProposedTrainingSamples.Count(sample => sample.Category == Category) == 0)
+            {
+                var result = await RunPythonAsync(@"src\process_testing_set_mispredictions.py", $"--category {Category}");
 
-            string ? trainingCsvSection = DatasetRepository.ExtractCsvSection(result, "Proposed rows for output/csv/training_3s_samples.csv:");
-            List<SampleRecord> newTrainingSamples = (trainingCsvSection != null)
-                ? DatasetRepository.LoadSamplesFromText(trainingCsvSection)
-                : new();
+                string? trainingCsvSection = DatasetRepository.ExtractCsvSection(result, "Proposed rows for output/csv/training_3s_samples.csv:");
+                List<SampleRecord> newTrainingSamples = (trainingCsvSection != null)
+                    ? DatasetRepository.LoadSamplesFromText(trainingCsvSection)
+                    : new();
 
-            string? testingCsvSection = DatasetRepository.ExtractCsvSection(result, "Proposed rows to remove from output/csv/testing_60s_samples.csv:");
-            List<SampleRecord> oldTestingSamples = (testingCsvSection != null)
-                ? DatasetRepository.LoadSamplesFromText(testingCsvSection)
-                : new();
+                string? testingCsvSection = DatasetRepository.ExtractCsvSection(result, "Proposed rows to remove from output/csv/testing_60s_samples.csv:");
+                List<SampleRecord> oldTestingSamples = (testingCsvSection != null)
+                    ? DatasetRepository.LoadSamplesFromText(testingCsvSection)
+                    : new();
 
-            Repository.ProposeTrainingSamples(newTrainingSamples);
-
+                Repository.ProposeTrainingSamples(newTrainingSamples);
+            }
             NavigationService?.Navigate(new AddTrainingSamplesPage(Repository, Category));
         }
     }

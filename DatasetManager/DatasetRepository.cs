@@ -276,6 +276,8 @@ namespace DatasetManager
         {
             TrainingSamples.Add(trainingSample);
             ProposedTrainingSamples.Remove(trainingSample);
+
+            // TODO: remove any overlap from testing samples
         }
 
         public void RejectTrainingSample(SampleRecord trainingSample)

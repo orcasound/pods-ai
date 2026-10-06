@@ -46,10 +46,16 @@
         <Button Grid.Row="5" Grid.Column="0" Content="Back" Click="Back_Click" Width="100" Margin="0,0,0,10"/>
         <Button Grid.Row="5" Grid.Column="1"
                 Content="Find more false positives"
-                IsEnabled="{Binding ElementName=SamplesGridControl, Path=InferenceEnabled}"
                 Click="MoreFalsePositives_Click"
                 Width="Auto"
-                Margin="0,0,0,10"/>
+                Margin="0,0,0,10">
+            <Button.IsEnabled>
+                <MultiBinding Converter="{StaticResource AndBooleanConverter}">
+                    <Binding ElementName="SamplesGridControl" Path="InferenceEnabled"/>
+                    <Binding Path="IsNotResident"/>
+                </MultiBinding>
+            </Button.IsEnabled>
+        </Button>
         <Button Grid.Row="5" Grid.Column="2"
                 Content="Find more false negatives"
                 IsEnabled="{Binding ElementName=SamplesGridControl, Path=InferenceEnabled}"
