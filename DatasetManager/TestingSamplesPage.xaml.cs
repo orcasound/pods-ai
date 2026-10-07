@@ -191,5 +191,36 @@ namespace DatasetManager
             }
             NavigationService?.Navigate(new AddTrainingSamplesPage(Repository, Category));
         }
+
+        private bool _enableUpdateTags = true;
+
+        public bool EnableUpdateTags
+        {
+            get => _enableUpdateTags;
+            private set
+            {
+                if (_enableUpdateTags == value)
+                {
+                    return;
+                }
+
+                _enableUpdateTags = value;
+                OnPropertyChanged();
+            }
+        }
+
+        protected async void UpdateModeratedTags_Click(object sender, RoutedEventArgs e)
+        {
+            // Read the samples from OrcaHello and update the samples in
+            // the repository with the moderated tags from OrcaHello.
+            IEnumerable<SampleRecord> filteredSamples = Repository.TestingSamples
+                .Where(sample => sample.Category == Category);
+
+            EnableUpdateTags = false;
+
+            await OrcaHelloHelper.UpdateModeratedTagsAsync(filteredSamples);
+
+            EnableUpdateTags = true;
+        }
     }
 }

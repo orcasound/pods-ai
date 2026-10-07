@@ -8,9 +8,9 @@ namespace DatasetManager
     /// </summary>
     public partial class AddTrainingSamplesPage : SamplesPageBase
     {
-        protected override LogViewerControl LogViewer => new LogViewerControl();
+        protected override LogViewerControl LogViewer => LogViewerControl;
         protected override SamplesGridControl SamplesGrid => SamplesGridControl;
-        protected override string WavFolderPath => @"output\training-wav";
+        protected override string WavFolderPath => @"output\wav";
 
         private void SamplesGrid_AcceptRequested(object? sender, SampleRecord sample)
         {

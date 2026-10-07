@@ -42,8 +42,8 @@ namespace DatasetManager
         public string Description { get; set; } = "";
         [Name("Notes")]
         public string Source { get; set; } = "";
-        private double? _confidence = null;
-        public double? Confidence {
+        private decimal? _confidence = null;
+        public decimal? Confidence {
             get => _confidence;
             set
             {
@@ -78,7 +78,7 @@ namespace DatasetManager
         }
 
         [Ignore]
-        public double? ConfidenceRatio => Confidence == null ? null : Confidence / 100.0;
+        public double? ConfidenceRatio => Confidence == null ? null : ((double)Confidence) / 100.0;
         [Ignore]
         public double? InferredConfidenceRatio => InferredConfidence == null ? null : InferredConfidence / 100.0;
         private string _moderatedTags = "";

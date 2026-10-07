@@ -12,4 +12,9 @@
     <PackageReference Include="CsvHelper" Version="33.1.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\external\orcahello\ModeratorFrontEnd\AIForOrcas\AIForOrcas.Client.BL\AIForOrcas.Client.BL.csproj" />
+    <ProjectReference Include="..\external\orcahello\ModeratorFrontEnd\AIForOrcas\AIForOrcas.DTO\AIForOrcas.DTO.csproj" />
+  </ItemGroup>
+
 </Project>

@@ -8,7 +8,7 @@ namespace DatasetManager
     /// </summary>
     public partial class AddTestingSamplesPage : SamplesPageBase
     {
-        protected override LogViewerControl LogViewer => new LogViewerControl();
+        protected override LogViewerControl LogViewer => LogViewerControl;
         protected override SamplesGridControl SamplesGrid => SamplesGridControl;
         protected override string WavFolderPath => @"output\testing-wav";
 

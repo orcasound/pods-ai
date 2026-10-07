@@ -4,14 +4,22 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
 
 namespace DatasetManager
 {
-    public abstract class SamplesPageBase : Page
+    public abstract class SamplesPageBase : Page, INotifyPropertyChanged
     {
+        public event PropertyChangedEventHandler? PropertyChanged;
+
+        protected void OnPropertyChanged([CallerMemberName] string? propertyName = null)
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
+
         protected readonly DatasetRepository Repository;
         protected abstract string WavFolderPath { get; }
         protected abstract LogViewerControl LogViewer { get; }
@@ -156,12 +164,12 @@ namespace DatasetManager
         /// <param name="sample">The sample record for which inference is requested.</param>
         protected async void SamplesGrid_InferenceRequested(object? sender, SampleRecord sample)
         {
-            await RunPythonAsync("src\\run_inference.py", sample.GetWavFilePath(WavFolderPath));
+            string result = await RunPythonAsync("src\\run_inference.py", sample.GetWavFilePath(WavFolderPath));
 
             double confidence;
-            string tag = FindTagsInOutput("Global prediction: ", LogViewer.LogTextBox.Text, out confidence);
+            string tag = FindTagsInOutput("Global prediction: ", result, out confidence);
             double dummyConfidence;
-            string tags = FindTagsInOutput("Global predictions: ", LogViewer.LogTextBox.Text, out dummyConfidence);
+            string tags = FindTagsInOutput("Global predictions: ", result, out dummyConfidence);
             if (string.IsNullOrEmpty(tags))
             {
                 tags = tag;

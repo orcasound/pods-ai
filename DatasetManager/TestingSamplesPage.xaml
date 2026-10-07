@@ -62,5 +62,11 @@
                 Click="MoreFalseNegatives_Click"
                 Width="Auto"
                 Margin="0,0,0,10"/>
+        <Button Grid.Row="5" Grid.Column="3"
+                Content="Update moderated tags"
+                Click="UpdateModeratedTags_Click"
+                Width="Auto"
+                IsEnabled="{Binding Path=EnableUpdateTags}"
+                Margin="0,0,0,10"/>
     </Grid>
 </local:SamplesPageBase>
