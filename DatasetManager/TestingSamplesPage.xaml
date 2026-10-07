@@ -32,15 +32,9 @@
         <Button Grid.Row="1" Grid.Column="1"
                 Content="Analyze"
                 Click="FindMispredictions_Click"
+                IsEnabled="{Binding ElementName=SamplesGridControl, Path=InferenceEnabled}"
                 Width="Auto"
-                Margin="0,0,0,10">
-            <Button.IsEnabled>
-                <MultiBinding Converter="{StaticResource AndBooleanConverter}">
-                    <Binding ElementName="SamplesGridControl" Path="InferenceEnabled" />
-                    <Binding Path="HasFalsePositives" />
-                </MultiBinding>
-            </Button.IsEnabled>
-        </Button>
+                Margin="0,0,0,10"/>
         <local:SamplesGridControl Grid.Row="2" Grid.ColumnSpan="4" x:Name="SamplesGridControl" InferenceRequested="SamplesGrid_InferenceRequested" />
         <TextBlock Grid.Row="3" Grid.ColumnSpan="4" Text="Output:" FontSize="16" FontWeight="Bold" Margin="0,10,0,5"/>
         <local:LogViewerControl Grid.Row="4" Grid.ColumnSpan="4" x:Name="LogViewerControl"/>
