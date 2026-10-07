@@ -168,8 +168,8 @@ namespace DatasetManager
             }
             if (!string.IsNullOrEmpty(tags))
             {
-                sample.Tags = tags;
-                sample.Confidence = confidence * 100.0;
+                sample.InferredTags = tags;
+                sample.InferredConfidence = confidence * 100.0;
             }
         }
 

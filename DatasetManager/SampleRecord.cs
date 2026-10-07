@@ -40,7 +40,8 @@ namespace DatasetManager
             }
         }
         public string Description { get; set; } = "";
-        public string Notes { get; set; } = "";
+        [Name("Notes")]
+        public string Source { get; set; } = "";
         private double? _confidence = null;
         public double? Confidence {
             get => _confidence;
@@ -57,30 +58,87 @@ namespace DatasetManager
                 OnPropertyChanged(nameof(ConfidenceRatio));
             }
         }
-
+        private double? _inferredConfidence = null;
         [Ignore]
-        public double? ConfidenceRatio => Confidence == null ? null : Confidence / 100.0;
-
-        private string _tags = "";
-        [Optional]
-        public string Tags
+        public double? InferredConfidence
         {
-            get => _tags;
+            get => _inferredConfidence;
             set
             {
-                if (_tags == value)
+                if (_inferredConfidence == value)
                 {
                     return;
                 }
 
-                _tags = value;
+                _inferredConfidence = value;
 
                 OnPropertyChanged();
-                OnPropertyChanged(nameof(HasTags));
+                OnPropertyChanged(nameof(InferredConfidenceRatio));
             }
         }
+
         [Ignore]
-        public bool HasTags => !string.IsNullOrWhiteSpace(Tags);
+        public double? ConfidenceRatio => Confidence == null ? null : Confidence / 100.0;
+        [Ignore]
+        public double? InferredConfidenceRatio => InferredConfidence == null ? null : InferredConfidence / 100.0;
+        private string _moderatedTags = "";
+
+        /// <summary>
+        /// Gets or sets the moderated tags for the sample. This property
+        /// is optional and can be empty.
+        /// </summary>
+        [Optional]
+        [Name("Tags")]
+        public string ModeratedTags
+        {
+            get => _moderatedTags;
+            set
+            {
+                if (_moderatedTags == value)
+                {
+                    return;
+                }
+
+                _moderatedTags = value;
+
+                OnPropertyChanged();
+            }
+        }
+
+        private string _inferredTags = "";
+
+        /// <summary>
+        /// Gets or sets the tags for the sample inferred by the current PODS-AI model.
+        /// This property is ignored during CSV serialization.
+        /// </summary>
+        [Ignore]
+        public string InferredTags
+        {
+            get => _inferredTags;
+            set
+            {
+                if (_inferredTags == value)
+                {
+                    return;
+                }
+
+                _inferredTags = value;
+
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(HasInferredTags));
+            }
+        }
+
+        /// <summary>
+        /// Gets a value indicating whether the sample has inferred tags.
+        /// </summary>
+        [Ignore]
+        public bool HasInferredTags => !string.IsNullOrWhiteSpace(InferredTags);
+
+        /// <summary>
+        /// Raises the PropertyChanged event for the specified property name.
+        /// </summary>
+        /// <param name="propertyName">The name of the property that changed.</param>
         protected void OnPropertyChanged([CallerMemberName] string? propertyName = null)
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));

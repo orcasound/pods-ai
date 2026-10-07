@@ -32,18 +32,22 @@
                     </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
             </DataGridTemplateColumn>
-            <DataGridTextColumn Header="Notes" Binding="{Binding Notes}" Width="Auto" />
-            <DataGridTextColumn Header="Confidence"
-                                Binding="{Binding ConfidenceRatio, StringFormat={}{0:P0}}"
-                                Width="Auto"
-                                ElementStyle="{StaticResource RightAlignedTextStyle}"
-                                CellStyle="{StaticResource RightAlignedCellStyle}" />
-            <DataGridTemplateColumn Header="Tags" Width="200">
+            <DataGridTextColumn Header="Source" Binding="{Binding Source}" Width="Auto" />
+            <DataGridTextColumn Width="*" Binding="{Binding ModeratedTags}">
+                <DataGridTextColumn.Header>
+                    <TextBlock Text="Moderated Tags" ToolTip="Tags set by a human moderator."/>
+                </DataGridTextColumn.Header>
+            </DataGridTextColumn>
+            <DataGridTemplateColumn Width="*">
+                <DataGridTemplateColumn.Header>
+                    <TextBlock Text="Inferred Tags"
+                               ToolTip="Tags predicted by the current PODS-AI model."/>
+                </DataGridTemplateColumn.Header>
                 <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate>
                         <Grid>
-                            <TextBlock x:Name="TagsText"
-                                       Text="{Binding Tags}"
+                            <TextBlock x:Name="InferredTagsText"
+                                       Text="{Binding InferredTags}"
                                        Visibility="Collapsed" />
                             <Button x:Name="InferButton"
                                     Content="Infer"
@@ -52,14 +56,19 @@
                                     IsEnabled="{Binding RelativeSource={RelativeSource AncestorType=UserControl},Path=InferenceEnabled}"/>
                         </Grid>
                         <DataTemplate.Triggers>
-                            <DataTrigger Binding="{Binding HasTags}" Value="True">
-                                <Setter TargetName="TagsText" Property="Visibility" Value="Visible" />
+                            <DataTrigger Binding="{Binding HasInferredTags}" Value="True">
+                                <Setter TargetName="InferredTagsText" Property="Visibility" Value="Visible" />
                                 <Setter TargetName="InferButton" Property="Visibility" Value="Collapsed" />
                             </DataTrigger>
                         </DataTemplate.Triggers>
                     </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
             </DataGridTemplateColumn>
+            <DataGridTextColumn Header="Confidence"
+                    Binding="{Binding InferredConfidenceRatio, StringFormat={}{0:P0}}"
+                    Width="Auto"
+                    ElementStyle="{StaticResource RightAlignedTextStyle}"
+                    CellStyle="{StaticResource RightAlignedCellStyle}" />
             <DataGridTemplateColumn Header="Audio" Width="Auto">
                 <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate>
