@@ -39,14 +39,14 @@ namespace DatasetManager
         /// Gets the start time in Pacific Standard Time (PST) for the past week
         /// and returns it as a formatted string.
         /// </summary>
-        /// <returns>A formatted string representing the start time in PST for the past week.</returns>
-        private string GetStartTimePSTStringForPastWeek()
+        /// <returns>A formatted string representing the start time in PST a given number of days ago.</returns>
+        private string GetStartTimePSTStringForPastDays(int days)
         {
             TimeZoneInfo pacificZone = TimeZoneInfo.FindSystemTimeZoneById("Pacific Standard Time");
-            DateTimeOffset oneWeekAgoPacific =
+            DateTimeOffset pastDaysAgoPacific =
                 TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, pacificZone)
-                .AddDays(-7);
-            return oneWeekAgoPacific.ToString("yyyy_MM_dd_HH_mm_ss") + "_PST";
+                .AddDays(-days);
+            return pastDaysAgoPacific.ToString("yyyy_MM_dd_HH_mm_ss") + "_PST";
         }
 
         /// <summary>
@@ -107,7 +107,11 @@ namespace DatasetManager
         {
             if (Repository.ProposedTestingSamples.Count(sample => sample.Category == Category) == 0)
             {
-                string timestamp = GetStartTimePSTStringForPastWeek();
+                int days = OneWeekRadio.IsChecked == true ? 7 :
+                           TwoWeekRadio.IsChecked == true ? 14 :
+                           30;
+
+                string timestamp = GetStartTimePSTStringForPastDays(days);
 
                 string result = await RunPythonAsync(@"src\process_false_positives.py", $"--set testing --start {timestamp} --end now --category {Category}");
 
@@ -129,7 +133,11 @@ namespace DatasetManager
         {
             if (Repository.ProposedTestingSamples.Count(sample => sample.Category == "resident") == 0)
             {
-                string timestamp = GetStartTimePSTStringForPastWeek();
+                int days = OneWeekRadio.IsChecked == true ? 7 :
+                           TwoWeekRadio.IsChecked == true ? 14 :
+                           30;
+
+                string timestamp = GetStartTimePSTStringForPastDays(days);
 
                 string result = await RunPythonAsync(@"src\process_false_negatives.py", $"--start {timestamp} --end now --category {Category}");
 

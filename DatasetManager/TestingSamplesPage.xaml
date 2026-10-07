@@ -26,7 +26,8 @@
             <ColumnDefinition Width="Auto"/>
             <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
-        <TextBlock Grid.Row="0" Grid.ColumnSpan="4" Text="{Binding Category, StringFormat='{}Testing samples for {0}'}" FontSize="20" FontWeight="Bold" Margin="0,0,0,10"/>
+        <Button Grid.Row="0" Grid.Column="0" Content="Back" Click="Back_Click" Width="100" Margin="0,0,0,10"/>
+        <TextBlock Grid.Row="0" Grid.Column="1" Grid.ColumnSpan="3" Text="{Binding Category, StringFormat='{}Testing samples for {0}'}" FontSize="20" FontWeight="Bold" Margin="0,0,0,10"/>
         <TextBlock Grid.Row="1" Grid.Column="0" Text="{Binding FalsePositiveCount, StringFormat='{}False positives: {0}'}" VerticalAlignment="Center" Margin="0,0,10,0"/>
         <Button Grid.Row="1" Grid.Column="1"
                 Content="Analyze"
@@ -43,7 +44,12 @@
         <local:SamplesGridControl Grid.Row="2" Grid.ColumnSpan="4" x:Name="SamplesGridControl" InferenceRequested="SamplesGrid_InferenceRequested" />
         <TextBlock Grid.Row="3" Grid.ColumnSpan="4" Text="Output:" FontSize="16" FontWeight="Bold" Margin="0,10,0,5"/>
         <local:LogViewerControl Grid.Row="4" Grid.ColumnSpan="4" x:Name="LogViewerControl"/>
-        <Button Grid.Row="5" Grid.Column="0" Content="Back" Click="Back_Click" Width="100" Margin="0,0,0,10"/>
+
+        <StackPanel Grid.Row="5" Grid.Column="0" Orientation="Horizontal">
+            <RadioButton x:Name="OneWeekRadio" Content="1w" Margin="0,0,15,0" GroupName="TimeRange" IsChecked="True"/>
+            <RadioButton x:Name="TwoWeekRadio" Content="2w" Margin="0,0,15,0" GroupName="TimeRange"/>
+            <RadioButton x:Name="OneMonthRadio" Content="1m" Margin="0,0,15,0" GroupName="TimeRange"/>
+        </StackPanel>
         <Button Grid.Row="5" Grid.Column="1"
                 Content="Find more false positives"
                 Click="MoreFalsePositives_Click"

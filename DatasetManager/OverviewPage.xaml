@@ -59,14 +59,22 @@
                                     Binding="{Binding TestCorrectRatio, StringFormat={}{0:P0}}"
                                     ElementStyle="{StaticResource RightAlignedTextStyle}"
                                     CellStyle="{StaticResource RightAlignedCellStyle}" />
-                <DataGridTextColumn Header="% FP"
-                                    Binding="{Binding TestFalsePositiveRatio, StringFormat={}{0:P0}}"
+                <DataGridTextColumn Binding="{Binding TestFalsePositiveRatio, StringFormat={}{0:P0}}"
                                     ElementStyle="{StaticResource RightAlignedTextStyle}"
-                                    CellStyle="{StaticResource RightAlignedCellStyle}" />
-                <DataGridTextColumn Header="% FN"
-                                    Binding="{Binding TestFalseNegativeRatio, StringFormat={}{0:P0}}"
+                                    CellStyle="{StaticResource RightAlignedCellStyle}">
+                    <DataGridTextColumn.Header>
+                        <TextBlock Text="% FP"
+                                   ToolTip="Percentage of testing samples in this category that PODS-AI incorrectly predicted as a whale category."/>
+                    </DataGridTextColumn.Header>
+                </DataGridTextColumn>
+                <DataGridTextColumn Binding="{Binding TestFalseNegativeRatio, StringFormat={}{0:P0}}"
                                     ElementStyle="{StaticResource RightAlignedTextStyle}"
-                                    CellStyle="{StaticResource RightAlignedCellStyle}" />
+                                    CellStyle="{StaticResource RightAlignedCellStyle}">
+                    <DataGridTextColumn.Header>
+                        <TextBlock Text="% FN"
+                                   ToolTip="Percentage of testing samples in this category that PODS-AI incorrectly predicted as any other category."/>
+                    </DataGridTextColumn.Header>
+                </DataGridTextColumn>
             </DataGrid.Columns>
         </DataGrid>
         <Button Grid.Row="1" Content="Save" Click="Save_Click"></Button>
