@@ -73,9 +73,16 @@ namespace DatasetManager
                     EnableRaisingEvents = true
                 };
 
+                var outputReaderCompleted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                var errorReaderCompleted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
                 process.OutputDataReceived += (s, e) =>
                 {
-                    if (e.Data != null)
+                    if (e.Data == null)
+                    {
+                        outputReaderCompleted.TrySetResult();
+                    }
+                    else
                     {
                         Dispatcher.Invoke(() =>
                         {
@@ -86,7 +93,11 @@ namespace DatasetManager
 
                 process.ErrorDataReceived += (s, e) =>
                 {
-                    if (e.Data != null)
+                    if (e.Data == null)
+                    {
+                        errorReaderCompleted.TrySetResult();
+                    }
+                    else
                     {
                         Dispatcher.Invoke(() =>
                         {
@@ -101,6 +112,7 @@ namespace DatasetManager
                 process.BeginErrorReadLine();
 
                 await process.WaitForExitAsync();
+                await Task.WhenAll(outputReaderCompleted.Task, errorReaderCompleted.Task);
             }
             finally
             {
