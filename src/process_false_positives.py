@@ -161,12 +161,8 @@ def process_false_positives(
         print(f"Loading podsai model from {model_path}...")
         model = get_model_inference(model_type="podsai", model_path=model_path)
 
-    print("Proposed rows for output/csv/testing_60s_samples.csv:")
-    csv_writer = csv.writer(sys.stdout, lineterminator="\n")
-    csv_writer.writerow(
-        ["Category", "NodeName", "StartTimestamp", "URI", "Description", "Notes", "Confidence", "Tags"]
-    )
-
+    proposed_rows = []
+    proposed_uris = set(existing_uris)
     for feed in feeds:
         for detection in get_orcahello_detections(feed, start_time, end_time):
             if detection.timestamp is None:
@@ -276,6 +272,12 @@ def process_false_positives(
                 append_rows = mismatched_whale_rows
                 summary["whale_mismatch_segments"] += len(mismatched_whale_rows)
 
+            for row in append_rows:
+                uri = (row.get("URI") or "").strip()
+                if uri not in proposed_uris:
+                    proposed_uris.add(uri)
+                    proposed_rows.append(row)
+
             appended, duplicates = append_manual_samples(
                 manual_samples_path,
                 append_rows,
@@ -283,6 +285,25 @@ def process_false_positives(
             )
             summary["appended"] += appended
             summary["duplicates"] += duplicates
+
+    print("Proposed rows for output/csv/testing_60s_samples.csv:")
+    csv_writer = csv.DictWriter(
+        sys.stdout,
+        fieldnames=[
+            "Category",
+            "NodeName",
+            "StartTimestamp",
+            "URI",
+            "Description",
+            "Notes",
+            "Confidence",
+            "Tags",
+        ],
+        lineterminator="\n",
+        extrasaction="ignore",
+    )
+    csv_writer.writeheader()
+    csv_writer.writerows(proposed_rows)
 
     return summary
 
