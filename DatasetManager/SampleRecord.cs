@@ -4,8 +4,8 @@
 using CsvHelper.Configuration.Attributes;
 using System.ComponentModel;
 using System.Globalization;
+using System.Net;
 using System.Runtime.CompilerServices;
-using System.Web;
 
 namespace DatasetManager
 {
@@ -25,7 +25,17 @@ namespace DatasetManager
                 // The URI is in the format "https://live.orcasound.net/bouts/new/port-townsend?time=2026-07-08T18%3A37%3A31.000Z"
                 // We can extract the timestamp from the URI and parse it as a DateTime.
                 var uri = new Uri(URI);
-                var timeValue = HttpUtility.ParseQueryString(uri.Query)["time"];
+                var timeValue = uri.Query
+                    .TrimStart('?')
+                    .Split('&', StringSplitOptions.RemoveEmptyEntries)
+                    .Select(parameter => parameter.Split('=', 2))
+                    .Where(parts => parts.Length == 2)
+                    .Where(parts => string.Equals(
+                        WebUtility.UrlDecode(parts[0]),
+                        "time",
+                        StringComparison.OrdinalIgnoreCase))
+                    .Select(parts => WebUtility.UrlDecode(parts[1]))
+                    .FirstOrDefault();
                 if (string.IsNullOrEmpty(timeValue))
                 {
                     throw new InvalidOperationException(
