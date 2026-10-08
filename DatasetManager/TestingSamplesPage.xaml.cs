@@ -131,6 +131,11 @@ namespace DatasetManager
         /// <param name="e">The event data.</param>
         protected async void MoreFalseNegatives_Click(object sender, RoutedEventArgs e)
         {
+            if (!string.Equals(Category, "resident", StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
             if (Repository.ProposedTestingSamples.Count(sample => sample.Category == "resident") == 0)
             {
                 int days = OneWeekRadio.IsChecked == true ? 7 :
@@ -139,7 +144,7 @@ namespace DatasetManager
 
                 string timestamp = GetStartTimePSTStringForPastDays(days);
 
-                string result = await RunPythonAsync(@"src\process_false_negatives.py", $"--start {timestamp} --end now --category {Category}");
+                string result = await RunPythonAsync(@"src\process_false_negatives.py", $"--start {timestamp} --end now");
 
                 ProposeSamplesFromText(result, $"Proposed rows for output/csv/testing_60s_samples.csv:");
             }
