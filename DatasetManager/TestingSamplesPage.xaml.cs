@@ -217,10 +217,14 @@ namespace DatasetManager
                 .Where(sample => sample.Category == Category);
 
             EnableUpdateTags = false;
-
-            await OrcaHelloHelper.UpdateModeratedTagsAsync(filteredSamples);
-
-            EnableUpdateTags = true;
+            try
+            {
+                await OrcaHelloHelper.UpdateModeratedTagsAsync(filteredSamples);
+            }
+            finally
+            {
+                EnableUpdateTags = true;
+            }
         }
     }
 }
