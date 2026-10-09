@@ -126,36 +126,6 @@ namespace DatasetManager
         }
 
         /// <summary>
-        /// Handles the click event for the "More False Negatives" button.
-        /// If there are no proposed testing samples for the "resident"
-        /// category, it runs a Python script to process false negatives
-        /// and proposes new testing samples.
-        /// </summary>
-        /// <param name="sender">The source of the event.</param>
-        /// <param name="e">The event data.</param>
-        protected async void MoreFalseNegatives_Click(object sender, RoutedEventArgs e)
-        {
-            if (!string.Equals(Category, "resident", StringComparison.OrdinalIgnoreCase))
-            {
-                return;
-            }
-
-            if (Repository.ProposedTestingSamples.Count(sample => sample.Category == "resident") == 0)
-            {
-                int days = OneWeekRadio.IsChecked == true ? 7 :
-                           TwoWeekRadio.IsChecked == true ? 14 :
-                           30;
-
-                string timestamp = GetStartTimePSTStringForPastDays(days);
-
-                string result = await RunPythonAsync(@"src\process_false_negatives.py", $"--start {timestamp} --end now");
-
-                ProposeSamplesFromText(result, $"Proposed rows for output/csv/new_manual_samples.csv:");
-            }
-            NavigationService?.Navigate(new AddTestingSamplesPage(Repository, Category));
-        }
-
-        /// <summary>
         /// Handles the click event for the "Find Mispredictions" button.
         /// If there are no proposed training samples for the current
         /// category, it runs a Python script to process mispredictions
