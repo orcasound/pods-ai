@@ -33,7 +33,6 @@ namespace DatasetManager
 
         public void AppendError(string text)
         {
-            //LogTextBox.AppendText($"ERROR: {text}\n");
             LogTextBox.AppendText(text + Environment.NewLine);
             LogTextBox.ScrollToEnd();
         }
