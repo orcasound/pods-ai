@@ -482,6 +482,17 @@ def main() -> int:
         ),
     )
     parser.add_argument(
+        "--set",
+        default="testing",
+        type=str.lower,
+        choices=("training", "testing"),
+        help=(
+            "Sample set used when downloading audio with --node-name: "
+            "training downloads a 3-second clip, testing downloads a 60-second clip "
+            "(default: testing). Ignored when wav_file is provided."
+        ),
+    )
+    parser.add_argument(
         "--model",
         default="podsai",
         help=(
@@ -565,13 +576,16 @@ def main() -> int:
                 return 1
 
             temp_dir = stack.enter_context(TemporaryDirectory())
+            duration_seconds = 3.0 if args.set == "training" else 60.0
             try:
                 if args.start_timestamp_utc is not None:
                     start_time_utc = parse_utc_start_timestamp(args.start_timestamp_utc)
                 else:
                     end_time_pst = parse_pst_end_timestamp(end_timestamp_str)
-                    start_time_utc = end_time_pst.astimezone(UTC_TZ) - timedelta(seconds=60)
-                wav_path = download_60s_audio_from_start_utc(args.node_name, start_time_utc, temp_dir)
+                    start_time_utc = end_time_pst.astimezone(UTC_TZ) - timedelta(seconds=duration_seconds)
+                wav_path = download_60s_audio_from_start_utc(
+                    args.node_name, start_time_utc, temp_dir, duration_seconds=duration_seconds
+                )
             except ValueError as e:
                 print(f"Failed to download wav: {e}", file=sys.stderr)
                 return 1

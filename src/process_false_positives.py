@@ -301,7 +301,7 @@ def main() -> int:
         "--set",
         type=str,
         default="training",
-        help="training or testing",
+        help="training or testing (default: training).",
     )
     parser.add_argument(
         "--feed",

@@ -344,9 +344,9 @@ def download_60s_audio_from_start_utc(
     node_name: str,
     start_time_utc: datetime,
     tmp_dir: str,
+    duration_seconds: float = 60.0,
 ) -> Optional[str]:
-    """Download a 60-second clip beginning at start_time_utc."""
-    duration_seconds = 60.0
+    """Download a clip (60 seconds by default) beginning at start_time_utc."""
     end_time_utc = start_time_utc + timedelta(seconds=duration_seconds)
     start_unix_time = int(start_time_utc.timestamp())
     end_unix_time = int(end_time_utc.timestamp())
@@ -420,7 +420,7 @@ def download_60s_audio_from_start_utc(
             return None
 
         clip_id = _build_clip_id(start_time_utc)
-        clipname = f"temp_60s_{node_name}_{clip_id}"
+        clipname = f"temp_{duration_seconds:g}s_{node_name}_{clip_id}"
         if len(file_names) > 1:
             hls_file = str(Path(tmp_dir) / f"{clipname}.ts")
             with open(hls_file, "wb") as wfd:
@@ -445,7 +445,7 @@ def download_60s_audio_from_start_utc(
             ac=1,
         )
         ffmpeg.run(stream, overwrite_output=True, quiet=True)
-        print(f"  Downloaded 60s audio: {wav_file_path}")
+        print(f"  Downloaded {duration_seconds:g}s audio: {wav_file_path}")
         return wav_file_path
     except Exception as e:
         print(f"  Warning: Unable to retrieve audio clip: {e}")

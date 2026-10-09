@@ -958,6 +958,38 @@ class TestMainCLI:
         finally:
             Path(wav_path).unlink(missing_ok=True)
 
+    def test_main_training_set_downloads_3s_clip(self):
+        """main() requests a 3-second clip when --set training is given."""
+        wav_path = _make_wav()
+        try:
+            mock_model = _make_fastai_model_mock()
+            with patch(
+                "sys.argv",
+                [
+                    "run_inference.py",
+                    "--node-name",
+                    "rpi_sunset_bay",
+                    "--start-timestamp-utc",
+                    "2025-01-15T20:29:00Z",
+                    "--set",
+                    "training",
+                    "--model",
+                    "fastai",
+                    "--model-path",
+                    "./model",
+                ],
+            ), patch(
+                "run_inference.download_60s_audio_from_start_utc",
+                return_value=wav_path,
+            ) as mock_download, patch(
+                "run_inference.get_model_inference", return_value=mock_model
+            ):
+                from run_inference import main
+                assert main() == 0
+                assert mock_download.call_args.kwargs["duration_seconds"] == 3.0
+        finally:
+            Path(wav_path).unlink(missing_ok=True)
+
     def test_main_returns_one_when_download_fails(self):
         """main() returns exit code 1 when audio download returns None."""
         with patch(
