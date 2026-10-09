@@ -1,0 +1,111 @@
+﻿<UserControl x:Class="DatasetManager.SamplesGridControl"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:local="clr-namespace:DatasetManager"
+             mc:Ignorable="d" 
+             d:DesignHeight="450" d:DesignWidth="800">
+    <UserControl.Resources>
+        <local:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
+    </UserControl.Resources>
+    <DataGrid x:Name="SamplesDataGrid"
+              Grid.Row="1"
+              ItemsSource="{Binding Samples}"
+              AutoGenerateColumns="False"
+              CanUserAddRows="False">
+        <DataGrid.Resources>
+            <Style x:Key="RightAlignedTextStyle" TargetType="TextBlock">
+                <Setter Property="TextAlignment" Value="Right"/>
+            </Style>
+            <Style x:Key="RightAlignedCellStyle" TargetType="DataGridCell">
+                <Setter Property="HorizontalContentAlignment" Value="Right"/>
+            </Style>
+        </DataGrid.Resources>
+        <DataGrid.Columns>
+            <DataGridTextColumn Header="Node" Binding="{Binding NodeName}" Width="Auto" />
+            <DataGridTextColumn Header="Timestamp" Binding="{Binding StartTimestamp}" Width="Auto" />
+            <DataGridTemplateColumn Header="Description" Width="*">
+                <DataGridTemplateColumn.CellTemplate>
+                    <DataTemplate>
+                        <TextBlock Text="{Binding Description}" TextWrapping="Wrap" />
+                    </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+            </DataGridTemplateColumn>
+            <DataGridTextColumn Header="Source" Binding="{Binding Source}" Width="Auto" />
+            <DataGridTextColumn Width="*" Binding="{Binding ModeratedTags}">
+                <DataGridTextColumn.Header>
+                    <TextBlock Text="Moderated Tags" ToolTip="Tags set by a human moderator."/>
+                </DataGridTextColumn.Header>
+            </DataGridTextColumn>
+            <DataGridTemplateColumn Width="*">
+                <DataGridTemplateColumn.Header>
+                    <TextBlock Text="Inferred Tags"
+                               ToolTip="Tags predicted by the current PODS-AI model."/>
+                </DataGridTemplateColumn.Header>
+                <DataGridTemplateColumn.CellTemplate>
+                    <DataTemplate>
+                        <Grid>
+                            <TextBlock x:Name="InferredTagsText"
+                                       Text="{Binding InferredTags}"
+                                       Visibility="Collapsed" />
+                            <Button x:Name="InferButton"
+                                    Content="Infer"
+                                    Click="InferButton_Click"
+                                    Visibility="Visible"
+                                    IsEnabled="{Binding RelativeSource={RelativeSource AncestorType=UserControl},Path=InferenceEnabled}"/>
+                        </Grid>
+                        <DataTemplate.Triggers>
+                            <DataTrigger Binding="{Binding HasInferredTags}" Value="True">
+                                <Setter TargetName="InferredTagsText" Property="Visibility" Value="Visible" />
+                                <Setter TargetName="InferButton" Property="Visibility" Value="Collapsed" />
+                            </DataTrigger>
+                        </DataTemplate.Triggers>
+                    </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+            </DataGridTemplateColumn>
+            <DataGridTextColumn Header="Confidence"
+                    Binding="{Binding InferredConfidenceRatio, StringFormat={}{0:P0}}"
+                    Width="Auto"
+                    ElementStyle="{StaticResource RightAlignedTextStyle}"
+                    CellStyle="{StaticResource RightAlignedCellStyle}" />
+            <DataGridTemplateColumn Header="Audio" Width="Auto">
+                <DataGridTemplateColumn.CellTemplate>
+                    <DataTemplate>
+                        <Button Content="Listen" Click="ListenButton_Click" />
+                    </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+            </DataGridTemplateColumn>
+            <DataGridTemplateColumn Header="Accept">
+                <DataGridTemplateColumn.CellStyle>
+                    <Style TargetType="DataGridCell">
+                        <Setter Property="Visibility"
+                                Value="{Binding RelativeSource={RelativeSource AncestorType=UserControl},
+                                Path=ShowReviewButtons,
+                                Converter={StaticResource BoolToVisibilityConverter}}" />
+                    </Style>
+                </DataGridTemplateColumn.CellStyle>
+                <DataGridTemplateColumn.CellTemplate>
+                    <DataTemplate>
+                        <Button Content="Accept" Click="AcceptButton_Click"/>
+                    </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+            </DataGridTemplateColumn>
+            <DataGridTemplateColumn Header="Reject">
+                <DataGridTemplateColumn.CellStyle>
+                    <Style TargetType="DataGridCell">
+                        <Setter Property="Visibility"
+                                Value="{Binding RelativeSource={RelativeSource AncestorType=UserControl},
+                                Path=ShowReviewButtons,
+                                Converter={StaticResource BoolToVisibilityConverter}}" />
+                    </Style>
+                </DataGridTemplateColumn.CellStyle>
+                <DataGridTemplateColumn.CellTemplate>
+                    <DataTemplate>
+                        <Button Content="Reject" Click="RejectButton_Click"/>
+                    </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+            </DataGridTemplateColumn>
+        </DataGrid.Columns>
+    </DataGrid>
+</UserControl>

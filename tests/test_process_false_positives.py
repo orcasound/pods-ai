@@ -157,7 +157,7 @@ class TestProcessFalsePositives:
         assert summary["rejected"] == 0
         mock_get_feeds.assert_called_once_with()
 
-    def test_testing_mode_appends_row_from_add_testing_60s_sample(self, tmp_path):
+    def test_testing_mode_appends_and_prints_contiguous_proposal_csv(self, tmp_path, capsys):
         """Testing mode should append the single corrected 60-second row."""
         feed = _make_feed()
         detection = OrcaHelloDetection(
@@ -169,6 +169,20 @@ class TestProcessFalsePositives:
             tags="vessel",
         )
         manual_samples_path = tmp_path / "manual_testing_samples.csv"
+        testing_row = {
+            "Category": "vessel",
+            "NodeName": "rpi_test",
+            "StartTimestamp": "2025_01_01_03_59_58_PST",
+            "URI": "https://example.com/testing",
+            "Description": "Boat noise from a nearby vessel.",
+            "Notes": "fp_machine",
+            "Confidence": 100,
+            "Tags": "vessel",
+        }
+
+        def add_testing_sample(**kwargs):
+            print("testing diagnostic")
+            return testing_row
 
         with patch("process_false_positives.get_model_inference") as mock_get_model, \
              patch("process_false_positives.get_orcasite_feeds_with_retry", return_value=[feed]), \
@@ -176,16 +190,7 @@ class TestProcessFalsePositives:
              patch("process_false_positives.add_training_3s_samples") as mock_add_training, \
              patch(
                  "process_false_positives.add_testing_60s_sample",
-                 return_value={
-                     "Category": "vessel",
-                     "NodeName": "rpi_test",
-                     "StartTimestamp": "2025_01_01_03_59_58_PST",
-                     "URI": "https://example.com/testing",
-                     "Description": "Boat noise from a nearby vessel.",
-                     "Notes": "fp_machine",
-                     "Confidence": 100,
-                     "Tags": "vessel",
-                 },
+                 side_effect=add_testing_sample,
              ) as mock_add_testing:
             summary = process_false_positives(
                 manual_samples_path=manual_samples_path,
@@ -205,6 +210,15 @@ class TestProcessFalsePositives:
         assert summary["whale_mismatch_segments"] == 1
         assert summary["appended"] == 1
         assert summary["duplicates"] == 0
+
+        output = capsys.readouterr().out
+        marker = "Proposed rows for output/csv/testing_60s_samples.csv:"
+        assert output.index("testing diagnostic") < output.index(marker)
+        csv_section = output.split(marker + "\n", 1)[1]
+        proposed_rows = list(csv.DictReader(csv_section.splitlines()))
+        assert len(proposed_rows) == 1
+        assert proposed_rows[0]["URI"] == "https://example.com/testing"
+        assert proposed_rows[0]["Tags"] == "vessel"
 
         with open(manual_samples_path, "r", encoding="utf-8") as handle:
             rows = list(csv.DictReader(handle))

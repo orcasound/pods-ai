@@ -15,6 +15,8 @@ For each confirmed OrcaHello detection in the selected timeframe, this script:
 """
 
 import argparse
+import csv
+import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -27,7 +29,7 @@ from audio_utils import (
     get_orcahello_detections,
     parse_timestamp_pst,
 )
-from manual_samples_utils import append_manual_samples, load_existing_uris
+from manual_samples_utils import CSV_FIELDNAMES, append_manual_samples, load_existing_uris
 from model_inference import get_model_inference
 from orcasite_feeds import get_orcasite_feeds_with_retry
 
@@ -80,6 +82,8 @@ def process_false_negatives(
             return summary
 
     existing_uris = load_existing_uris(manual_samples_path)
+    proposed_rows = []
+    proposed_uris = set(existing_uris)
 
     print(f"Loading podsai model from {model_path}...")
     podsai_model = get_model_inference(model_type="podsai", model_path=model_path)
@@ -185,6 +189,12 @@ def process_false_negatives(
                 mismatched_rows.append(updated_row)
 
             summary["mismatched_segments"] += len(mismatched_rows)
+            for row in mismatched_rows:
+                uri = (row.get("URI") or "").strip()
+                if uri not in proposed_uris:
+                    proposed_uris.add(uri)
+                    proposed_rows.append(row)
+
             appended, duplicates = append_manual_samples(
                 manual_samples_path,
                 mismatched_rows,
@@ -192,6 +202,16 @@ def process_false_negatives(
             )
             summary["appended"] += appended
             summary["duplicates"] += duplicates
+
+    print("Proposed rows for output/csv/new_manual_samples.csv:")
+    csv_writer = csv.DictWriter(
+        sys.stdout,
+        fieldnames=CSV_FIELDNAMES,
+        lineterminator="\n",
+        extrasaction="ignore",
+    )
+    csv_writer.writeheader()
+    csv_writer.writerows(proposed_rows)
 
     return summary
 
