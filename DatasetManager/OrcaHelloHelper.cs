@@ -11,6 +11,7 @@ using System;
 using System.Collections.Generic;
 using System.Net.Http;
 using System.Text;
+using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Navigation;
 using System.Xml.XPath;
@@ -45,6 +46,9 @@ namespace DatasetManager
                     sp.GetRequiredService<ILogger<ApiClientHelper>>()));
             services.AddTransient<DetectionService>();
 
+            using var provider = services.BuildServiceProvider();
+            var detectionService = provider.GetRequiredService<DetectionService>();
+
             var filterOptions = new ReviewedFilterOptionsDTO
             {
                 SortOrder = "asc",
@@ -68,7 +72,21 @@ namespace DatasetManager
                     MinutesPerPage = 50,
                 };
 
-                PaginatedResponseDTO<List<Detection>> result = await detectionService.GetDetectionsAsync(paginationOptions, filterOptions);
+                PaginatedResponseDTO<List<Detection>> result;
+                try
+                {
+                    result = await detectionService.GetDetectionsAsync(paginationOptions, filterOptions);
+                }
+                catch (Exception)
+                {
+                    MessageBox.Show(
+                        "Could not retrieve detections from OrcaHello. Please check your connection and try again.",
+                        "OrcaHello update failed",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Error);
+                    return null;
+                }
+
                 if (result?.Response == null)
                 {
                     // Failed.
