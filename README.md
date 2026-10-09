@@ -246,3 +246,21 @@ flowchart TD;
     testingSamples-->generateEmbeddings;
     testingWav-->generateEmbeddings-->embeddings;
 ```
+
+## Dataset Manager (Windows)
+
+`DatasetManager/` contains a Windows WPF application for reviewing and updating the training and testing datasets. It provides:
+
+- Per-category counts for samples and downloaded WAVs, along with test accuracy and false-positive/false-negative statistics when `model-comparison.txt` is available.
+- Training and testing sample grids with links to listen to the Orcasound audio, moderated tags, and on-demand PODS-AI inference.
+- A review queue for proposed samples, with accept/reject actions and checks for overlaps with existing samples.
+- Actions to find recent resident false negatives for training, testing false positives, and testing-set mispredictions by running the repository’s Python scripts.
+- An option to refresh moderated tags and confidence values for testing samples from OrcaHello.
+
+To build and run the app, use Windows with the .NET 10 SDK. Initialize the `external/orcahello` submodule, install the Python dependencies described in [Getting Started](#getting-started), and ensure `python` is available on `PATH`. From the repository root, run:
+
+```powershell
+dotnet run --project DatasetManager/DatasetManager.csproj
+```
+
+The app reads `output/csv/training_3s_samples.csv` and `output/csv/testing_60s_samples.csv`, and uses WAVs under `output/wav` and `output/testing-wav`. To run it against a repository checkout elsewhere, pass that checkout’s path after `--`. Use **Save** on the overview page to write accepted dataset changes back to the CSV files.
