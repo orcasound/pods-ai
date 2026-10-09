@@ -39,10 +39,11 @@ namespace DatasetManager
             services.AddLogging();
 
             services.AddSingleton<IAuthTokenProvider, NoAuthTokenProvider>();
+            services.AddScoped<IApiClientHelper>(sp =>
+                new ApiClientHelper(
+                    sp.GetRequiredService<IHttpClientFactory>(),
+                    sp.GetRequiredService<ILogger<ApiClientHelper>>()));
             services.AddTransient<DetectionService>();
-
-            var provider = services.BuildServiceProvider();
-            var detectionService = provider.GetRequiredService<DetectionService>();
 
             var filterOptions = new ReviewedFilterOptionsDTO
             {
