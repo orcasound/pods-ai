@@ -146,7 +146,7 @@ namespace DatasetManager
 
                 string result = await RunPythonAsync(@"src\process_false_negatives.py", $"--start {timestamp} --end now");
 
-                ProposeSamplesFromText(result, $"Proposed rows for output/csv/testing_60s_samples.csv:");
+                ProposeSamplesFromText(result, $"Proposed rows for output/csv/new_manual_samples.csv:");
             }
             NavigationService?.Navigate(new AddTestingSamplesPage(Repository, Category));
         }
