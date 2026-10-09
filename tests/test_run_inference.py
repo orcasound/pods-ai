@@ -915,7 +915,7 @@ class TestMainCLI:
                     "./model",
                 ],
             ), patch(
-                "run_inference.download_60s_audio_from_start_utc",
+                "run_inference.download_audio_from_start_utc",
                 return_value=wav_path,
             ), patch(
                 "run_inference.get_model_inference", return_value=mock_model
@@ -944,7 +944,7 @@ class TestMainCLI:
                     "./model",
                 ],
             ), patch(
-                "run_inference.download_60s_audio_from_start_utc",
+                "run_inference.download_audio_from_start_utc",
                 return_value=wav_path,
             ) as mock_download, patch(
                 "run_inference.get_model_inference", return_value=mock_model
@@ -979,7 +979,7 @@ class TestMainCLI:
                     "./model",
                 ],
             ), patch(
-                "run_inference.download_60s_audio_from_start_utc",
+                "run_inference.download_audio_from_start_utc",
                 return_value=wav_path,
             ) as mock_download, patch(
                 "run_inference.get_model_inference", return_value=mock_model
@@ -1005,7 +1005,7 @@ class TestMainCLI:
                 "--model-path",
                 "./model",
             ],
-        ), patch("run_inference.download_60s_audio_from_start_utc", return_value=None):
+        ), patch("run_inference.download_audio_from_start_utc", return_value=None):
             from run_inference import main
             assert main() == 1
 

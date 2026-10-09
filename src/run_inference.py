@@ -29,7 +29,7 @@ import ffmpeg
 
 from audio_utils import (
     format_utc_iso_z,
-    download_60s_audio_from_start_utc,
+    download_audio_from_start_utc,
     download_from_url,
     get_cached_folders,
     get_difference_between_times_in_seconds,
@@ -583,7 +583,7 @@ def main() -> int:
                 else:
                     end_time_pst = parse_pst_end_timestamp(end_timestamp_str)
                     start_time_utc = end_time_pst.astimezone(UTC_TZ) - timedelta(seconds=duration_seconds)
-                wav_path = download_60s_audio_from_start_utc(
+                wav_path = download_audio_from_start_utc(
                     args.node_name, start_time_utc, temp_dir, duration_seconds=duration_seconds
                 )
             except ValueError as e:
