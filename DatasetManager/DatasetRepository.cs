@@ -288,10 +288,9 @@ namespace DatasetManager
                 Environment.Exit(1);
             }
 
-            repository._trainingWavs = Directory.GetFiles(
-                Path.Combine(rootPath, "output", "wav"),
-                "*.wav",
-                SearchOption.AllDirectories).ToList();
+            repository._trainingWavs = Directory.Exists(Path.Combine(rootPath, "output", "wav"))
+                ? Directory.GetFiles(Path.Combine(rootPath, "output", "wav"), "*.wav", SearchOption.AllDirectories).ToList()
+                : new List<string>();
 
             repository._testingWavs = Directory.GetFiles(
                 Path.Combine(rootPath, "output", "testing-wav"),
