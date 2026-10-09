@@ -917,11 +917,50 @@ class TestMainCLI:
             ), patch(
                 "run_inference.download_audio_from_start_utc",
                 return_value=wav_path,
-            ), patch(
+            ) as mock_download, patch(
                 "run_inference.get_model_inference", return_value=mock_model
             ):
                 from run_inference import main
                 assert main() == 0
+                mock_download.assert_called_once()
+                _, start_time_utc, _ = mock_download.call_args.args
+                assert start_time_utc == datetime(2025, 1, 15, 20, 29, tzinfo=timezone.utc)
+                assert mock_download.call_args.kwargs["duration_seconds"] == 60.0
+        finally:
+            Path(wav_path).unlink(missing_ok=True)
+
+    def test_main_training_set_downloads_from_end_timestamp(self):
+        """main() requests a 3-second training clip ending at the given timestamp."""
+        wav_path = _make_wav()
+        try:
+            mock_model = _make_fastai_model_mock()
+            with patch(
+                "sys.argv",
+                [
+                    "run_inference.py",
+                    "--node-name",
+                    "rpi_sunset_bay",
+                    "--end-timestamp-str",
+                    "2025_01_15_12_30_00_PST",
+                    "--set",
+                    "training",
+                    "--model",
+                    "fastai",
+                    "--model-path",
+                    "./model",
+                ],
+            ), patch(
+                "run_inference.download_audio_from_start_utc",
+                return_value=wav_path,
+            ) as mock_download, patch(
+                "run_inference.get_model_inference", return_value=mock_model
+            ):
+                from run_inference import main
+                assert main() == 0
+                mock_download.assert_called_once()
+                _, start_time_utc, _ = mock_download.call_args.args
+                assert start_time_utc == datetime(2025, 1, 15, 20, 29, 57, tzinfo=timezone.utc)
+                assert mock_download.call_args.kwargs["duration_seconds"] == 3.0
         finally:
             Path(wav_path).unlink(missing_ok=True)
 
