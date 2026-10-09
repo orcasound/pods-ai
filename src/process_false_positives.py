@@ -286,19 +286,26 @@ def process_false_positives(
             summary["appended"] += appended
             summary["duplicates"] += duplicates
 
-    print("Proposed rows for output/csv/testing_60s_samples.csv:")
+    output_path = (
+        "output/csv/training_3s_samples.csv"
+        if for_training
+        else "output/csv/testing_60s_samples.csv"
+    )
+    fieldnames = [
+        "Category",
+        "NodeName",
+        "StartTimestamp",
+        "URI",
+        "Description",
+        "Notes",
+        "Confidence",
+    ]
+    if not for_training:
+        fieldnames.append("Tags")
+    print(f"Proposed rows for {output_path}:")
     csv_writer = csv.DictWriter(
         sys.stdout,
-        fieldnames=[
-            "Category",
-            "NodeName",
-            "StartTimestamp",
-            "URI",
-            "Description",
-            "Notes",
-            "Confidence",
-            "Tags",
-        ],
+        fieldnames=fieldnames,
         lineterminator="\n",
         extrasaction="ignore",
     )
