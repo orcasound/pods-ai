@@ -64,33 +64,37 @@ namespace DatasetManager
                    ? DatasetRepository.LoadSamplesFromText(testingCsvSection)
                    : new();
 
-            // Remove any samples that overlap any samples already in the training set to avoid duplicates.
+            // Remove any testing samples that overlap any samples already in the training set to avoid duplicates.
             newTestingSamples.RemoveAll(sample =>
                 Repository.FindOverlapsIn(
                     Repository.TrainingSamples,
+                    samplesSeconds: 3,
                     sample,
-                    seconds: 3).Any());
+                    sampleSeconds: 60).Any());
 
             // Remove any samples that overlap any samples already the testing set to avoid duplicates.
             newTestingSamples.RemoveAll(sample =>
                 Repository.FindOverlapsIn(
                     Repository.TestingSamples,
+                    samplesSeconds: 60,
                     sample,
-                    seconds: 60).Any());
+                    sampleSeconds: 60).Any());
 
             // Now remove any that overlap with any samples already proposed to avoid duplicates.
             newTestingSamples.RemoveAll(sample =>
                 Repository.FindOverlapsIn(
                     Repository.ProposedTestingSamples,
+                    samplesSeconds: 60,
                     sample,
-                    seconds: 60).Any());
+                    sampleSeconds: 60).Any());
 
             // Finally, remove any that overlap with any samples already in the rejected set.
             newTestingSamples.RemoveAll(sample =>
                 Repository.FindOverlapsIn(
                     Repository.RejectedTestingSamples,
+                    samplesSeconds: 60,
                     sample,
-                    seconds: 60).Any());
+                    sampleSeconds: 60).Any());
 
             Repository.ProposeTestingSamples(newTestingSamples);
         }
@@ -175,22 +179,25 @@ namespace DatasetManager
                 newTrainingSamples.RemoveAll(sample =>
                     Repository.FindOverlapsIn(
                         Repository.TrainingSamples,
+                        samplesSeconds: 3,
                         sample,
-                        seconds: 3).Any());
+                        sampleSeconds: 3).Any());
 
                 // Now remove any that overlap with any samples already proposed to avoid duplicates.
                 newTrainingSamples.RemoveAll(sample =>
                     Repository.FindOverlapsIn(
                         Repository.ProposedTrainingSamples,
+                        samplesSeconds: 3,
                         sample,
-                        seconds: 3).Any());
+                        sampleSeconds: 3).Any());
 
                 // Finally, remove any that overlap with any samples already in the rejected set.
                 newTrainingSamples.RemoveAll(sample =>
                     Repository.FindOverlapsIn(
                         Repository.RejectedTrainingSamples,
+                        samplesSeconds: 3,
                         sample,
-                        seconds: 3).Any());
+                        sampleSeconds: 3).Any());
 
                 Repository.ProposeTrainingSamples(newTrainingSamples);
             }

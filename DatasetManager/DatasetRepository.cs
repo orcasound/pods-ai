@@ -21,9 +21,9 @@ namespace DatasetManager
         public int TestFalsePositiveCount { get; set; }
         public int TestFalseNegativeCount { get; set; }
 
-        public double TestCorrectRatio => 1.0 * TestCorrectCount / TestTotalCount;
-        public double TestFalsePositiveRatio => 1.0 * TestFalsePositiveCount / TestTotalCount;
-        public double TestFalseNegativeRatio => 1.0 * TestFalseNegativeCount / TestTotalCount;
+        public double TestCorrectRatio => (TestTotalCount > 0) ? 1.0 * TestCorrectCount / TestTotalCount : 0;
+        public double TestFalsePositiveRatio => (TestTotalCount > 0) ? 1.0 * TestFalsePositiveCount / TestTotalCount : 0;
+        public double TestFalseNegativeRatio => (TestTotalCount > 0) ? 1.0 * TestFalseNegativeCount / TestTotalCount : 0;
     }
 
     public class DatasetRepository
@@ -416,13 +416,14 @@ namespace DatasetManager
         /// Finds overlapping samples in the given list of samples based on the specified sample and time window in seconds.
         /// </summary>
         /// <param name="samples">The list of samples to search for overlaps.</param>
+        /// <param name="samplesSeconds">The duration of the samples to find overlaps for.</param>
         /// <param name="sample">The sample to find overlaps for.</param>
-        /// <param name="seconds">The time window in seconds to consider for overlaps.</param>
+        /// <param name="sampleSeconds">The duration of the sample to find overlaps for.</param>
         /// <returns>A list of overlapping samples.</returns>
-        public List<SampleRecord> FindOverlapsIn(IEnumerable<SampleRecord> samples, SampleRecord sample, int seconds)
+        public List<SampleRecord> FindOverlapsIn(IEnumerable<SampleRecord> samples, int samplesSeconds, SampleRecord sample, int sampleSeconds)
         {
             DateTime sampleStart = sample.StartTimestampUtc;
-            DateTime sampleEnd = sampleStart.AddSeconds(seconds);
+            DateTime sampleEnd = sampleStart.AddSeconds(sampleSeconds);
 
             return samples.Where(s =>
             {
@@ -432,7 +433,7 @@ namespace DatasetManager
                 }
 
                 DateTime otherStart = s.StartTimestampUtc;
-                DateTime otherEnd = otherStart.AddSeconds(seconds);
+                DateTime otherEnd = otherStart.AddSeconds(samplesSeconds);
 
                 return sampleStart < otherEnd && otherStart < sampleEnd;
             }).ToList();
@@ -454,7 +455,11 @@ namespace DatasetManager
             ProposedTrainingSamples.Remove(trainingSample);
 
             // Remove any overlapping samples from testing samples.
-            var overlaps = FindOverlapsIn(TestingSamples, trainingSample, 60);
+            var overlaps = FindOverlapsIn(
+                TestingSamples,
+                samplesSeconds: 60,
+                sample: trainingSample,
+                sampleSeconds: 3);
             foreach (var overlap in overlaps)
             {
                 TestingSamples.Remove(overlap);

@@ -299,9 +299,8 @@ def process_false_positives(
         "Description",
         "Notes",
         "Confidence",
+        "Tags",
     ]
-    if not for_training:
-        fieldnames.append("Tags")
     print(f"Proposed rows for {output_path}:")
     csv_writer = csv.DictWriter(
         sys.stdout,
