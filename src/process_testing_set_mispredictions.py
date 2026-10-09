@@ -213,7 +213,7 @@ def triage_testing_set_mispredictions(
     for testing_row in rows:
         category = normalize_label(testing_row.get("Category", ""))
         if normalized_category_filter and category != normalized_category_filter:
-                continue
+            continue
         summary["rows_seen"] += 1
         print(f"Processing row {summary['rows_seen']} of {total}...")
         wav_path = find_wav_file(testing_row, wav_dir)
