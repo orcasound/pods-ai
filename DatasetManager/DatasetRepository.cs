@@ -225,6 +225,9 @@ namespace DatasetManager
             List<string> trainingWavs,
             List<string> testingWavs)
         {
+            // Recompute stats from scratch so callers can refresh after collection changes.
+            Stats.Clear();
+
             var categories =
                 trainingSamples.Select(s => s.Category)
                 .Union(testingSamples.Select(s => s.Category))
@@ -463,6 +466,9 @@ namespace DatasetManager
             {
                 TestingSamples.Remove(overlap);
             }
+
+            // Refresh stats so UI shows updated counts after accepting a sample
+            PopulateStats(TrainingSamples, TestingSamples, _trainingWavs, _testingWavs);
         }
 
         /// <summary>
