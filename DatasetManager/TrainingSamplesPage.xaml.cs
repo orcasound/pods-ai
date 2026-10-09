@@ -37,7 +37,7 @@ namespace DatasetManager
                            30;
 
                 string timestamp = GetStartTimePSTStringForPastDays(days);
-                string result = await RunPythonAsync(@"src\process_false_negatives.py", $"--start {timestamp} --end now");
+                string result = await RunPythonAsync(@"src\process_false_negatives.py", $"--start {timestamp} --end now --output-dir output/wav/resident");
                 string? trainingCsvSection = DatasetRepository.ExtractCsvSection(
                     result,
                     "Proposed rows for output/csv/new_manual_samples.csv:");
