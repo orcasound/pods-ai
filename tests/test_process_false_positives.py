@@ -172,7 +172,7 @@ class TestProcessFalsePositives:
         testing_row = {
             "Category": "vessel",
             "NodeName": "rpi_test",
-            "StartTimestamp": "2025_01_01_04_00_00_PST",
+            "StartTimestamp": "2025_01_01_03_59_58_PST",
             "URI": "https://example.com/testing",
             "Description": "Boat noise from a nearby vessel.",
             "Notes": "fp_machine",
@@ -202,7 +202,7 @@ class TestProcessFalsePositives:
         mock_add_training.assert_not_called()
         assert mock_add_testing.call_count == 1
         assert mock_add_testing.call_args.kwargs["corrected_class"] == "vessel"
-        assert mock_add_testing.call_args.kwargs["start_timestamp"] == "2025_01_01_04_00_00_PST"
+        assert mock_add_testing.call_args.kwargs["start_timestamp"] == "2025_01_01_03_59_58_PST"
         assert mock_add_testing.call_args.kwargs["fallback_description"] == detection.comments
         assert mock_add_testing.call_args.kwargs["fallback_notes"] == "fp_machine"
         assert mock_add_testing.call_args.kwargs["fallback_tags"] == detection.tags
@@ -299,6 +299,7 @@ class TestProcessFalsePositives:
         assert summary["duplicates"] == 1
         assert mock_model.predict.call_count == 1
         assert mock_add_samples.call_args.kwargs["model"] is mock_model
+        assert mock_add_samples.call_args.kwargs["start_timestamp"] == "2025_01_01_03_59_58_PST"
         assert mock_add_samples.call_args.kwargs["corrected_class"] == "vessel"
         assert mock_add_samples.call_args.kwargs["fallback_description"] == detection.comments
         assert mock_add_samples.call_args.kwargs["fallback_notes"] == "fp_machine"

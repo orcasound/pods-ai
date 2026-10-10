@@ -35,6 +35,7 @@ from orcasite_feeds import get_orcasite_feeds_with_retry
 
 DEFAULT_MANUAL_SAMPLES_CSV = "output/csv/new_manual_samples.csv"
 DEFAULT_ORCAHELLO_MODEL_PATH = "orcasound/orcahello-srkw-detector-v1"
+AUDIO_OFFSET_SECONDS = 2
 WHALE_CLASSES = {"resident", "transient", "humpback"}
 
 
@@ -102,7 +103,9 @@ def process_false_negatives(
                 continue
 
             summary["confirmed"] += 1
-            timestamp_str = format_timestamp_pst(detection.timestamp)
+            timestamp_str = format_timestamp_pst(
+                detection.timestamp - timedelta(seconds=AUDIO_OFFSET_SECONDS)
+            )
             print(f"Checking confirmed OrcaHello detection at {timestamp_str}")
 
             with TemporaryDirectory() as temp_dir:
