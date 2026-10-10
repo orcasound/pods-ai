@@ -1,0 +1,82 @@
+﻿<Page x:Class="DatasetManager.OverviewPage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+      xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+      xmlns:local="clr-namespace:DatasetManager"
+      mc:Ignorable="d" 
+      d:DesignHeight="450" d:DesignWidth="800"
+      Title="OverviewPage">
+
+    <Grid Margin="10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        <DataGrid Grid.Row="0"
+                  x:Name="StatsGrid"
+                  ItemsSource="{Binding Stats}"
+                  AutoGenerateColumns="False"
+                  IsReadOnly="True" 
+                  SelectionMode="Single"
+                  SelectionUnit="Cell"
+                  SelectedCellsChanged="StatsGrid_SelectedCellsChanged">
+            <DataGrid.Resources>
+                <Style x:Key="RightAlignedTextStyle" TargetType="TextBlock">
+                    <Setter Property="TextAlignment" Value="Right"/>
+                </Style>
+                <Style x:Key="RightAlignedCellStyle" TargetType="DataGridCell">
+                    <Setter Property="HorizontalContentAlignment" Value="Right"/>
+                </Style>
+            </DataGrid.Resources>
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="Category" Binding="{Binding Category}" />
+                <DataGridTextColumn Header="# Training Samples"
+                                    Binding="{Binding TrainingSampleCount}"
+                                    ElementStyle="{StaticResource RightAlignedTextStyle}"
+                                    CellStyle="{StaticResource RightAlignedCellStyle}" />
+                <DataGridTextColumn Header="# Training WAVs"
+                                    Binding="{Binding TrainingWavCount}"
+                                    ElementStyle="{StaticResource RightAlignedTextStyle}"
+                                    CellStyle="{StaticResource RightAlignedCellStyle}" />
+                <DataGridTextColumn Header="# Testing Samples"
+                                    Binding="{Binding TestingSampleCount}"
+                                    ElementStyle="{StaticResource RightAlignedTextStyle}"
+                                    CellStyle="{StaticResource RightAlignedCellStyle}" />
+                <DataGridTextColumn Header="# Testing WAVs"
+                                    Binding="{Binding TestingWavCount}"
+                                    ElementStyle="{StaticResource RightAlignedTextStyle}"
+                                    CellStyle="{StaticResource RightAlignedCellStyle}" />
+                <DataGridTextColumn Header="Correct Tests"
+                                    Binding="{Binding TestCorrectCount}"
+                                    ElementStyle="{StaticResource RightAlignedTextStyle}"
+                                    CellStyle="{StaticResource RightAlignedCellStyle}" />
+                <DataGridTextColumn Header="Total Tests"
+                                    Binding="{Binding TestTotalCount}"
+                                    ElementStyle="{StaticResource RightAlignedTextStyle}"
+                                    CellStyle="{StaticResource RightAlignedCellStyle}" />
+                <DataGridTextColumn Header="% Correct"
+                                    Binding="{Binding TestCorrectRatio, StringFormat={}{0:P0}}"
+                                    ElementStyle="{StaticResource RightAlignedTextStyle}"
+                                    CellStyle="{StaticResource RightAlignedCellStyle}" />
+                <DataGridTextColumn Binding="{Binding TestFalsePositiveRatio, StringFormat={}{0:P0}}"
+                                    ElementStyle="{StaticResource RightAlignedTextStyle}"
+                                    CellStyle="{StaticResource RightAlignedCellStyle}">
+                    <DataGridTextColumn.Header>
+                        <TextBlock Text="% FP"
+                                   ToolTip="Percentage of testing samples in this category that PODS-AI incorrectly predicted as a whale category."/>
+                    </DataGridTextColumn.Header>
+                </DataGridTextColumn>
+                <DataGridTextColumn Binding="{Binding TestFalseNegativeRatio, StringFormat={}{0:P0}}"
+                                    ElementStyle="{StaticResource RightAlignedTextStyle}"
+                                    CellStyle="{StaticResource RightAlignedCellStyle}">
+                    <DataGridTextColumn.Header>
+                        <TextBlock Text="% FN"
+                                   ToolTip="Percentage of testing samples in this category that PODS-AI incorrectly predicted as any other category."/>
+                    </DataGridTextColumn.Header>
+                </DataGridTextColumn>
+            </DataGrid.Columns>
+        </DataGrid>
+        <Button Grid.Row="1" Content="Save" Click="Save_Click"></Button>
+    </Grid>
+</Page>
