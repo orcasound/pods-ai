@@ -103,7 +103,7 @@ class TestProcessFalseNegatives:
         assert summary["confirmed"] == 0
         mock_get_feeds.assert_called_once_with()
 
-    def test_appends_orcahello_resident_segments_missed_by_podsai(self, tmp_path):
+    def test_appends_and_prints_orcahello_resident_segments_missed_by_podsai(self, tmp_path, capsys):
         """Segments predicted resident by OrcaHello and non-resident by PODS-AI are appended."""
         feed = _make_feed()
         detection = OrcaHelloDetection(
@@ -209,6 +209,17 @@ class TestProcessFalseNegatives:
             "https://example.com/water",
         ]
         assert all(row["Category"] == "resident" for row in rows)
+
+        output = capsys.readouterr().out
+        marker = "Proposed rows for output/csv/new_manual_samples.csv:"
+        assert marker in output
+        csv_section = output.split(marker + "\n", 1)[1]
+        proposed_rows = list(csv.DictReader(csv_section.splitlines()))
+        assert [row["URI"] for row in proposed_rows] == [
+            "https://example.com/transient",
+            "https://example.com/water",
+        ]
+        assert all(row["Category"] == "resident" for row in proposed_rows)
 
     def test_skips_when_full_clip_prediction_is_resident(self, tmp_path):
         """When full-clip PODS-AI prediction is resident, processing is skipped."""
@@ -324,4 +335,4 @@ class TestProcessFalseNegatives:
         assert podsai_model.predict.call_count == 2
         assert orcahello_model.predict.call_count == 1
         assert mock_add_samples.call_count == 1
-        assert mock_add_samples.call_args.kwargs["start_timestamp"] == "2025_01_01_04_05_00_PST"
+        assert mock_add_samples.call_args.kwargs["start_timestamp"] == "2025_01_01_04_04_58_PST"

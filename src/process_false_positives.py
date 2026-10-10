@@ -35,6 +35,7 @@ from orcasite_feeds import get_orcasite_feeds_with_retry
 
 DEFAULT_MANUAL_TRAINING_SAMPLES_CSV = "output/csv/new_manual_training_samples.csv"
 DEFAULT_MANUAL_TESTING_SAMPLES_CSV = "output/csv/new_manual_testing_samples.csv"
+AUDIO_OFFSET_SECONDS = 2
 BIRD_TERMS = ("bird", "pigu", "keir")
 RESIDENT_TERMS = ("resident", "pod")
 TRANSIENT_TERMS = ("bigg", "transient")
@@ -161,12 +162,9 @@ def process_false_positives(
         print(f"Loading podsai model from {model_path}...")
         model = get_model_inference(model_type="podsai", model_path=model_path)
 
+    proposed_rows = []
+    proposed_uris = set(existing_uris)
     for feed in feeds:
-        print(f"Processing feed {feed.node_name}")
-        csv_writer = csv.writer(sys.stdout, lineterminator="\n")
-        csv_writer.writerow(
-            ["Category", "NodeName", "StartTimestamp", "URI", "Description", "Notes", "Confidence", "Tags"]
-        )
         for detection in get_orcahello_detections(feed, start_time, end_time):
             if detection.timestamp is None:
                 continue
@@ -187,7 +185,9 @@ def process_false_positives(
             if end_time is not None and detection.timestamp > end_time:
                 continue
 
-            timestamp_str_pst = format_timestamp_pst(detection.timestamp)
+            timestamp_str_pst = format_timestamp_pst(
+                detection.timestamp - timedelta(seconds=AUDIO_OFFSET_SECONDS)
+            )
             summary["rejected"] += 1
             corrected_class = get_corrected_class(detection.comments, detection.tags)
             if corrected_class is None:
@@ -199,7 +199,7 @@ def process_false_positives(
 
             with TemporaryDirectory() as temp_dir:
                 if not for_training:
-                    testing_start_timestamp = format_timestamp_pst(detection.timestamp)
+                    testing_start_timestamp = timestamp_str_pst
                     segment_row = add_testing_60s_sample(
                         node_name=feed.node_name,
                         start_timestamp=testing_start_timestamp,
@@ -275,6 +275,12 @@ def process_false_positives(
                 append_rows = mismatched_whale_rows
                 summary["whale_mismatch_segments"] += len(mismatched_whale_rows)
 
+            for row in append_rows:
+                uri = (row.get("URI") or "").strip()
+                if uri not in proposed_uris:
+                    proposed_uris.add(uri)
+                    proposed_rows.append(row)
+
             appended, duplicates = append_manual_samples(
                 manual_samples_path,
                 append_rows,
@@ -282,6 +288,31 @@ def process_false_positives(
             )
             summary["appended"] += appended
             summary["duplicates"] += duplicates
+
+    output_path = (
+        "output/csv/training_3s_samples.csv"
+        if for_training
+        else "output/csv/testing_60s_samples.csv"
+    )
+    fieldnames = [
+        "Category",
+        "NodeName",
+        "StartTimestamp",
+        "URI",
+        "Description",
+        "Notes",
+        "Confidence",
+        "Tags",
+    ]
+    print(f"Proposed rows for {output_path}:")
+    csv_writer = csv.DictWriter(
+        sys.stdout,
+        fieldnames=fieldnames,
+        lineterminator="\n",
+        extrasaction="ignore",
+    )
+    csv_writer.writeheader()
+    csv_writer.writerows(proposed_rows)
 
     return summary
 
