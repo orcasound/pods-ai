@@ -35,6 +35,7 @@ from orcasite_feeds import get_orcasite_feeds_with_retry
 
 DEFAULT_MANUAL_TRAINING_SAMPLES_CSV = "output/csv/new_manual_training_samples.csv"
 DEFAULT_MANUAL_TESTING_SAMPLES_CSV = "output/csv/new_manual_testing_samples.csv"
+AUDIO_OFFSET_SECONDS = 2
 BIRD_TERMS = ("bird", "pigu", "keir")
 RESIDENT_TERMS = ("resident", "pod")
 TRANSIENT_TERMS = ("bigg", "transient")
@@ -184,7 +185,9 @@ def process_false_positives(
             if end_time is not None and detection.timestamp > end_time:
                 continue
 
-            timestamp_str_pst = format_timestamp_pst(detection.timestamp)
+            timestamp_str_pst = format_timestamp_pst(
+                detection.timestamp - timedelta(seconds=AUDIO_OFFSET_SECONDS)
+            )
             summary["rejected"] += 1
             corrected_class = get_corrected_class(detection.comments, detection.tags)
             if corrected_class is None:
@@ -196,7 +199,7 @@ def process_false_positives(
 
             with TemporaryDirectory() as temp_dir:
                 if not for_training:
-                    testing_start_timestamp = format_timestamp_pst(detection.timestamp)
+                    testing_start_timestamp = timestamp_str_pst
                     segment_row = add_testing_60s_sample(
                         node_name=feed.node_name,
                         start_timestamp=testing_start_timestamp,
