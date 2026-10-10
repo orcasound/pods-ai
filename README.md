@@ -15,40 +15,55 @@ Model Comparison Summary
 ================================================================================================================
 Model           Evaluated   Correct  Accuracy      F1    RFP%    RFN%    TFP%    TFN%    HFP%    HFN%   Avg Time
 ----------------------------------------------------------------------------------------------------------------
-orcahello             145        40     27.6%   0.129   92.5%   36.5%    0.0%  100.0%    0.0%  100.0%      5.92s
-podsai                145       100     69.0%   0.592   41.9%   32.7%    0.9%   35.7%    0.8%   68.8%     10.78s
+orcahello             832       713     85.7%   0.262   16.3%    9.5%    0.0%  100.0%    0.0%  100.0%      4.06s
+oldpodsai             832       242     29.1%   0.530    5.6%   23.0%    3.2%   25.0%    0.0%   87.5%      6.70s
+podsai                832       267     32.1%   0.671    8.8%   16.9%    0.1%   35.7%    0.2%   68.8%      6.65s
 ================================================================================================================
 
 Definitions:
   Accuracy     = Correct / Evaluated
-  Correct      = fastai/orcahello: resident vs other; oldpodsai/podsai: category in prediction set
+  Correct      = fastai/orcahello: resident vs other; wav2vec2/oldpodsai/podsai: category in prediction set
   F1           = macro F1 over humpback, resident, and transient classes that are present
   [R|T|H]FP%   = among non-[R|T|H] samples, fraction predicted as that class
   [R|T|H]FN%   = among actual samples of that class, fraction predicted as another class
   Avg Time     = average time spent in model predict() per 60-second WAV file
-  Note         = compares end-to-end 60-second inference on testing_60s_samples.csv
+  Note         = compares end-to-end 60-second inference on all WAV files in --wav-dir
 
 Confusion Matrix for orcahello (rows=actual, cols=predicted):
                 other  resident     total
-       bird         2         8        10
-      human         0        10        10
-   humpback         4        14        18
-     jingle         0         7         7
-   resident        22        30        52
-  transient         0        30        30
-     vessel         0         7         7
-      water         0        10        10
+    abiotic       486        10       496
+       bird         1        10        11
+      human         0         9         9
+   humpback         5        11        16
+     jingle         0        12        12
+   resident        23       220       243
+  transient         0        28        28
+     vessel         0         6         6
+      water         1        10        11
+
+Confusion Matrix for oldpodsai (rows=actual, cols=predicted):
+                  bird      human   humpback     jingle   resident  transient     vessel      water      total
+    abiotic         15          0          0         42          1          0        420         18        496
+       bird          1          0          0          0          6          0          4          0         11
+      human          0          9          0          0          0          0          0          0          9
+   humpback          0          0          1          1          3          1         10          0         16
+     jingle          0          0          0          7          3          0          2          0         12
+   resident          2          1          0          4        182          6         46          2        243
+  transient          0          0          0          0         12         15          1          0         28
+     vessel          0          0          0          0          0          0          6          0          6
+      water          0          0          0          0          0          0         10          1         11
 
 Confusion Matrix for podsai (rows=actual, cols=predicted):
-                 human   humpback   resident  transient     vessel      water      total
-       bird          0          0          3          0          7          0         10
-      human          9          0          0          1          0          0         10
-   humpback          0          2          3          1         11          1         18
-     jingle          0          0          0          0          7          0          7
-   resident          1          0         30          3         16          2         52
-  transient          0          0          9         19          2          0         30
-     vessel          0          0          0          0          7          0          7
-      water          0          0          0          0          9          1         10
+                 human   humpback     jingle   resident  transient     vessel      water      total
+    abiotic          0          1        242         13          0        220         20        496
+       bird          0          0          1          9          0          1          0         11
+      human          8          0          1          0          0          0          0          9
+   humpback          0          4          6          3          0          2          1         16
+     jingle          0          0         12          0          0          0          0         12
+   resident          1          0         15        202          0         22          3        243
+  transient          0          0          0         20          7          1          0         28
+     vessel          0          0          0          0          0          6          0          6
+      water          0          0          1          0          0          5          5         11
 ```
 
 NOTE 1: The results above may be biased against models, compared to what would be expected on live
