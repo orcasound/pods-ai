@@ -318,7 +318,7 @@ def download_60s_audio(node_name: str, min_end_timestamp_pst_str: str, tmp_dir: 
     Note that min_end_timestamp_str is the Orcasite time, which is off by ~2 seconds from real time.
     """
     # Compute the aligned end time and derive the 60s clip start UTC to reuse
-    # the download_60s_audio_from_start_utc implementation which handles the
+    # the download_audio_from_start_utc implementation which handles the
     # HLS folder/segment logic. This reduces duplication and keeps behavior
     # consistent between callers that request clips by end-time vs start-time.
     end_time = _get_aligned_end_time(min_end_timestamp_pst_str)
@@ -326,7 +326,7 @@ def download_60s_audio(node_name: str, min_end_timestamp_pst_str: str, tmp_dir: 
     start_time = end_time - timedelta(seconds=60) - timedelta(seconds=audio_offset)
     start_time_utc = start_time.astimezone(UTC_TZ)
 
-    return download_60s_audio_from_start_utc(node_name, start_time_utc, tmp_dir)
+    return download_audio_from_start_utc(node_name, start_time_utc, tmp_dir, 60)
 
 
 MIN_SEGMENT_DURATION = 0.001
@@ -340,13 +340,13 @@ def format_utc_iso_z(dt: datetime) -> str:
     return dt.astimezone(UTC_TZ).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def download_60s_audio_from_start_utc(
+def download_audio_from_start_utc(
     node_name: str,
     start_time_utc: datetime,
     tmp_dir: str,
+    duration_seconds: float,
 ) -> Optional[str]:
-    """Download a 60-second clip beginning at start_time_utc."""
-    duration_seconds = 60.0
+    """Download a clip beginning at start_time_utc and lasting for duration_seconds."""
     end_time_utc = start_time_utc + timedelta(seconds=duration_seconds)
     start_unix_time = int(start_time_utc.timestamp())
     end_unix_time = int(end_time_utc.timestamp())
@@ -420,7 +420,7 @@ def download_60s_audio_from_start_utc(
             return None
 
         clip_id = _build_clip_id(start_time_utc)
-        clipname = f"temp_60s_{node_name}_{clip_id}"
+        clipname = f"temp_{duration_seconds:g}s_{node_name}_{clip_id}"
         if len(file_names) > 1:
             hls_file = str(Path(tmp_dir) / f"{clipname}.ts")
             with open(hls_file, "wb") as wfd:
@@ -445,7 +445,7 @@ def download_60s_audio_from_start_utc(
             ac=1,
         )
         ffmpeg.run(stream, overwrite_output=True, quiet=True)
-        print(f"  Downloaded 60s audio: {wav_file_path}")
+        print(f"  Downloaded {duration_seconds:g}s audio: {wav_file_path}")
         return wav_file_path
     except Exception as e:
         print(f"  Warning: Unable to retrieve audio clip: {e}")
