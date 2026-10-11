@@ -25,7 +25,7 @@ with a corrected class. For testing, append one corrected 60-second sample row t
 
 options:
   -h, --help            show this help message and exit
-  --set SET             training or testing
+  --set SET             training or testing (default: training).
   --feed FEED           Process only this feed (by node_name, e.g., rpi_sunset_bay).
   --start YYYY_MM_DD_HH_MM_SS_PST
                         Include only detections with timestamp >= this value.
