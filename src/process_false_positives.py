@@ -15,7 +15,9 @@ For each rejected OrcaHello detection in the selected timeframe, this script:
 
 import argparse
 import csv
+import io
 import sys
+from contextlib import redirect_stdout
 from datetime import datetime, timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -209,15 +211,16 @@ def process_false_positives(
             with TemporaryDirectory() as temp_dir:
                 if not for_training:
                     testing_start_timestamp = timestamp_str_pst
-                    segment_row = add_testing_60s_sample(
-                        node_name=feed.node_name,
-                        start_timestamp=testing_start_timestamp,
-                        detections_csv=detections_csv,
-                        corrected_class=corrected_class,
-                        fallback_description=detection.comments,
-                        fallback_notes="fp_machine",
-                        fallback_tags=detection.tags,
-                    )
+                    with redirect_stdout(io.StringIO()):
+                        segment_row = add_testing_60s_sample(
+                            node_name=feed.node_name,
+                            start_timestamp=testing_start_timestamp,
+                            detections_csv=detections_csv,
+                            corrected_class=corrected_class,
+                            fallback_description=detection.comments,
+                            fallback_notes="fp_machine",
+                            fallback_tags=detection.tags,
+                        )
                     segment_rows = [segment_row]
                 else:
                     # For the training set, we need to run PODS-AI inference on the 60-second WAV to find mismatched whale-class segments.

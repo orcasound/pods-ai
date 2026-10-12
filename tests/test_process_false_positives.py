@@ -213,7 +213,7 @@ class TestProcessFalsePositives:
 
         output = capsys.readouterr().out
         marker = "Proposed rows for output/csv/testing_60s_samples.csv:"
-        assert output.index("testing diagnostic") < output.index(marker)
+        assert "testing diagnostic" not in output
         csv_section = output.split(marker + "\n", 1)[1]
         proposed_rows = list(csv.DictReader(csv_section.splitlines()))
         assert len(proposed_rows) == 1

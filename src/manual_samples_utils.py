@@ -4,11 +4,10 @@
 """Shared helpers for reading and appending manual_samples.csv rows."""
 
 import csv
+from audio_utils import parse_timestamp_pst
 from collections import defaultdict
 from datetime import datetime, timedelta
 from pathlib import Path
-
-from audio_utils import parse_timestamp_pst
 
 CSV_FIELDNAMES = [
     "Category",
