@@ -29,12 +29,20 @@ from audio_utils import (
     get_orcahello_detections,
     parse_timestamp_pst,
 )
-from manual_samples_utils import append_manual_samples, load_existing_uris
+from manual_samples_utils import (
+    append_manual_samples,
+    filter_overlapping_samples,
+    load_existing_uris,
+)
 from model_inference import get_model_inference
 from orcasite_feeds import get_orcasite_feeds_with_retry
 
 DEFAULT_MANUAL_TRAINING_SAMPLES_CSV = "output/csv/new_manual_training_samples.csv"
 DEFAULT_MANUAL_TESTING_SAMPLES_CSV = "output/csv/new_manual_testing_samples.csv"
+DEFAULT_TRAINING_SAMPLES_CSV = "output/csv/training_3s_samples.csv"
+DEFAULT_TESTING_SAMPLES_CSV = "output/csv/testing_60s_samples.csv"
+TRAINING_SAMPLE_DURATION_SECONDS = 3
+TESTING_SAMPLE_DURATION_SECONDS = 60
 AUDIO_OFFSET_SECONDS = 2
 BIRD_TERMS = ("bird", "pigu", "keir")
 RESIDENT_TERMS = ("resident", "pod")
@@ -125,6 +133,7 @@ def process_false_positives(
     actual_category_filter: Optional[str] = None,
     start_time: Optional[datetime] = None,
     end_time: Optional[datetime] = None,
+    destination_samples_path: Optional[Path] = None,
 ) -> dict[str, int]:
     """Process rejected OrcaHello detections in the selected timeframe.
 
@@ -143,6 +152,7 @@ def process_false_positives(
         "whale_mismatch_segments": 0,
         "appended": 0,
         "duplicates": 0,
+        "overlaps": 0,
     }
     normalized_category_filter = (
         actual_category_filter.strip().lower() if actual_category_filter else None
@@ -162,8 +172,7 @@ def process_false_positives(
         print(f"Loading podsai model from {model_path}...")
         model = get_model_inference(model_type="podsai", model_path=model_path)
 
-    proposed_rows = []
-    proposed_uris = set(existing_uris)
+    candidate_rows = []
     for feed in feeds:
         for detection in get_orcahello_detections(feed, start_time, end_time):
             if detection.timestamp is None:
@@ -275,25 +284,44 @@ def process_false_positives(
                 append_rows = mismatched_whale_rows
                 summary["whale_mismatch_segments"] += len(mismatched_whale_rows)
 
-            for row in append_rows:
-                uri = (row.get("URI") or "").strip()
-                if uri not in proposed_uris:
-                    proposed_uris.add(uri)
-                    proposed_rows.append(row)
+            candidate_rows.extend(append_rows)
 
-            appended, duplicates = append_manual_samples(
-                manual_samples_path,
-                append_rows,
-                existing_uris,
-            )
-            summary["appended"] += appended
-            summary["duplicates"] += duplicates
-
-    output_path = (
-        "output/csv/training_3s_samples.csv"
+    if destination_samples_path is None:
+        destination_samples_path = Path(
+            DEFAULT_TRAINING_SAMPLES_CSV
+            if for_training
+            else DEFAULT_TESTING_SAMPLES_CSV
+        )
+    sample_duration = (
+        TRAINING_SAMPLE_DURATION_SECONDS
         if for_training
-        else "output/csv/testing_60s_samples.csv"
+        else TESTING_SAMPLE_DURATION_SECONDS
     )
+    new_rows = []
+    candidate_uris = set(existing_uris)
+    for row in candidate_rows:
+        uri = (row.get("URI") or "").strip()
+        if uri in candidate_uris:
+            summary["duplicates"] += 1
+            continue
+        candidate_uris.add(uri)
+        new_rows.append(row)
+
+    proposed_rows, overlaps = filter_overlapping_samples(
+        new_rows,
+        destination_samples_path,
+        sample_duration,
+    )
+    summary["overlaps"] = overlaps
+
+    appended, duplicates = append_manual_samples(
+        manual_samples_path,
+        proposed_rows,
+        existing_uris,
+    )
+    summary["appended"] = appended
+    summary["duplicates"] += duplicates
+
     fieldnames = [
         "Category",
         "NodeName",
@@ -304,7 +332,7 @@ def process_false_positives(
         "Confidence",
         "Tags",
     ]
-    print(f"Proposed rows for {output_path}:")
+    print(f"Proposed rows for {destination_samples_path.as_posix()}:")
     csv_writer = csv.DictWriter(
         sys.stdout,
         fieldnames=fieldnames,

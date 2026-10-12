@@ -193,8 +193,9 @@ class TestProcessFalseNegatives:
         assert summary["not_false_negative"] == 0
         assert summary["mismatched_segments"] == 2
         assert summary["wrong_whale_class_segments"] == 1
-        assert summary["appended"] == 2
+        assert summary["appended"] == 1
         assert summary["duplicates"] == 0
+        assert summary["overlaps"] == 1
         mock_add_samples.assert_called_once()
         assert mock_add_samples.call_args.kwargs["corrected_class"] == "resident"
         assert mock_add_samples.call_args.kwargs["fallback_description"] == detection.comments
@@ -203,21 +204,19 @@ class TestProcessFalseNegatives:
         with open(manual_samples_path, "r", encoding="utf-8") as handle:
             rows = list(csv.DictReader(handle))
 
-        assert len(rows) == 2
+        assert len(rows) == 1
         assert [row["URI"] for row in rows] == [
             "https://example.com/transient",
-            "https://example.com/water",
         ]
         assert all(row["Category"] == "resident" for row in rows)
 
         output = capsys.readouterr().out
-        marker = "Proposed rows for output/csv/new_manual_samples.csv:"
+        marker = "Proposed rows for output/csv/training_3s_samples.csv:"
         assert marker in output
         csv_section = output.split(marker + "\n", 1)[1]
         proposed_rows = list(csv.DictReader(csv_section.splitlines()))
         assert [row["URI"] for row in proposed_rows] == [
             "https://example.com/transient",
-            "https://example.com/water",
         ]
         assert all(row["Category"] == "resident" for row in proposed_rows)
 
