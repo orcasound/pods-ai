@@ -74,6 +74,51 @@ def test_multilabel_prediction_counts_matching_species_as_correct():
     assert not is_correct_prediction("humpback", "resident", "podsai", ["resident", "transient"])
 
 
+def test_parse_model_spec_supports_custom_huggingface_id_and_local_path(tmp_path):
+    from compare_models import parse_model_spec, validate_custom_model_path
+
+    local_model = tmp_path / "model"
+    local_model.mkdir()
+    assert parse_model_spec("custom:org/model") == ("custom:org/model", "podsai", "org/model")
+    assert parse_model_spec(f"custom:{local_model}")[1:] == ("podsai", str(local_model))
+    validate_custom_model_path(str(local_model))
+
+
+def test_validate_custom_model_path_rejects_missing_local_path(tmp_path):
+    from compare_models import validate_custom_model_path
+
+    missing = tmp_path / "missing-model"
+    with pytest.raises(ValueError, match="does not exist"):
+        validate_custom_model_path(str(missing))
+
+
+def test_validate_inference_model_rejects_non_podsai_backend():
+    from compare_models import validate_inference_model
+
+    with pytest.raises(ValueError, match=r"predict\(\)"):
+        validate_inference_model(object(), "custom:bad-model")
+
+
+def test_main_loads_custom_model_from_cli(tmp_path):
+    from compare_models import ModelResult, main
+
+    wav_dir = tmp_path / "testing-wav"
+    _make_wav(wav_dir, "resident")
+    custom_model = tmp_path / "custom-model"
+    custom_model.mkdir()
+    args = [
+        "compare_models.py", "--wav-dir", str(wav_dir), "--models", "custom:" + str(custom_model),
+        "--max-samples", "1",
+    ]
+    with patch.object(sys, "argv", args), \
+         patch("compare_models.get_model_inference", return_value=type("Model", (), {"predict": lambda self, _: {}})()) as load_model, \
+         patch("compare_models.evaluate_model", return_value=ModelResult("custom:model")):
+        assert main() == 0
+    load_model.assert_called_once_with(
+        model_type="podsai", model_path=str(custom_model), model_revision=None
+    )
+
+
 # ---------------------------------------------------------------------------
 # Tests for load_test_samples()
 # ---------------------------------------------------------------------------
@@ -621,6 +666,43 @@ class TestMainCLI:
         with patch.object(sys, "argv", test_args):
             result = main()
         assert result == 1
+
+    def test_returns_1_for_missing_custom_model_path(self, tmp_path):
+        """main() rejects a missing path before attempting model loading."""
+        from compare_models import main
+
+        wav_dir = tmp_path / "testing-wav"
+        self._write_testing_wavs(wav_dir, [_make_testing_rows()[0]])
+        test_args = [
+            "compare_models.py",
+            "--wav-dir", str(wav_dir),
+            "--models", "custom:" + str(tmp_path / "missing-model"),
+        ]
+        with patch.object(sys, "argv", test_args):
+            assert main() == 1
+
+    def test_reports_custom_loader_failure_without_traceback(self, tmp_path, capsys):
+        """main() converts a Hub loader failure into a concise CLI error."""
+        from compare_models import main
+
+        wav_dir = tmp_path / "testing-wav"
+        self._write_testing_wavs(wav_dir, [_make_testing_rows()[0]])
+        test_args = [
+            "compare_models.py",
+            "--wav-dir", str(wav_dir),
+            "--models", "custom:missing-org/missing-model",
+        ]
+        with patch.object(sys, "argv", test_args), \
+             patch(
+                 "compare_models.get_model_inference",
+                 side_effect=RuntimeError("repository not found"),
+             ):
+            assert main() == 1
+
+        captured = capsys.readouterr()
+        assert "Error loading custom model 'missing-org/missing-model'" in captured.err
+        assert "RuntimeError: repository not found" in captured.err
+        assert "Traceback" not in captured.err
 
     def test_accepts_oldpodsai_model(self, tmp_path):
         """main() accepts oldpodsai and evaluates it using the podsai inference path."""
