@@ -40,8 +40,10 @@ from orcasite_feeds import get_orcasite_feeds_with_retry
 
 DEFAULT_MANUAL_SAMPLES_CSV = "output/csv/new_manual_samples.csv"
 DEFAULT_TRAINING_SAMPLES_CSV = "output/csv/training_3s_samples.csv"
+DEFAULT_TESTING_SAMPLES_CSV = "output/csv/testing_60s_samples.csv"
 DEFAULT_ORCAHELLO_MODEL_PATH = "orcasound/orcahello-srkw-detector-v1"
 TRAINING_SAMPLE_DURATION_SECONDS = 3
+TESTING_SAMPLE_DURATION_SECONDS = 60
 AUDIO_OFFSET_SECONDS = 2
 WHALE_CLASSES = {"resident", "transient", "humpback"}
 
@@ -215,6 +217,9 @@ def process_false_negatives(
         new_rows,
         destination_samples_path,
         TRAINING_SAMPLE_DURATION_SECONDS,
+        comparison_paths=(
+            (Path(DEFAULT_TESTING_SAMPLES_CSV), TESTING_SAMPLE_DURATION_SECONDS),
+        ),
     )
     summary["overlaps"] = overlaps
 

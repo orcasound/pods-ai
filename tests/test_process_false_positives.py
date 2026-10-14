@@ -271,6 +271,49 @@ class TestProcessFalsePositives:
         proposed_rows = list(csv.DictReader(output.split(marker + "\n", 1)[1].splitlines()))
         assert proposed_rows == []
 
+    def test_training_mode_filters_candidate_in_testing_manifest(self, tmp_path):
+        """Training candidates overlapping testing samples are not appended."""
+        feed = _make_feed()
+        detection = OrcaHelloDetection(
+            id="det_1",
+            feed=feed,
+            timestamp=datetime(2025, 1, 1, 12, 0, 0, tzinfo=timezone.utc),
+            status="rejected",
+            comments="Boat noise from a nearby vessel.",
+        )
+        wav_path = tmp_path / "input.wav"
+        wav_path.write_bytes(b"wav")
+        testing_path = tmp_path / "testing_60s_samples.csv"
+        with open(testing_path, "w", newline="", encoding="utf-8") as handle:
+            writer = csv.DictWriter(handle, fieldnames=["Category", "NodeName", "StartTimestamp", "URI"])
+            writer.writeheader()
+            writer.writerow({
+                "Category": "vessel",
+                "NodeName": "rpi_test",
+                "StartTimestamp": "2025_01_01_03_59_00_PST",
+                "URI": "https://example.com/testing",
+            })
+        segment = {
+            "Category": "resident",
+            "NodeName": "rpi_test",
+            "StartTimestamp": "2025_01_01_03_59_58_PST",
+            "URI": "https://example.com/training",
+        }
+        with patch("process_false_positives.DEFAULT_TESTING_SAMPLES_CSV", str(testing_path)), \
+             patch("process_false_positives.get_model_inference") as get_model, \
+             patch("process_false_positives.get_orcasite_feeds_with_retry", return_value=[feed]), \
+             patch("process_false_positives.get_orcahello_detections", return_value=[detection]), \
+             patch("process_false_positives.download_60s_audio", return_value=str(wav_path)), \
+             patch("process_false_positives.add_training_3s_samples", return_value=[segment]):
+            get_model.return_value.predict.return_value = {"global_prediction_label": "resident"}
+            summary = process_false_positives(
+                manual_samples_path=tmp_path / "manual.csv",
+                output_dir=tmp_path / "segments",
+            )
+
+        assert summary["appended"] == 0
+        assert summary["overlaps"] == 1
+
     def test_appends_only_mismatched_whale_segments_with_corrected_class(self, tmp_path):
         """Whale-class segments should be rewritten unless they already match the corrected class."""
         feed = _make_feed()

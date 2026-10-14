@@ -142,3 +142,60 @@ def test_compares_intervals_safely_across_daylight_saving_transition(tmp_path):
 
     assert accepted == []
     assert filtered == 1
+
+
+def test_filters_training_candidate_overlapping_testing_manifest(tmp_path):
+    testing = tmp_path / "testing_60s_samples.csv"
+    _write_rows(
+        testing,
+        [_row("2025_01_01_00_00_00_PST", "https://example.com/testing")],
+    )
+    candidate = _row("2025_01_01_00_00_58_PST", "https://example.com/training")
+
+    accepted, filtered = filter_overlapping_samples(
+        [candidate],
+        tmp_path / "training_3s_samples.csv",
+        3,
+        comparison_paths=((testing, 60),),
+    )
+
+    assert accepted == []
+    assert filtered == 1
+
+
+def test_filters_testing_candidate_overlapping_training_manifest(tmp_path):
+    training = tmp_path / "training_3s_samples.csv"
+    _write_rows(
+        training,
+        [_row("2025_01_01_00_00_00_PST", "https://example.com/training")],
+    )
+    candidate = _row("2025_01_01_00_00_00_PST", "https://example.com/testing")
+
+    accepted, filtered = filter_overlapping_samples(
+        [candidate],
+        tmp_path / "testing_60s_samples.csv",
+        60,
+        comparison_paths=((training, 3),),
+    )
+
+    assert accepted == []
+    assert filtered == 1
+
+
+def test_cross_manifest_adjacent_clip_is_retained(tmp_path):
+    training = tmp_path / "training_3s_samples.csv"
+    _write_rows(
+        training,
+        [_row("2025_01_01_00_00_00_PST", "https://example.com/training")],
+    )
+    candidate = _row("2025_01_01_00_00_03_PST", "https://example.com/testing")
+
+    accepted, filtered = filter_overlapping_samples(
+        [candidate],
+        tmp_path / "testing_60s_samples.csv",
+        60,
+        comparison_paths=((training, 3),),
+    )
+
+    assert accepted == [candidate]
+    assert filtered == 0

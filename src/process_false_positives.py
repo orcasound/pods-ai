@@ -314,6 +314,18 @@ def process_false_positives(
         new_rows,
         destination_samples_path,
         sample_duration,
+        comparison_paths=(
+            (
+                Path(
+                    DEFAULT_TESTING_SAMPLES_CSV
+                    if for_training
+                    else DEFAULT_TRAINING_SAMPLES_CSV
+                ),
+                TESTING_SAMPLE_DURATION_SECONDS
+                if for_training
+                else TRAINING_SAMPLE_DURATION_SECONDS,
+            ),
+        ),
     )
     summary["overlaps"] = overlaps
 
