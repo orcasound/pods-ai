@@ -322,7 +322,7 @@ def main() -> int:
     )
     parser.add_argument(
         "--manual-samples-csv",
-        default=DEFAULT_MANUAL_SAMPLES_CSV,
+        default=None,
         help="Path to new_manual_samples.csv.",
     )
     parser.add_argument(
