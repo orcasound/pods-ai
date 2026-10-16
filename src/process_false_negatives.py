@@ -37,6 +37,7 @@ from audio_utils import (
 )
 from manual_samples_utils import (
     CSV_FIELDNAMES,
+    TESTING_CSV_FIELDNAMES,
     append_manual_samples,
     filter_overlapping_samples,
     load_existing_uris,
@@ -266,6 +267,7 @@ def process_false_negatives(
         manual_samples_path,
         proposed_rows,
         existing_uris,
+        fieldnames=CSV_FIELDNAMES if for_training else TESTING_CSV_FIELDNAMES,
     )
     summary["appended"] = appended
     summary["duplicates"] += duplicates
@@ -273,7 +275,7 @@ def process_false_negatives(
     print(f"Proposed rows for {destination_samples_path.as_posix()}:")
     csv_writer = csv.DictWriter(
         sys.stdout,
-        fieldnames=CSV_FIELDNAMES,
+        fieldnames=CSV_FIELDNAMES if for_training else TESTING_CSV_FIELDNAMES,
         lineterminator="\n",
         extrasaction="ignore",
     )

@@ -18,6 +18,7 @@ CSV_FIELDNAMES = [
     "Notes",
     "Confidence",
 ]
+TESTING_CSV_FIELDNAMES = [*CSV_FIELDNAMES, "Tags"]
 
 
 def _sample_key(row: dict) -> tuple[str, str] | None:
@@ -197,8 +198,10 @@ def append_manual_samples(
     manual_samples_path: Path,
     rows: list[dict],
     existing_uris: set[str],
+    fieldnames: list[str] | None = None,
 ) -> tuple[int, int]:
     """Append rows to manual_samples.csv, skipping URIs already present."""
+    fieldnames = fieldnames or CSV_FIELDNAMES
     rows_to_append = []
     duplicates = 0
 
@@ -208,7 +211,7 @@ def append_manual_samples(
             duplicates += 1
             continue
         existing_uris.add(uri)
-        rows_to_append.append({field: row.get(field, "") for field in CSV_FIELDNAMES})
+        rows_to_append.append({field: row.get(field, "") for field in fieldnames})
 
     if not rows_to_append:
         return 0, duplicates
@@ -218,7 +221,7 @@ def append_manual_samples(
         not manual_samples_path.exists() or manual_samples_path.stat().st_size == 0
     )
     with open(manual_samples_path, "a", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=CSV_FIELDNAMES, lineterminator="\n")
+        writer = csv.DictWriter(handle, fieldnames=fieldnames, lineterminator="\n")
         if write_header:
             writer.writeheader()
         writer.writerows(rows_to_append)

@@ -412,6 +412,7 @@ class TestProcessFalseNegatives:
             "NodeName": "rpi_test",
             "StartTimestamp": "2025_01_01_03_59_58_PST",
             "URI": "https://example.com/testing",
+            "Tags": "resident",
         }
 
         with patch("process_false_negatives.DEFAULT_TESTING_SAMPLES_CSV", str(testing_path)), \
@@ -447,7 +448,9 @@ class TestProcessFalseNegatives:
         add_training.assert_not_called()
         assert get_model.call_count == 1
         with open(tmp_path / "manual_testing.csv", "r", encoding="utf-8") as handle:
-            assert list(csv.DictReader(handle))[0]["URI"] == "https://example.com/testing"
+            rows = list(csv.DictReader(handle))
+        assert rows[0]["URI"] == "https://example.com/testing"
+        assert rows[0]["Tags"] == "resident"
 
     def test_main_routes_testing_set_to_testing_manual_csv(self, monkeypatch):
         """The testing CLI option selects testing output and processing behavior."""
