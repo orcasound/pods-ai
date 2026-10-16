@@ -74,32 +74,52 @@ def test_multilabel_prediction_counts_matching_species_as_correct():
     assert not is_correct_prediction("humpback", "resident", "podsai", ["resident", "transient"])
 
 
-def test_parse_model_spec_supports_custom_huggingface_id_and_local_path(tmp_path):
-    from compare_models import parse_model_spec, validate_custom_model_path
+def test_parse_model_spec_accepts_custom_name_only(tmp_path):
+    """Custom is a model name; its path is not embedded in the model list."""
+    from compare_models import parse_model_spec, resolve_custom_model_path
 
     local_model = tmp_path / "model"
     local_model.mkdir()
-    assert parse_model_spec("custom:org/model") == ("custom:org/model", "podsai", "org/model")
-    assert parse_model_spec(f"custom:{local_model}")[1:] == ("podsai", str(local_model))
-    validate_custom_model_path(str(local_model))
+    assert parse_model_spec("custom") == ("custom", "podsai", None)
+    with pytest.raises(ValueError, match="inline custom model paths"):
+        parse_model_spec("custom:org/model")
+    assert resolve_custom_model_path(str(local_model)) == (str(local_model), True)
+    assert resolve_custom_model_path("org/model") == ("org/model", False)
+
+
+def test_validate_custom_model_path_expands_tilde(tmp_path, monkeypatch):
+    """Existing tilde paths are normalized before they reach the loader."""
+    from compare_models import resolve_custom_model_path
+
+    local_model = tmp_path / "custom-model"
+    local_model.mkdir()
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    monkeypatch.setenv("HOME", str(tmp_path))
+
+    assert resolve_custom_model_path("~/custom-model") == (str(local_model), True)
 
 
 def test_validate_custom_model_path_rejects_missing_local_path(tmp_path):
+    """Missing local-looking paths fail before model loading."""
     from compare_models import validate_custom_model_path
 
     missing = tmp_path / "missing-model"
     with pytest.raises(ValueError, match="does not exist"):
         validate_custom_model_path(str(missing))
+    with pytest.raises(ValueError, match="does not exist"):
+        validate_custom_model_path("/missing-model")
 
 
 def test_validate_inference_model_rejects_non_podsai_backend():
+    """Custom models must expose the PODS-AI predict method."""
     from compare_models import validate_inference_model
 
     with pytest.raises(ValueError, match=r"predict\(\)"):
-        validate_inference_model(object(), "custom:bad-model")
+        validate_inference_model(object(), "custom")
 
 
 def test_main_loads_custom_model_from_cli(tmp_path):
+    """main() loads and evaluates the custom model selected by the CLI."""
     from compare_models import ModelResult, main
 
     wav_dir = tmp_path / "testing-wav"
@@ -107,16 +127,71 @@ def test_main_loads_custom_model_from_cli(tmp_path):
     custom_model = tmp_path / "custom-model"
     custom_model.mkdir()
     args = [
-        "compare_models.py", "--wav-dir", str(wav_dir), "--models", "custom:" + str(custom_model),
+        "compare_models.py", "--wav-dir", str(wav_dir), "--models", "custom",
+        "--custom-model-path", str(custom_model),
+        "--custom-model-revision", "deadbeef",
         "--max-samples", "1",
     ]
     with patch.object(sys, "argv", args), \
          patch("compare_models.get_model_inference", return_value=type("Model", (), {"predict": lambda self, _: {}})()) as load_model, \
-         patch("compare_models.evaluate_model", return_value=ModelResult("custom:model")):
+         patch("compare_models.evaluate_model", return_value=ModelResult("custom")):
         assert main() == 0
     load_model.assert_called_once_with(
         model_type="podsai", model_path=str(custom_model), model_revision=None
     )
+
+
+def test_main_expands_tilde_custom_model_path(tmp_path, monkeypatch):
+    """main() passes the expanded local path to the model loader."""
+    from compare_models import ModelResult, main
+
+    wav_dir = tmp_path / "testing-wav"
+    _make_wav(wav_dir, "resident")
+    custom_model = tmp_path / "custom-model"
+    custom_model.mkdir()
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    args = [
+        "compare_models.py", "--wav-dir", str(wav_dir), "--models", "custom",
+        "--custom-model-path", "~/custom-model", "--max-samples", "1",
+    ]
+    model = type("Model", (), {"predict": lambda self, _: {}})()
+    with patch.object(sys, "argv", args), \
+         patch("compare_models.get_model_inference", return_value=model) as load_model, \
+         patch("compare_models.evaluate_model", return_value=ModelResult("custom")):
+        assert main() == 0
+    load_model.assert_called_once_with(
+        model_type="podsai", model_path=str(custom_model), model_revision=None
+    )
+
+
+def test_main_forwards_custom_model_revision(tmp_path):
+    """The custom Hub revision is passed to the PODS-AI loader."""
+    from compare_models import ModelResult, main
+
+    wav_dir = tmp_path / "testing-wav"
+    _make_wav(wav_dir, "resident")
+    args = [
+        "compare_models.py", "--wav-dir", str(wav_dir), "--models", "custom",
+        "--custom-model-path", "org/model", "--custom-model-revision", "deadbeef",
+        "--max-samples", "1",
+    ]
+    model = type("Model", (), {"predict": lambda self, _: {}})()
+    with patch.object(sys, "argv", args), \
+         patch("compare_models.get_model_inference", return_value=model) as load_model, \
+         patch("compare_models.evaluate_model", return_value=ModelResult("custom")):
+        assert main() == 0
+    load_model.assert_called_once_with(
+        model_type="podsai", model_path="org/model", model_revision="deadbeef"
+    )
+
+
+def test_custom_model_uses_category_membership_for_abiotic():
+    """Custom models use multi-class membership for background categories."""
+    from compare_models import is_correct_prediction
+
+    assert is_correct_prediction("abiotic", "other", "custom", ["abiotic"])
+    assert is_correct_prediction("abiotic", "other", "fastai", ["other"])
 
 
 # ---------------------------------------------------------------------------
@@ -676,10 +751,49 @@ class TestMainCLI:
         test_args = [
             "compare_models.py",
             "--wav-dir", str(wav_dir),
-            "--models", "custom:" + str(tmp_path / "missing-model"),
+            "--models", "custom",
+            "--custom-model-path", str(tmp_path / "missing-model"),
         ]
-        with patch.object(sys, "argv", test_args):
+        with patch.object(sys, "argv", test_args), \
+             patch("compare_models.get_model_inference") as load_model:
             assert main() == 1
+        load_model.assert_not_called()
+
+    def test_returns_1_when_custom_name_has_no_path(self, tmp_path, capsys):
+        """main() rejects custom without its required path option."""
+        from compare_models import main
+
+        wav_dir = tmp_path / "testing-wav"
+        self._write_testing_wavs(wav_dir, [_make_testing_rows()[0]])
+        test_args = [
+            "compare_models.py",
+            "--wav-dir", str(wav_dir),
+            "--models", "custom",
+        ]
+        with patch.object(sys, "argv", test_args), \
+             patch("compare_models.get_model_inference") as load_model:
+            assert main() == 1
+        load_model.assert_not_called()
+        assert "--custom-model-path" in capsys.readouterr().err
+
+    def test_custom_path_auto_adds_custom_model(self, tmp_path):
+        """main() adds custom when a path is supplied without the model name."""
+        from compare_models import ModelResult, main
+
+        wav_dir = tmp_path / "testing-wav"
+        self._write_testing_wavs(wav_dir, [_make_testing_rows()[0]])
+        test_args = [
+            "compare_models.py",
+            "--wav-dir", str(wav_dir),
+            "--models", "fastai",
+            "--custom-model-path", "org/model",
+        ]
+        custom_model = type("Model", (), {"predict": lambda self, _: {}})()
+        with patch.object(sys, "argv", test_args), \
+             patch("compare_models.get_model_inference", return_value=custom_model), \
+             patch("compare_models.evaluate_model", return_value=ModelResult("custom")) as evaluate:
+            assert main() == 0
+        assert evaluate.call_args.kwargs["result_model_type"] == "custom"
 
     def test_reports_custom_loader_failure_without_traceback(self, tmp_path, capsys):
         """main() converts a Hub loader failure into a concise CLI error."""
@@ -690,7 +804,8 @@ class TestMainCLI:
         test_args = [
             "compare_models.py",
             "--wav-dir", str(wav_dir),
-            "--models", "custom:missing-org/missing-model",
+            "--models", "custom",
+            "--custom-model-path", "missing-org/missing-model",
         ]
         with patch.object(sys, "argv", test_args), \
              patch(

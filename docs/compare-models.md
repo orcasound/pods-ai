@@ -20,12 +20,13 @@ python src/compare_models.py [options]
 | Option | Description |
 | --- | --- |
 | `--wav-dir PATH` | Root directory of category subdirectories. Default: `output/testing-wav`. |
-| `--models MODEL_LIST` | Comma-separated built-in names and/or `custom:PATH_OR_HF_ID` entries. Default: `fastai,orcahello,wav2vec2,oldpodsai,podsai`. |
-| `--custom-model PATH_OR_HF_ID` | Add one custom PODS-AI model. Repeat the option for multiple models. Equivalent to adding `custom:VALUE` to `--models`. |
+| `--models MODEL_LIST` | Comma-separated built-in names. Include `custom` to evaluate the custom PODS-AI model. Default: `fastai,orcahello,wav2vec2,oldpodsai,podsai`. |
+| `--custom-model-path PATH_OR_HF_ID` | Local custom model file/directory or Hugging Face repository ID. Required when `custom` is in `--models`; supplying it without `custom` adds `custom` automatically. |
+| `--custom-model-revision REVISION` | Optional revision for a custom Hugging Face model. Ignored for local paths. |
 | `--fastai-model-path PATH` | FastAI model directory. Default: `model`. |
 | `--orcahello-model-path PATH_OR_HF_ID` | OrcaHello model path or Hub ID. Default: `orcasound/orcahello-srkw-detector-v1`. |
 | `--podsai-model-path PATH_OR_HF_ID` | PODS-AI model path or Hub ID for `wav2vec2`, `oldpodsai`, and `podsai`. Default: `davethaler/whale-call-detector`. |
-| `--podsai-model-revision REVISION` | Revision for the built-in `podsai` model. Custom models do not use a pinned revision. |
+| `--podsai-model-revision REVISION` | Revision for the built-in `podsai` model. |
 | `--max-samples N` | Evaluate at most `N` WAV files. `N` must be positive. |
 | `--category NAME` | Evaluate only the named category. |
 
@@ -40,21 +41,21 @@ Built-in model names map to these inference backends:
 | `podsai` | PODS-AI | `--podsai-model-revision` |
 
 Unknown names cause an error before model loading. The WAV directory must
-exist and contain at least one category WAV file.
+exist and contain at least one category WAV file. Supported background
+categories include `other`, `abiotic`, `water`, `vessel`, `jingle`, `human`,
+and `bird`.
 
 ## Custom model specification
 
-Custom entries always use the PODS-AI backend. The command accepts either
-form:
+The `custom` model name selects the PODS-AI backend. Its value is supplied by
+`--custom-model-path`; the option accepts one local path or one Hugging Face
+repository ID. A command that lists `custom` without a path is rejected. A
+path supplied without `custom` adds `custom` to the model list. Inline values
+such as `custom:./models/my-detector` are not supported.
 
-```text
---custom-model PATH_OR_HF_ID
---models custom:PATH_OR_HF_ID
-```
-
-The two forms have identical loading and evaluation behavior. Custom entries
-are evaluated with the same correctness, confusion-matrix, F1, and FP/FN
-calculations as the built-in `podsai` model.
+Custom models are PODS-AI-compatible multi-class models. They use the same
+category-membership evaluation as `wav2vec2`, `oldpodsai`, and `podsai`,
+including the confusion matrix, F1, and FP/FN calculations.
 
 ### Inference contract
 
@@ -69,9 +70,11 @@ input and result contract is:
 
 - Input audio is decoded as mono at 16 kHz.
 - Analysis uses 3-second windows with a 2-second hop.
+- Inference uses a confidence threshold of `0.5` by default. The default
+  positive-event threshold is 2, scaled down for shorter clips.
 - The Hugging Face audio-classification configuration provides `id2label` and
   `label2id` and includes at least one supported background label: `other`,
-  `water`, `vessel`, `jingle`, `human`, or `bird`.
+  `abiotic`, `water`, `vessel`, `jingle`, `human`, or `bird`.
 - The prediction mapping contains `global_prediction_label`,
   `global_confidence`, `local_predictions`, `local_confidences`, and
   `per_class_probabilities`. `global_prediction_labels` may also be present.
@@ -83,12 +86,12 @@ An artifact that cannot be loaded by this backend or a factory result without
 ### Model value resolution
 
 1. If `VALUE` resolves to an existing file or directory, it is passed to the
-   loader as a local model path.
-2. A missing value beginning with `./`, `../`, `~`, `/`, or a Windows drive
-   letter is treated as a missing local path and rejected before loading.
+   loader as a local model path. The command expands `~` before loading.
+2. A missing value beginning with `./`, `../`, `~`, `/`, `\`, or a Windows
+   drive letter is treated as a missing local path and rejected before loading.
 3. Other missing values are passed to the Hugging Face loader as repository
-   IDs. The command does not pin a revision for custom entries; the loader
-   resolves the Hub revision or local cache.
+   IDs. `--custom-model-revision` is forwarded for these values; it is ignored
+   for local paths.
 
 Invalid repository IDs, unavailable repositories, permission failures, and
 incompatible artifacts are reported as a single custom-model loading error
@@ -99,8 +102,8 @@ not printed by the CLI.
 
 - `fastai` and `orcahello` are binary resident-versus-other models. A sample
   is correct when resident status matches the expected category.
-- `wav2vec2`, `oldpodsai`, and `podsai` use the expected category's membership
-  in `global_prediction_labels`; older output falls back to
+- `wav2vec2`, `oldpodsai`, `podsai`, and `custom` use the expected category's
+  membership in `global_prediction_labels`; older output falls back to
   `global_prediction_label`.
 - Macro F1 covers `resident`, `transient`, and `humpback` classes present in
   the evaluated samples.
@@ -120,21 +123,16 @@ python src/compare_models.py
 Evaluate a local custom model alongside FastAI:
 
 ```bash
-python src/compare_models.py --models fastai --custom-model ./models/my-detector
+python src/compare_models.py --models fastai,custom --custom-model-path ./models/my-detector
 ```
 
-Evaluate one Hugging Face model ID alongside the built-in PODS-AI model:
+Evaluate a Hugging Face custom model with a pinned revision:
 
 ```bash
 python src/compare_models.py \
-    --models podsai \
-    --custom-model my-org/my-whale-detector
-```
-
-Use a custom entry directly in `--models`:
-
-```bash
-python src/compare_models.py --models podsai,custom:./models/my-detector
+    --models podsai,custom \
+    --custom-model-path my-org/my-whale-detector \
+    --custom-model-revision main
 ```
 
 Limit evaluation to resident samples and ten files:

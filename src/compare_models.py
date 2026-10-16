@@ -15,7 +15,7 @@ per-whale-class false-positive/false-negative rates per model.
 A "correct" identification means:
   - For fastai and orcahello, model predicted "resident" (SRKW) when the label is
     "resident", or anything other than "resident" when the label is not "resident".
-  - For podsai, oldpodsai, and wav2vec2, the actual category is present in the model's
+  - For custom, podsai, oldpodsai, and wav2vec2, the actual category is present in the model's
     multi-label prediction set (with a single-label fallback for older models).
 
 For each whale class X (resident, transient, humpback):
@@ -39,6 +39,9 @@ from run_inference import run_inference
 
 RESIDENT_LABEL = "resident"
 WHALE_CLASS_NAMES = {"humpback", "resident", "transient"}
+BACKGROUND_LABELS = {
+    "abiotic", "bird", "human", "jingle", "other", "vessel", "water"
+}
 SUMMARY_LABELS = [
     ("resident", "R"),
     ("transient", "T"),
@@ -56,9 +59,20 @@ MODEL_TYPE_TO_INFERENCE_TYPE = {
     "oldpodsai": "podsai",
     "podsai": "podsai",
 }
-CUSTOM_MODEL_PREFIX = "custom:"
 CUSTOM_MODEL_TYPE = "podsai"
 DEFAULT_MODELS = "fastai,orcahello,wav2vec2,oldpodsai,podsai"
+MODEL_LOAD_ERRORS = (
+    AttributeError,
+    EOFError,
+    ImportError,
+    IndexError,
+    KeyError,
+    NotImplementedError,
+    OSError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+)
 
 
 @dataclass
@@ -247,45 +261,103 @@ def load_test_samples(wav_dir: Path, max_samples: Optional[int] = None,
 
 
 def is_exact_match_model(model_type: str) -> bool:
-    """Return True when a model uses exact-category matching for correctness."""
-    return model_type in {"podsai", "oldpodsai", "wav2vec2"}
+    """Return whether a model uses exact category membership for correctness."""
+    return model_type in {"custom", "podsai", "oldpodsai", "wav2vec2"}
 
 
 def parse_model_spec(spec: str) -> tuple[str, str, Optional[str]]:
-    """Resolve a built-in model name or ``custom:<path-or-Hub-ID>`` spec."""
+    """Parse one model name from ``--models``.
+
+    Args:
+        spec: A built-in model name or the literal ``custom``.
+
+    Returns:
+        A tuple containing the display name, inference backend, and an empty
+        custom path slot. The custom path is supplied separately by
+        ``--custom-model-path``.
+
+    Raises:
+        ValueError: If ``spec`` is unknown or uses the removed inline custom
+            path syntax.
+    """
     model = spec.strip()
-    if model.startswith(CUSTOM_MODEL_PREFIX):
-        model_path = model[len(CUSTOM_MODEL_PREFIX):].strip()
-        if not model_path:
-            raise ValueError("custom model specification must include a path or Hugging Face ID")
-        return model, CUSTOM_MODEL_TYPE, model_path
-    if model not in MODEL_TYPE_TO_INFERENCE_TYPE:
-        valid = ", ".join(sorted(MODEL_TYPE_TO_INFERENCE_TYPE))
+    if model.startswith("custom:"):
         raise ValueError(
-            f"unknown model type {model!r}; valid built-ins: {valid}; "
-            "custom syntax: custom:<path-or-HF-ID>"
+            "inline custom model paths are not supported; use 'custom' in "
+            "--models with --custom-model-path"
+        )
+    if model == "custom":
+        return model, CUSTOM_MODEL_TYPE, None
+    if model not in MODEL_TYPE_TO_INFERENCE_TYPE:
+        valid = ", ".join(sorted((*MODEL_TYPE_TO_INFERENCE_TYPE, "custom")))
+        raise ValueError(
+            f"unknown model type {model!r}; valid models: {valid}"
         )
     return model, MODEL_TYPE_TO_INFERENCE_TYPE[model], None
 
 
-def validate_custom_model_path(model_path: str) -> None:
-    """Validate local custom model paths while allowing Hugging Face IDs."""
-    path = Path(model_path).expanduser()
-    if path.exists():
-        if not (path.is_file() or path.is_dir()):
+def resolve_custom_model_path(model_path: str) -> tuple[str, bool]:
+    """Validate and normalize a custom model path or Hugging Face ID.
+
+    Args:
+        model_path: Local file/directory path or Hugging Face repository ID.
+
+    Returns:
+        A tuple of the normalized model value and whether it is a local path.
+
+    Raises:
+        ValueError: If the value is empty, names an invalid local path, or
+            cannot be expanded.
+    """
+    if not model_path or not model_path.strip():
+        raise ValueError("--custom-model-path must not be empty")
+    model_path = model_path.strip()
+    try:
+        path = Path(model_path).expanduser()
+    except (RuntimeError, OSError, ValueError) as exc:
+        raise ValueError(f"invalid custom model path: {model_path}") from exc
+
+    try:
+        path_exists = path.exists()
+        valid_local_path = (path.is_file() or path.is_dir()) if path_exists else False
+    except OSError as exc:
+        raise ValueError(f"unable to access local custom model path: {model_path}") from exc
+    if path_exists:
+        if not valid_local_path:
             raise ValueError(f"local custom model path is not a file or directory: {model_path}")
-        return
+        return str(path), True
     looks_like_local_path = (
         path.is_absolute()
-        or model_path.startswith((".", "~"))
+        or model_path.startswith((".", "~", "/", "\\"))
         or (len(model_path) > 1 and model_path[1] == ":")
     )
     if looks_like_local_path:
         raise ValueError(f"local custom model path does not exist: {model_path}")
+    return model_path, False
+
+
+def validate_custom_model_path(model_path: str) -> None:
+    """Validate a custom model path without changing the existing API.
+
+    Args:
+        model_path: Local file/directory path or Hugging Face repository ID.
+
+    Raises:
+        ValueError: If the value is empty or names an invalid local path.
+    """
+    resolve_custom_model_path(model_path)
 
 
 def validate_inference_model(model: Any, model_name: str) -> None:
-    """Reject a factory result that cannot satisfy the inference interface."""
+    """Validate the prediction method required by a custom model.
+
+    Args:
+        model: Object returned by the inference model factory.
+        model_name: Display name used in the validation error.
+
+    Raises:
+        ValueError: If the object does not expose a callable ``predict``.
+    """
     if not callable(getattr(model, "predict", None)):
         raise ValueError(
             f"{model_name!r} did not load a PODS-AI inference model with predict()"
@@ -317,6 +389,8 @@ def is_correct_prediction(
     labels = predicted_labels or [predicted_label]
     if is_exact_match_model(model_type):
         return actual_label in labels
+    if actual_label in BACKGROUND_LABELS:
+        return RESIDENT_LABEL not in labels
     return (RESIDENT_LABEL in labels) == (actual_label == RESIDENT_LABEL)
 
 
@@ -348,8 +422,9 @@ def evaluate_model(
     Run a model against all test samples and accumulate results.
 
     Args:
-        model_type: One of 'fastai', 'orcahello', 'wav2vec2', 'oldpodsai', or 'podsai'.
-                    'oldpodsai' and 'wav2vec2' are mapped to 'podsai' inference internally.
+        model_type: One of 'fastai', 'orcahello', 'wav2vec2', 'oldpodsai', 'podsai', or
+                    'custom'. 'oldpodsai', 'wav2vec2', and 'custom' are mapped to
+                    'podsai' inference internally.
         model_path: Path to the model (or HuggingFace Hub model ID).
         wav_paths: List of WAV file paths.
         wav_dir: Root directory containing testing WAV files.
@@ -527,7 +602,7 @@ def print_summary(results: list[ModelResult]) -> None:
     print()
     print("Definitions:")
     print("  Accuracy     = Correct / Evaluated")
-    print("  Correct      = fastai/orcahello: resident vs other; wav2vec2/oldpodsai/podsai: category in prediction set")
+    print("  Correct      = fastai/orcahello: resident vs other; wav2vec2/oldpodsai/podsai/custom: category in prediction set")
     print("  F1           = macro F1 over humpback, resident, and transient classes that are present")
     print("  [R|T|H]FP%   = among non-[R|T|H] samples, fraction predicted as that class")
     print("  [R|T|H]FN%   = among actual samples of that class, fraction predicted as another class")
@@ -561,19 +636,27 @@ def main() -> int:
         "--models",
         default=DEFAULT_MODELS,
         help=(
-            "Comma-separated list of models to evaluate "
-            "Use custom:<local-path-or-HuggingFace-ID> for an additional PODS-AI-compatible model. "
+            "Comma-separated list of models to evaluate. "
+            "Include custom for an additional PODS-AI-compatible model. "
             f"(default: {DEFAULT_MODELS})."
         ),
     )
     parser.add_argument(
-        "--custom-model",
-        action="append",
-        default=[],
+        "--custom-model-path",
+        default=None,
         metavar="PATH_OR_HF_ID",
         help=(
-            "Additional PODS-AI-compatible local model path or Hugging Face model ID. "
-            "May be repeated; equivalent to adding custom:<value> to --models."
+            "Local path or Hugging Face model ID for the custom model. "
+            "Providing this option automatically adds custom to --models."
+        ),
+    )
+    parser.add_argument(
+        "--custom-model-revision",
+        default=None,
+        metavar="REVISION",
+        help=(
+            "Optional revision to use when loading a custom Hugging Face model. "
+            "Ignored for local paths."
         ),
     )
     parser.add_argument(
@@ -625,7 +708,7 @@ def main() -> int:
         help=(
             "Only test samples from this category. "
             "If not specified, all categories are tested. "
-            "Categories: water, resident, transient, humpback, vessel, jingle, human, bird."
+            "Categories: abiotic, water, resident, transient, humpback, vessel, jingle, human, bird."
         ),
     )
 
@@ -641,12 +724,32 @@ def main() -> int:
         return 1
 
     models = [m.strip() for m in args.models.split(",") if m.strip()]
-    models.extend(f"{CUSTOM_MODEL_PREFIX}{path}" for path in args.custom_model)
     try:
-        model_specs = [parse_model_spec(model) for model in models]
-        for _display_name, _inference_type, model_path in model_specs:
-            if model_path is not None:
-                validate_custom_model_path(model_path)
+        if args.custom_model_path is not None and "custom" not in models:
+            models.append("custom")
+        if args.custom_model_revision is not None and "custom" not in models:
+            raise ValueError(
+                "--custom-model-revision requires custom in --models or "
+                "--custom-model-path"
+            )
+        parsed_models = [parse_model_spec(model) for model in models]
+        custom_count = sum(display_name == "custom" for display_name, _, _ in parsed_models)
+        if custom_count > 1:
+            raise ValueError("custom may be listed only once in --models")
+        if custom_count and args.custom_model_path is None:
+            raise ValueError(
+                "custom is listed in --models but --custom-model-path was not provided"
+            )
+        custom_path = None
+        custom_path_is_local = False
+        if args.custom_model_path is not None:
+            custom_path, custom_path_is_local = resolve_custom_model_path(
+                args.custom_model_path
+            )
+        model_specs = [
+            (display_name, inference_type, custom_path if display_name == "custom" else None)
+            for display_name, inference_type, _ in parsed_models
+        ]
     except ValueError as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 1
@@ -693,7 +796,12 @@ def main() -> int:
     for model_type, inference_model_type, custom_path in model_specs:
         print(f"Evaluating model: {model_type}")
         effective_model_path = custom_path or model_paths[model_type]
-        effective_revision = None if custom_path else model_revisions[model_type]
+        if custom_path:
+            effective_revision = (
+                None if custom_path_is_local else args.custom_model_revision
+            )
+        else:
+            effective_revision = model_revisions[model_type]
         try:
             inference_model = get_model_inference(
                 model_type=inference_model_type,
@@ -702,16 +810,16 @@ def main() -> int:
             )
             if custom_path:
                 validate_inference_model(inference_model, model_type)
-        except Exception as e:
+        except MODEL_LOAD_ERRORS as exc:
             if custom_path:
                 print(
                     f"Error loading custom model {custom_path!r}: "
                     "the model must be compatible with the PODS-AI inference "
-                    f"contract ({type(e).__name__}: {e})",
+                    f"contract ({type(exc).__name__}: {exc})",
                     file=sys.stderr,
                 )
             else:
-                print(f"Error loading {model_type} model: {e}", file=sys.stderr)
+                print(f"Error loading {model_type} model: {exc}", file=sys.stderr)
             return 1
         model_result = evaluate_model(
             model_type=inference_model_type,
