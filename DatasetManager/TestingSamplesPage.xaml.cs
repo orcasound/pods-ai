@@ -148,7 +148,7 @@ namespace DatasetManager
                 string timestamp = GetStartTimePSTStringForPastDays(days);
                 string result = await RunPythonAsync(
                     @"src\process_false_negatives.py",
-                    $"--set testing --start {timestamp} --end now --category {Category}");
+                    $"--set testing --start {timestamp} --end now");
 
                 ProposeSamplesFromText(
                     result,
