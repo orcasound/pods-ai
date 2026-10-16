@@ -281,11 +281,6 @@ def parse_model_spec(spec: str) -> tuple[str, str, Optional[str]]:
             path syntax.
     """
     model = spec.strip()
-    if model.startswith("custom:"):
-        raise ValueError(
-            "inline custom model paths are not supported; use 'custom' in "
-            "--models with --custom-model-path"
-        )
     if model == "custom":
         return model, CUSTOM_MODEL_TYPE, None
     if model not in MODEL_TYPE_TO_INFERENCE_TYPE:

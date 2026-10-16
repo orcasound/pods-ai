@@ -106,7 +106,7 @@ not printed by the CLI.
   membership in `global_prediction_labels`; older output falls back to
   `global_prediction_label`.
 - Macro F1 covers `resident`, `transient`, and `humpback` classes present in
-  the evaluated samples.
+  the evaluated samples, either as the correct class or the predicted class.
 - `[R|T|H]FP%` is the fraction of non-class samples predicted as that class.
 - `[R|T|H]FN%` is the fraction of class samples predicted as another class.
 - The displayed confusion matrix uses `global_prediction_label`. Multi-label
@@ -132,7 +132,7 @@ Evaluate a Hugging Face custom model with a pinned revision:
 python src/compare_models.py \
     --models podsai,custom \
     --custom-model-path my-org/my-whale-detector \
-    --custom-model-revision main
+    --custom-model-revision d66c75205e3d229aa5fe875cb27bc90304654fcd
 ```
 
 Limit evaluation to resident samples and ten files:

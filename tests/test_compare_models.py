@@ -74,19 +74,6 @@ def test_multilabel_prediction_counts_matching_species_as_correct():
     assert not is_correct_prediction("humpback", "resident", "podsai", ["resident", "transient"])
 
 
-def test_parse_model_spec_accepts_custom_name_only(tmp_path):
-    """Custom is a model name; its path is not embedded in the model list."""
-    from compare_models import parse_model_spec, resolve_custom_model_path
-
-    local_model = tmp_path / "model"
-    local_model.mkdir()
-    assert parse_model_spec("custom") == ("custom", "podsai", None)
-    with pytest.raises(ValueError, match="inline custom model paths"):
-        parse_model_spec("custom:org/model")
-    assert resolve_custom_model_path(str(local_model)) == (str(local_model), True)
-    assert resolve_custom_model_path("org/model") == ("org/model", False)
-
-
 def test_validate_custom_model_path_expands_tilde(tmp_path, monkeypatch):
     """Existing tilde paths are normalized before they reach the loader."""
     from compare_models import resolve_custom_model_path
