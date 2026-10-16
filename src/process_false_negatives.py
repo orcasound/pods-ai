@@ -326,7 +326,7 @@ def main() -> int:
     parser.add_argument(
         "--manual-samples-csv",
         default=None,
-        help="Path to new_manual_samples.csv.",
+        help="Path to the manual samples CSV; defaults to the file for the selected set.",
     )
     parser.add_argument(
         "--output-dir",
