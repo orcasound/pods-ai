@@ -11,7 +11,8 @@ For each confirmed OrcaHello detection in the selected timeframe, this script:
 4. Splits the WAV into segments and runs PODS-AI segment inference.
 5. Runs OrcaHello inference on each segment.
 6. Appends segments where OrcaHello predicts resident but PODS-AI does not to
-   new_manual_samples.csv with corrected class "resident", avoiding duplicates.
+   new_manual_training_samples.csv or new_manual_testing_samples.csv with corrected class
+   "resident", avoiding duplicates.
 """
 
 import argparse
@@ -290,7 +291,8 @@ def main() -> int:
         description=(
             "Process confirmed OrcaHello detections, find 60-second false negatives "
             "where PODS-AI misses resident calls, and append corrected resident "
-            "sub-segments to new_manual_training_samples.csv."
+            "sub-segments to new_manual_training_samples.csv for the training set,"
+            "or new_manual_testing_samples.csv for the testing set."
         )
     )
     parser.add_argument(

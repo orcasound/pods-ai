@@ -3,7 +3,7 @@
 Re-checks confirmed OrcaHello detections by downloading the 60-second WAV and
 running PODS-AI inference. By default, it runs OrcaHello segment inference and
 appends 3-second segments where OrcaHello predicts resident but PODS-AI does not
-to `output/csv/new_manual_samples.csv` with corrected class `resident`. Use
+to `output/csv/new_manual_training_samples.csv` with corrected class `resident`. Use
 `--set testing` to instead add a 60-second testing sample when PODS-AI does not
 predict resident; these rows are appended to
 `output/csv/new_manual_testing_samples.csv`. Supports `--category CATEGORY` to
