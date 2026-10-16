@@ -37,7 +37,6 @@ from audio_utils import (
 )
 from manual_samples_utils import (
     CSV_FIELDNAMES,
-    TESTING_CSV_FIELDNAMES,
     append_manual_samples,
     filter_overlapping_samples,
     load_existing_uris,
@@ -45,7 +44,7 @@ from manual_samples_utils import (
 from model_inference import get_model_inference
 from orcasite_feeds import get_orcasite_feeds_with_retry
 
-DEFAULT_MANUAL_SAMPLES_CSV = "output/csv/new_manual_samples.csv"
+DEFAULT_MANUAL_TRAINING_SAMPLES_CSV = "output/csv/new_manual_training_samples.csv"
 DEFAULT_MANUAL_TESTING_SAMPLES_CSV = "output/csv/new_manual_testing_samples.csv"
 DEFAULT_TRAINING_SAMPLES_CSV = "output/csv/training_3s_samples.csv"
 DEFAULT_TESTING_SAMPLES_CSV = "output/csv/testing_60s_samples.csv"
@@ -267,7 +266,7 @@ def process_false_negatives(
         manual_samples_path,
         proposed_rows,
         existing_uris,
-        fieldnames=CSV_FIELDNAMES if for_training else TESTING_CSV_FIELDNAMES,
+        fieldnames=CSV_FIELDNAMES,
     )
     summary["appended"] = appended
     summary["duplicates"] += duplicates
@@ -275,7 +274,7 @@ def process_false_negatives(
     print(f"Proposed rows for {destination_samples_path.as_posix()}:")
     csv_writer = csv.DictWriter(
         sys.stdout,
-        fieldnames=CSV_FIELDNAMES if for_training else TESTING_CSV_FIELDNAMES,
+        fieldnames=CSV_FIELDNAMES,
         lineterminator="\n",
         extrasaction="ignore",
     )
@@ -291,7 +290,7 @@ def main() -> int:
         description=(
             "Process confirmed OrcaHello detections, find 60-second false negatives "
             "where PODS-AI misses resident calls, and append corrected resident "
-            "sub-segments to new_manual_samples.csv."
+            "sub-segments to new_manual_training_samples.csv."
         )
     )
     parser.add_argument(
@@ -366,7 +365,7 @@ def main() -> int:
     manual_samples_csv = args.manual_samples_csv
     if not manual_samples_csv:
         manual_samples_csv = (
-            DEFAULT_MANUAL_SAMPLES_CSV
+            DEFAULT_MANUAL_TRAINING_SAMPLES_CSV
             if result_set == "training"
             else DEFAULT_MANUAL_TESTING_SAMPLES_CSV
         )

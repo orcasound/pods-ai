@@ -17,8 +17,8 @@ CSV_FIELDNAMES = [
     "Description",
     "Notes",
     "Confidence",
+    "Tags",
 ]
-TESTING_CSV_FIELDNAMES = [*CSV_FIELDNAMES, "Tags"]
 
 
 def _sample_key(row: dict) -> tuple[str, str] | None:
