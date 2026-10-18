@@ -295,6 +295,7 @@ def load_model(orch_config: dict[str, Any], logger: logging.Logger) -> Any:
         effective_config.get("min_num_positive_calls_threshold", 2)
     )
     device = effective_config.get("device")
+    inference_overrides = (overrides or {}).get("inference", {}) or {}
 
     kwargs: dict[str, Any] = {
         "threshold": threshold,
@@ -303,6 +304,9 @@ def load_model(orch_config: dict[str, Any], logger: logging.Logger) -> Any:
     }
     if device:
         kwargs["device"] = device
+
+    if "max_batch_size" in inference_overrides:
+        kwargs["inference_batch_size"] = int(inference_overrides["max_batch_size"])
 
     logger.debug(f"Loading PODS-AI model from {model_path}")
     return get_model_inference(
