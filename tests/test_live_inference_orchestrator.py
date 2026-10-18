@@ -181,3 +181,52 @@ def test_upload_detection_to_azure_skips_existing_blobs(tmp_path) -> None:
     spectrogram_blob_client.upload_blob.assert_called_once()
     logger.info.assert_any_call("Blob already exists, skipping upload: existing.wav")
     logger.info.assert_any_call("Blob already exists, skipping upload: existing.png")
+
+
+def test_apply_model_config_overrides_updates_nested_values() -> None:
+    """Nested override sections should be copied into the config dict without class refs."""
+    config = {
+        "inference": {"max_batch_size": 8, "window_s": 3},
+        "global_prediction": {"pred_global_threshold": 0.5},
+    }
+    overrides = {
+        "inference": {"max_batch_size": 16},
+        "global_prediction": {"pred_global_threshold": 0.75},
+    }
+
+    updated = orchestrator.apply_model_config_overrides(config, overrides, Mock())
+
+    assert updated["inference"]["max_batch_size"] == 16
+    assert updated["global_prediction"]["pred_global_threshold"] == 0.75
+
+
+def test_load_model_logs_and_validates_overrides(monkeypatch) -> None:
+    """The loader should validate override data and still initialize the model."""
+    logger = Mock()
+    called = {}
+
+    def fake_get_model_inference(model_type, model_path, **kwargs):
+        called["type"] = model_type
+        called["path"] = model_path
+        called["kwargs"] = kwargs
+        return "model"
+
+    monkeypatch.setattr(orchestrator, "get_model_inference", fake_get_model_inference)
+
+    model = orchestrator.load_model(
+        {
+            "model_hf_repo_id": "demo-model",
+            "model_config_overrides": {
+                "inference": {"max_batch_size": 16},
+                "unknown_section": {"bad": "value"},
+            },
+        },
+        logger,
+    )
+
+    assert model == "model"
+    assert called["path"] == "demo-model"
+    logger.info.assert_any_call(
+        "Applying model config overrides: %s",
+        {"inference": {"max_batch_size": 16}, "unknown_section": {"bad": "value"}},
+    )

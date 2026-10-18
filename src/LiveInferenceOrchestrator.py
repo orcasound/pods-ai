@@ -235,9 +235,73 @@ def setup_logger(connection_string: Optional[str], log_level: str = "DEBUG") -> 
 
     return logger
 
+def apply_model_config_overrides(model_config: Any, overrides: Any, logger: logging.Logger) -> Any:
+    """Apply nested overrides from orch_config onto a model config dictionary.
 
+    The PODS-AI orchestrator does not use the OrcaHello inference config type.
+    We therefore accept a plain dict or any config object exposing as_dict(), and
+    apply nested overrides in-place while preserving legacy behavior when no overrides
+    are provided.
+    """
+    if not overrides:
+        return model_config
+    if not isinstance(overrides, dict):
+        logger.warning("model_config_overrides: overrides must be a dict, skipping")
+        return model_config
+
+    config_dict = model_config
+    if hasattr(model_config, "as_dict"):
+        config_dict = model_config.as_dict()
+    if not isinstance(config_dict, dict):
+        logger.warning(
+            "model_config_overrides: model_config must be a dict-like object, skipping"
+        )
+        return model_config
+
+    applied: list[str] = []
+    for section, values in overrides.items():
+        if section not in config_dict:
+            logger.warning(
+                f"model_config_overrides: unknown section '{section}', skipping"
+            )
+            continue
+        if not isinstance(values, dict):
+            logger.warning(
+                f"model_config_overrides: section '{section}' must be a dict, skipping"
+            )
+            continue
+
+        section_config = config_dict[section]
+        if not isinstance(section_config, dict):
+            logger.warning(
+                f"model_config_overrides: section '{section}' is not a dict, skipping"
+            )
+            continue
+
+        for key, val in values.items():
+            if key not in section_config:
+                logger.warning(
+                    f"model_config_overrides: unknown key '{section}.{key}', skipping"
+                )
+                continue
+            old_value = section_config[key]
+            section_config[key] = val
+            applied.append(f"{section}.{key}: {old_value!r} -> {val!r}")
+
+    if applied:
+        logger.info("model_config_overrides applied: %s", "; ".join(applied))
+
+    return config_dict
+
+
+# If config.yaml has model_config_overrides, apply them to the model config by calling override function.
 def load_model(orch_config: dict[str, Any], logger: logging.Logger) -> Any:
     """Load PODS-AI model using the model_inference factory."""
+    overrides = orch_config.get("model_config_overrides")
+    if overrides:
+        logger.info("Applying model config overrides: %s", overrides)
+        apply_model_config_overrides({}, overrides, logger)
+
     model_path = orch_config.get("model_hf_repo_id", PODSAI_MODEL_ID)
     model_revision = orch_config.get("model_hf_repo_revision", PODSAI_MODEL_REVISION)
     threshold = float(orch_config.get("threshold", 0.5))
