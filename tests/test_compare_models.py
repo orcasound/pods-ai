@@ -1110,7 +1110,7 @@ class TestConfusionMatrix:
     """Tests for per-class confusion matrix tracking in ModelResult and evaluate_model()."""
 
     def test_confusion_matrix_populated_on_correct_prediction(self, tmp_path):
-        """evaluate_model records actualâ†’predicted in confusion_matrix for correct predictions."""
+        """evaluate_model records actual→predicted in confusion_matrix for correct predictions."""
         from compare_models import evaluate_model
 
         wav_dir = tmp_path / "testing-wav"
@@ -1143,7 +1143,7 @@ class TestConfusionMatrix:
         assert result.whale_f1 == 0.5
 
     def test_confusion_matrix_populated_on_false_positive(self, tmp_path):
-        """evaluate_model records actualâ†’predicted in confusion_matrix for false positives."""
+        """evaluate_model records actual→predicted in confusion_matrix for false positives."""
         from compare_models import evaluate_model
 
         wav_dir = tmp_path / "testing-wav"
