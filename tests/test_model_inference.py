@@ -7,6 +7,25 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 import wave
 
+import numpy as np
+import soundfile as sf
+
+
+def test_export_wave_file_closes_output_before_decoding(tmp_path):
+    """An exported segment is fully readable before the next pipeline stage."""
+    from model_inference import export_wave_file
+    from pydub import AudioSegment
+
+    source = tmp_path / "source.wav"
+    destination = tmp_path / "segment.wav"
+    sf.write(source, np.zeros(16000, dtype=np.float32), 16000)
+
+    export_wave_file(AudioSegment.from_wav(source), 0, 1, destination)
+    samples, sample_rate = sf.read(destination)
+
+    assert sample_rate == 16000
+    assert len(samples) == 16000
+
 
 def test_fastai_predict_with_empty_valid_loader(tmp_path):
     """FastAI model prediction works when split_none() is used."""

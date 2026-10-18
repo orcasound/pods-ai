@@ -2,9 +2,33 @@
 # SPDX-License-Identifier: MIT
 """Unit tests for PODS-AI LiveInferenceOrchestrator helpers."""
 
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import LiveInferenceOrchestrator as orchestrator
+
+
+@patch("LiveInferenceOrchestrator.requests.get")
+def test_orcasound_attributes_pulled_from_feed(mock_get) -> None:
+    mock_response = Mock()
+    mock_response.raise_for_status.return_value = None
+    mock_response.json.return_value = {
+        "data": [
+            {
+                "id": "feed_02u8r4EPgmlYQmh6gzlGIL",
+                "attributes": {
+                    "name": "Andrews Bay",
+                    "node_name": "rpi_andrews_bay",
+                    "location_point": {
+                        "coordinates": [-123.166408, 48.546653]
+                    }
+                }
+            }
+        ]
+    }
+    mock_get.return_value = mock_response
+
+    result_dict = orchestrator.get_hydro_attributes_from_feed()
+    assert result_dict["rpi_andrews_bay"]["name"] == "Andrews Bay"
 
 
 def test_orcasound_attributes_pulled_from_feed() -> None:
@@ -18,6 +42,7 @@ def test_is_positive_label_uses_multiclass_negative_set() -> None:
     assert orchestrator.is_positive_label("humpback")
 
     assert not orchestrator.is_positive_label("other")
+    assert not orchestrator.is_positive_label("abiotic")
     assert not orchestrator.is_positive_label("water")
     assert not orchestrator.is_positive_label("vessel")
     assert not orchestrator.is_positive_label("jingle")
@@ -102,8 +127,8 @@ def test_build_cosmosdb_metadata_comments_appends_dominant_extra_class() -> None
         model_id="podsai-model",
     )
 
-    # Tags should only include resident (positive label) and negative local (vessel)
-    assert metadata["tags"] == "resident;vessel"
+    # Tags should only include srkw (positive label) and negative local (vessel)
+    assert metadata["tags"] == "srkw;vessel"
 
 
 def test_build_cosmosdb_metadata_tags_include_all_positive_predictions() -> None:
@@ -126,7 +151,7 @@ def test_build_cosmosdb_metadata_tags_include_all_positive_predictions() -> None
         model_id="podsai-model",
     )
 
-    assert metadata["tags"] == "resident"
+    assert metadata["tags"] == "srkw"
 
 
 def test_upload_detection_to_azure_skips_existing_blobs(tmp_path) -> None:

@@ -29,11 +29,10 @@ COSMOSDB_CONTAINER_NAME = "metadata"
 
 ORCASOUND_S3_BUCKET = "audio-orcasound-net"
 
-NEGATIVE_LABELS = {"other", "water", "vessel", "jingle", "human", "bird"}
+NEGATIVE_LABELS = {"abiotic", "other", "water", "vessel", "jingle", "human", "bird"}
 
 PODSAI_MODEL_ID = "davethaler/whale-call-detector"
-# renovate: datasource=git-refs depName=https://huggingface.co/davethaler/whale-call-detector versioning=git.
-PODSAI_MODEL_REVISION = "36620370fd59c8a70f9b7be6060d4f40717e796d"
+from model_revisions import LATEST_PODSAI_MODEL_REVISION
 
 def get_hydro_attributes_from_feed() -> dict:
     hydrophone_location_data = {}
@@ -303,10 +302,10 @@ def load_model(orch_config: dict[str, Any], logger: logging.Logger) -> Any:
         apply_model_config_overrides({}, overrides, logger)
 
     model_path = orch_config.get("model_hf_repo_id", PODSAI_MODEL_ID)
-    model_revision = orch_config.get("model_hf_repo_revision", PODSAI_MODEL_REVISION)
+    model_revision = orch_config.get("model_hf_repo_revision", LATEST_PODSAI_MODEL_REVISION)
     threshold = float(orch_config.get("threshold", 0.5))
     min_num_positive_calls_threshold = int(
-        orch_config.get("min_num_positive_calls_threshold", 3)
+        orch_config.get("min_num_positive_calls_threshold", 2)
     )
     device = orch_config.get("device")
 

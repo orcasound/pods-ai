@@ -32,6 +32,8 @@ if str(REPO_ROOT) not in sys.path:
 
 from src.audio_utils import (
     download_60s_audio,
+    format_timestamp_pst,
+    parse_timestamp_pst,
 )
 
 # Offset, in seconds, between the detection end time and the start of the downloaded audio.
@@ -151,7 +153,7 @@ def sort_by_preference(detections: list[dict], manual_confidences: dict[str, str
             except (ValueError, TypeError):
                 pass
 
-        timestamp = det['Timestamp']
+        timestamp = det['StartTimestamp']
         # Return tuple: (not preferred note, not full confidence, has quality issue, timestamp).
         # This puts preferred notes first, then 100.0-confidence entries, then by timestamp.
         return (not has_preferred_note, not has_full_confidence, has_quality_issue, timestamp)
@@ -455,12 +457,13 @@ def compute_correct_timestamp_for_tp_human_only(
         Tuple of (corrected timestamp string, max confidence score in range 0.0-100.0)
     """
     node_name = sample['NodeName']
-    timestamp_str = sample['Timestamp']
+    timestamp_str = sample['StartTimestamp']
 
     print(f"Computing correct timestamp for tp_human_only: {node_name} - {timestamp_str}")
 
     # Download 60 seconds of audio.
-    wav_path = download_60s_audio(node_name, timestamp_str, tmp_dir)
+    min_end_timestamp_pst_str=format_timestamp_pst(parse_timestamp_pst(timestamp_str) + timedelta(seconds=60))
+    wav_path = download_60s_audio(node_name, min_end_timestamp_pst_str, tmp_dir)
 
     if wav_path is None:
         print(f"  Failed to download audio, falling back to {segment_duration}-second offset")
@@ -539,8 +542,11 @@ def compute_correct_timestamp_for_tp_human_only(
 
         # max_confidence_idx represents a position in the downloaded 60-second WAV
         # We need to calculate what clock time that corresponds to
-        # The WAV starts at (aligned_end - 60 - AUDIO_OFFSET_SECONDS) due to the 2-second offset in download.
-        end_time = get_aligned_end_time(timestamp_str)
+        # The WAV start must be computed from the same minimum-end timestamp
+        # that was requested from the downloader. Reuse min_end_timestamp_pst_str
+        # (which is timestamp + 60s) so the aligned end matches the downloaded file
+        # and reconstructed call times are correct.
+        end_time = get_aligned_end_time(min_end_timestamp_pst_str)
         wav_start_time = end_time - timedelta(seconds=60 + AUDIO_OFFSET_SECONDS)
 
         # The detected call is at wav_start_time + timedelta(seconds=time_offset_seconds).
@@ -601,7 +607,7 @@ def process_sample(
     # Check if there's a manual timestamp correction for this sample.
     if sample['URI'] in manual_timestamps:
         print(f"  Using manual timestamp correction for {sample['URI']}")
-        output_row['Timestamp'] = manual_timestamps[sample['URI']]
+        output_row['StartTimestamp'] = manual_timestamps[sample['URI']]
         output_row['Confidence'] = manual_confidences[sample['URI']]
 
     # For tp_human_only detections, use model-based timestamp correction.
@@ -609,12 +615,12 @@ def process_sample(
         timestamp, confidence = compute_correct_timestamp_for_tp_human_only(
             sample, model_inference, tmp_dir or '', segment_duration
         )
-        output_row['Timestamp'] = timestamp
+        output_row['StartTimestamp'] = timestamp
         output_row['Confidence'] = f"{confidence:.1f}"
 
     # For samples from manual_samples.csv, keep timestamp as-is (already correct).
     elif is_from_manual_samples:
-        print(f"  Keeping timestamp as-is for manual sample: {sample['Timestamp']}")
+        print(f"  Keeping timestamp as-is for manual sample: {sample['StartTimestamp']}")
         # Timestamp remains unchanged from manual_samples.csv.
         confidence_str = sample.get('Confidence', '')
         if confidence_str:
@@ -629,7 +635,7 @@ def process_sample(
     else:
         # For all other detections, use the timestamp from segment_duration seconds earlier
         # since machine detection timestamps in the orcasite UI seem to be off by that much currently.
-        output_row['Timestamp'] = subtract_segment_duration(sample['Timestamp'], segment_duration)
+        output_row['StartTimestamp'] = subtract_segment_duration(sample['StartTimestamp'], segment_duration)
         confidence_str = sample.get('Confidence', '')
         if confidence_str:
             try:
@@ -641,7 +647,7 @@ def process_sample(
             output_row['Confidence'] = ''
 
     # Update URI to match the new timestamp.
-    output_row['URI'] = generate_uri(sample['URI'], output_row['Timestamp'])
+    output_row['URI'] = generate_uri(sample['URI'], output_row['StartTimestamp'])
 
     return output_row
 
@@ -671,7 +677,7 @@ def write_training_samples(
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     # Sort samples by Category, then NodeName, then Timestamp.
-    sorted_samples = sorted(samples, key=lambda s: (s['Category'], s['NodeName'], s['Timestamp']))
+    sorted_samples = sorted(samples, key=lambda s: (s['Category'], s['NodeName'], s['StartTimestamp']))
 
     # Track output URIs to detect duplicates.
     output_uris_seen = {}  # URI -> (Category, NodeName, Timestamp)
@@ -683,7 +689,7 @@ def write_training_samples(
         print(f"\nProcessing {total_samples} samples...")
 
         for idx, sample in enumerate(sorted_samples, start=1):
-            print(f"\n[{idx}/{total_samples}] Processing: {sample['Category']} - {sample['NodeName']} - {sample['Timestamp']}")
+            print(f"\n[{idx}/{total_samples}] Processing: {sample['Category']} - {sample['NodeName']} - {sample['StartTimestamp']}")
 
             output_row = process_sample(
                 sample, manual_timestamps, manual_confidences, model_inference, tmp_dir, segment_duration
@@ -697,7 +703,7 @@ def write_training_samples(
                     f"\nError: Duplicate output URI detected after processing:\n"
                     f"  URI: {output_uri}\n"
                     f"  First occurrence: {prev_info[0]}, {prev_info[1]}, {prev_info[2]}\n"
-                    f"  Second occurrence: {output_row['Category']}, {output_row['NodeName']}, {output_row['Timestamp']}\n"
+                    f"  Second occurrence: {output_row['Category']}, {output_row['NodeName']}, {output_row['StartTimestamp']}\n"
                     f"\nEach training sample must have a unique output URI.\n"
                     f"This typically means the same timestamp appears twice, or timestamp correction\n"
                     f"produced the same result for different input samples."
@@ -707,7 +713,7 @@ def write_training_samples(
             output_uris_seen[output_uri] = (
                 output_row['Category'],
                 output_row['NodeName'],
-                output_row['Timestamp']
+                output_row['StartTimestamp']
             )
             processed_rows.append(output_row)
 
@@ -717,7 +723,7 @@ def write_training_samples(
 
         with open(output_path, 'w', newline='', encoding='utf-8') as f:
             # Use same columns as detections.csv.
-            fieldnames = ['Category', 'NodeName', 'Timestamp', 'URI', 'Description', 'Notes', 'Confidence']
+            fieldnames = ['Category', 'NodeName', 'StartTimestamp', 'URI', 'Description', 'Notes', 'Confidence']
             writer = csv.DictWriter(f, fieldnames=fieldnames, lineterminator='\n')
             writer.writeheader()
 
@@ -735,8 +741,8 @@ def write_testing_samples(samples: list[dict], output_path: Path):
     """
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    sorted_samples = sorted(samples, key=lambda s: (s['Category'], s['NodeName'], s['Timestamp']))
-    fieldnames = ['Category', 'NodeName', 'Timestamp', 'URI', 'Description', 'Notes', 'Confidence']
+    sorted_samples = sorted(samples, key=lambda s: (s['Category'], s['NodeName'], s['StartTimestamp']))
+    fieldnames = ['Category', 'NodeName', 'StartTimestamp', 'URI', 'Description', 'Notes', 'Confidence']
 
     with open(output_path, 'w', newline='', encoding='utf-8') as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames, lineterminator='\n')
@@ -815,7 +821,7 @@ def load_manual_corrections(corrections_path: Path) -> tuple[dict[str, str], dic
                     if not uri:
                         continue  # Skip rows without URI.
 
-                    timestamp = row.get('Timestamp', '').strip()
+                    timestamp = row.get('StartTimestamp', '').strip()
                     confidence = row.get('Confidence', '').strip()
 
                     # Only store timestamp if provided.

@@ -57,8 +57,8 @@ class TestBuildSample:
         assert self._sample()['NodeName'] == 'rpi_orcasound_lab'
 
     def test_timestamp_preserved(self):
-        """Timestamp should be the original timestamp_str argument."""
-        assert self._sample()['Timestamp'] == self.TIMESTAMP
+        """StartTimestamp should be the original timestamp_str argument."""
+        assert self._sample()['StartTimestamp'] == self.TIMESTAMP
 
     def test_notes_is_tp_human_only(self):
         """Notes should be 'tp_human_only' so process_sample uses model correction."""

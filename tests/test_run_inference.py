@@ -26,8 +26,7 @@ import soundfile as sf
 
 # Pinned PODS-AI model revision for integration-test stability.
 PODSAI_TEST_MODEL_ID = "davethaler/whale-call-detector"
-# renovate: datasource=git-refs depName=https://huggingface.co/davethaler/whale-call-detector versioning=git.
-PODSAI_TEST_MODEL_REVISION = "36620370fd59c8a70f9b7be6060d4f40717e796d"
+from model_revisions import LATEST_PODSAI_MODEL_REVISION, PODSAI_WAV2VEC2_MODEL_REVISION
 
 
 # ---------------------------------------------------------------------------
@@ -136,21 +135,45 @@ def _resolve_podsai_test_model_path() -> str:
         if not hf_file_exists(
             PODSAI_TEST_MODEL_ID,
             "preprocessor_config.json",
-            revision=PODSAI_TEST_MODEL_REVISION,
+            revision=LATEST_PODSAI_MODEL_REVISION,
         ):
             pytest.skip(
                 f"Hub model '{PODSAI_TEST_MODEL_ID}' revision "
-                f"'{PODSAI_TEST_MODEL_REVISION}' is missing preprocessor_config.json."
+                f"'{LATEST_PODSAI_MODEL_REVISION}' is missing preprocessor_config.json."
             )
         return hf_snapshot_download(
             repo_id=PODSAI_TEST_MODEL_ID,
-            revision=PODSAI_TEST_MODEL_REVISION,
+            revision=LATEST_PODSAI_MODEL_REVISION,
+            allow_patterns=[
+                "config.json",
+                "preprocessor_config.json",
+                "model.safetensors",
+                "training_args.bin",
+            ],
         )
     except Exception:
         pytest.skip(
             f"HuggingFace Hub is not reachable; cannot load model "
-            f"'{PODSAI_TEST_MODEL_ID}' revision '{PODSAI_TEST_MODEL_REVISION}'"
+            f"'{PODSAI_TEST_MODEL_ID}' revision '{LATEST_PODSAI_MODEL_REVISION}'"
         )
+
+
+def model_inference_helper(label: str, wav_file: str, model_type: str, model_path: str) -> dict:
+    """Download a specific testing WAV and run run_inference() against it.
+
+    This helper is used by the integration tests and must be module-level so
+    pytest test methods can call it directly.
+    """
+    from download_wavs import download_testing_file
+    from run_inference import run_inference
+
+    output_root = Path("output/testing-wav")
+    category_dir = output_root / label
+    wav_path = category_dir / wav_file
+    print(f"\nProcessing {wav_path}...")
+    download_testing_file(wav_path, output_root)
+    result = run_inference(str(wav_path), model_type=model_type, model_path=model_path)
+    return result
 
 
 
@@ -450,7 +473,7 @@ class TestRunInferencePodsAI:
         try:
             mock_model = _make_podsai_model_mock()
             with patch("run_inference.get_model_inference", return_value=mock_model) as mock_factory:
-                from run_inference import run_inference, PODSAI_MODEL_ID, PODSAI_MODEL_REVISION
+                from run_inference import run_inference, PODSAI_MODEL_ID
                 run_inference(wav_path, model_type="podsai", model_path=None)
 
             mock_factory.assert_called_once()
@@ -459,7 +482,7 @@ class TestRunInferencePodsAI:
                 call_kwargs.args[0] if call_kwargs.args else None
             )
             assert model_path_arg == PODSAI_MODEL_ID
-            assert call_kwargs.kwargs.get("model_revision") == PODSAI_MODEL_REVISION
+            assert call_kwargs.kwargs.get("model_revision") == LATEST_PODSAI_MODEL_REVISION
         finally:
             Path(wav_path).unlink(missing_ok=True)
 
@@ -653,6 +676,20 @@ class TestRunInferenceOrcaHello:
         finally:
             Path(wav_path).unlink(missing_ok=True)
 
+    def test_orcahello_inference_error_is_not_silently_accepted(self):
+        """Audio decoder failures must fail the runner instead of becoming negatives."""
+        wav_path = _make_wav()
+        try:
+            mock_model = _make_orcahello_model_mock()
+            mock_model.predict.return_value["error"] = "LibsndfileError: System error"
+            with patch("run_inference.get_model_inference", return_value=mock_model):
+                from run_inference import run_inference
+
+                with pytest.raises(RuntimeError, match="OrcaHello inference failed"):
+                    run_inference(wav_path, model_type="orcahello", model_path="model")
+        finally:
+            Path(wav_path).unlink(missing_ok=True)
+
     def test_defaults_model_path_to_orcahello_hub(self):
         """When model_path is None for orcahello, get_model_inference uses orcahello-srkw-detector-v1."""
         wav_path = _make_wav()
@@ -718,7 +755,7 @@ class TestBuildTagsList:
         }
         
         tags = build_tags_list(result, id2label)
-        assert set(tags) == {"resident"}
+        assert set(tags) == {"srkw"}
 
     def test_tags_append_context_class_when_most_common_segment(self):
         """Tags should include vessel when vessel is most common and differs from global label."""
@@ -735,7 +772,7 @@ class TestBuildTagsList:
         }
         
         tags = build_tags_list(result, id2label)
-        assert set(tags) == {"resident", "vessel"}
+        assert set(tags) == {"srkw", "vessel"}
 
     def test_tags_include_all_global_positive_labels_without_duplicates(self):
         """Multi-label global predictions are preserved before local context."""
@@ -748,7 +785,7 @@ class TestBuildTagsList:
         }
         id2label = {1: "resident", 2: "transient"}
 
-        assert build_tags_list(result, id2label) == ["resident", "transient"]
+        assert build_tags_list(result, id2label) == ["srkw", "transient"]
 
     def test_tags_do_not_add_secondary_local_whale_context(self):
         """Local whale labels below the global threshold remain out of context tags."""
@@ -759,7 +796,17 @@ class TestBuildTagsList:
             "local_predictions": ["resident", "humpback", "resident"],
         }
 
-        assert build_tags_list(result) == ["resident"]
+        assert build_tags_list(result) == ["srkw"]
+
+    def test_abiotic_is_not_treated_as_a_global_whale_label(self):
+        """Legacy single-label output does not promote abiotic to a whale tag."""
+        from run_inference import build_tags_list
+
+        result = {
+            "global_prediction_label": "abiotic",
+        }
+
+        assert build_tags_list(result) == []
 
     def test_tags_deduplicate_global_and_local_positive_labels(self):
         """Global positives are emitted once even when repeated locally."""
@@ -771,7 +818,7 @@ class TestBuildTagsList:
             "local_predictions": ["resident", "resident", "water"],
         }
 
-        assert build_tags_list(result) == ["resident", "transient", "water"]
+        assert build_tags_list(result) == ["srkw", "transient", "water"]
 
 # ---------------------------------------------------------------------------
 # Tests for main() CLI
@@ -878,13 +925,52 @@ class TestMainCLI:
                     "./model",
                 ],
             ), patch(
-                "run_inference.download_60s_audio_from_start_utc",
+                "run_inference.download_audio_from_start_utc",
                 return_value=wav_path,
-            ), patch(
+            ) as mock_download, patch(
                 "run_inference.get_model_inference", return_value=mock_model
             ):
                 from run_inference import main
                 assert main() == 0
+                mock_download.assert_called_once()
+                _, start_time_utc, _ = mock_download.call_args.args
+                assert start_time_utc == datetime(2025, 1, 15, 20, 29, tzinfo=timezone.utc)
+                assert mock_download.call_args.kwargs["duration_seconds"] == 60.0
+        finally:
+            Path(wav_path).unlink(missing_ok=True)
+
+    def test_main_training_set_downloads_from_end_timestamp(self):
+        """main() requests a 3-second training clip ending at the given timestamp."""
+        wav_path = _make_wav()
+        try:
+            mock_model = _make_fastai_model_mock()
+            with patch(
+                "sys.argv",
+                [
+                    "run_inference.py",
+                    "--node-name",
+                    "rpi_sunset_bay",
+                    "--end-timestamp-str",
+                    "2025_01_15_12_30_00_PST",
+                    "--set",
+                    "training",
+                    "--model",
+                    "fastai",
+                    "--model-path",
+                    "./model",
+                ],
+            ), patch(
+                "run_inference.download_audio_from_start_utc",
+                return_value=wav_path,
+            ) as mock_download, patch(
+                "run_inference.get_model_inference", return_value=mock_model
+            ):
+                from run_inference import main
+                assert main() == 0
+                mock_download.assert_called_once()
+                _, start_time_utc, _ = mock_download.call_args.args
+                assert start_time_utc == datetime(2025, 1, 15, 20, 29, 57, tzinfo=timezone.utc)
+                assert mock_download.call_args.kwargs["duration_seconds"] == 3.0
         finally:
             Path(wav_path).unlink(missing_ok=True)
 
@@ -907,7 +993,7 @@ class TestMainCLI:
                     "./model",
                 ],
             ), patch(
-                "run_inference.download_60s_audio_from_start_utc",
+                "run_inference.download_audio_from_start_utc",
                 return_value=wav_path,
             ) as mock_download, patch(
                 "run_inference.get_model_inference", return_value=mock_model
@@ -918,6 +1004,38 @@ class TestMainCLI:
                 _, start_time_utc, _ = mock_download.call_args[0]
                 assert isinstance(start_time_utc, datetime)
                 assert start_time_utc.tzinfo == timezone.utc
+        finally:
+            Path(wav_path).unlink(missing_ok=True)
+
+    def test_main_training_set_downloads_3s_clip(self):
+        """main() requests a 3-second clip when --set training is given."""
+        wav_path = _make_wav()
+        try:
+            mock_model = _make_fastai_model_mock()
+            with patch(
+                "sys.argv",
+                [
+                    "run_inference.py",
+                    "--node-name",
+                    "rpi_sunset_bay",
+                    "--start-timestamp-utc",
+                    "2025-01-15T20:29:00Z",
+                    "--set",
+                    "training",
+                    "--model",
+                    "fastai",
+                    "--model-path",
+                    "./model",
+                ],
+            ), patch(
+                "run_inference.download_audio_from_start_utc",
+                return_value=wav_path,
+            ) as mock_download, patch(
+                "run_inference.get_model_inference", return_value=mock_model
+            ):
+                from run_inference import main
+                assert main() == 0
+                assert mock_download.call_args.kwargs["duration_seconds"] == 3.0
         finally:
             Path(wav_path).unlink(missing_ok=True)
 
@@ -936,7 +1054,7 @@ class TestMainCLI:
                 "--model-path",
                 "./model",
             ],
-        ), patch("run_inference.download_60s_audio_from_start_utc", return_value=None):
+        ), patch("run_inference.download_audio_from_start_utc", return_value=None):
             from run_inference import main
             assert main() == 1
 
@@ -974,6 +1092,8 @@ class TestMainCLI:
             "global_prediction_label": "resident",
             "global_confidence": 0.7,
             "local_predictions": [0, 1, 2, 4],
+            "local_prediction_labels": ["water", "resident", "transient", "vessel"],
+            "local_confidences": [0.9, 0.7, 0.8, 0.9],
             "positive_segments_count": 2,
             "positive_segments": [
                 {
@@ -991,8 +1111,8 @@ class TestMainCLI:
         print_results(results, "podsai")
         captured = capsys.readouterr()
         assert "Positive segments: 2/4" in captured.out
-        assert "2025-01-15 12:29:02 PST: resident (confidence: 0.700)" in captured.out
-        assert "2025-01-15 12:29:04 PST: transient (confidence: 0.800)" in captured.out
+        assert "  +2.0s: resident (whale confidence: 0.700)" in captured.out
+        assert "  +4.0s: transient (whale confidence: 0.800)" in captured.out
 
 
 class TestPinnedPodsAIModelPath:
@@ -1018,11 +1138,17 @@ class TestPinnedPodsAIModelPath:
         mock_file_exists.assert_called_once_with(
             PODSAI_TEST_MODEL_ID,
             "preprocessor_config.json",
-            revision=PODSAI_TEST_MODEL_REVISION,
+            revision=LATEST_PODSAI_MODEL_REVISION,
         )
         mock_snapshot.assert_called_once_with(
             repo_id=PODSAI_TEST_MODEL_ID,
-            revision=PODSAI_TEST_MODEL_REVISION,
+            revision=LATEST_PODSAI_MODEL_REVISION,
+            allow_patterns=[
+                "config.json",
+                "preprocessor_config.json",
+                "model.safetensors",
+                "training_args.bin",
+            ],
         )
 
 
@@ -1138,73 +1264,63 @@ class TestIntegrationWithRealModels:
         return self._get_testing_wav_path("bird")
 
     # Parametrized tests for FastAI model on different audio types.
-    @pytest.mark.parametrize("wav_fixture,label,xfail_reason", [
-        ("resident_wav_path", "resident",
-         "FastAI model may fail to extract segments on some platforms or audio clips"),
-        ("transient_wav_path", "transient",
+    @pytest.mark.parametrize("label,wav_file,xfail_reason", [
+        ("resident", "rpi-sunset-bay_2026_01_08_01_52_39_PST.wav", None),
+        ("transient", "rpi-orcasound-lab_2024_12_29_13_37_23_PST.wav",
          "FastAI binary model may predict resident on transient clips"),
-        ("humpback_wav_path", "humpback", "FastAI binary model may misclassify humpback as resident"),
-        ("vessel_wav_path", "vessel", "FastAI binary model may predict vessel as resident"),
-        ("water_wav_path", "water",
-         "FastAI binary model may predict resident on ambient water clips"),
-        ("human_wav_path", "human",
-         "FastAI model may fail to extract segments on some platforms or audio clips"),
-        ("jingle_wav_path", "jingle", "FastAI binary model may predict resident on jingle clips"),
-        ("bird_wav_path", "bird", "FastAI binary model may predict resident on bird clips"),
+        ("humpback", "rpi-orcasound-lab_2023_10_28_08_08_03_PST.wav", None),
+        ("vessel", "rpi-orcasound-lab_2025_11_30_12_53_54_PST.wav", "FastAI binary model may predict vessel as resident"),
+        ("water", "rpi-andrews-bay_2026_08_30_02_22_52_PST.wav", None),
+        ("human", "rpi-sunset-bay_2024_07_19_12_50_08_PST.wav", None),
+        ("jingle", "rpi-bush-point_2026_07_19_09_54_48_PST.wav", "FastAI binary model may predict jingle as resident"),
+        ("bird", "rpi-bush-point_2026_08_09_17_36_48_PST.wav", None),
     ])
     def test_fastai_model_inference(
         self,
-        wav_fixture: str,
         label: str,
+        wav_file: str,
         xfail_reason: Optional[str],
         fastai_model_path: str,
         request: pytest.FixtureRequest
     ) -> None:
         """Test FastAI model inference on various audio types."""
-        from run_inference import run_inference
 
         # Apply xfail marker if this test case is expected to fail.
         if xfail_reason:
             request.node.add_marker(pytest.mark.xfail(reason=xfail_reason, strict=False))
 
-        wav_path = request.getfixturevalue(wav_fixture)
-        print(f"\nProcessing {wav_path}...")
-        result = run_inference(wav_path, model_type="fastai", model_path=fastai_model_path)
+        result = model_inference_helper(label, wav_file, "fastai", fastai_model_path)
 
         _verify_fastai_result_structure(result)
         _verify_fastai_prediction(result, label)
         _print_fastai_result(result, label)
 
     # Parametrized tests for PODS-AI model on different audio types.
-    @pytest.mark.parametrize("wav_fixture,label,xfail_reason", [
-        ("resident_wav_path", "resident", "PODS-AI model may misclassify resident as vessel"),
-        ("transient_wav_path", "transient",
-         "PODS-AI model may misclassify transient as resident"),
-        ("humpback_wav_path", "humpback", "PODS-AI model may misclassify humpback as resident"),
-        ("vessel_wav_path", "vessel", None),
-        ("water_wav_path", "water", "PODS-AI model may misclassify water as vessel"),
-        ("human_wav_path", "human", None),
-        ("jingle_wav_path", "jingle", "PODS-AI model may misclassify jingle as vessel"),
-        ("bird_wav_path", "bird", "PODS-AI model may misclassify bird as jingle"),
+    @pytest.mark.parametrize("label,wav_file,xfail_reason", [
+        ("resident", "rpi-sunset-bay_2026_01_08_01_52_39_PST.wav", None),
+        ("transient", "rpi-orcasound-lab_2025_01_02_10_12_24_PST.wav", None),
+        ("humpback", "rpi-orcasound-lab_2025_01_05_21_18_05_PST.wav", None),
+        ("vessel", "rpi-orcasound-lab_2025_11_30_12_53_54_PST.wav", None),
+        ("water", "rpi-bush-point_2025_06_29_18_23_17_PST.wav", "PODS-AI model may misclassify water as vessel"),
+        ("human", "rpi-sunset-bay_2024_07_19_12_50_08_PST.wav", None),
+        ("jingle", "rpi-bush-point_2026_07_19_09_54_48_PST.wav", None),
+        ("bird", "rpi-bush-point_2026_08_09_17_36_48_PST.wav", "PODS-AI model may misclassify bird as jingle"),
     ])
     def test_podsai_model_inference(
         self,
-        wav_fixture: str,
         label: str,
+        wav_file: str,
         xfail_reason: Optional[str],
         podsai_model_path: str,
         request: pytest.FixtureRequest
     ) -> None:
         """Test PODS-AI model inference on various audio types."""
-        from run_inference import run_inference
 
         # Apply xfail marker if this test case is expected to fail.
         if xfail_reason:
             request.node.add_marker(pytest.mark.xfail(reason=xfail_reason, strict=False))
 
-        wav_path = request.getfixturevalue(wav_fixture)
-        print(f"\nProcessing {wav_path}...")
-        result = run_inference(wav_path, model_type="podsai", model_path=podsai_model_path)
+        result = model_inference_helper(label, wav_file, "podsai", podsai_model_path)
 
         _verify_podsai_result_structure(result)
         # Always require exact match - no category matching allowed.
@@ -1212,51 +1328,28 @@ class TestIntegrationWithRealModels:
         _print_podsai_result(result, label)
 
     # Parametrized CLI integration tests.
-    @pytest.mark.parametrize("wav_fixture,model_type,model_path_fixture", [
-        pytest.param("resident_wav_path", "fastai", "fastai_model_path",
-                     marks=pytest.mark.xfail(
-                         reason="FastAI model may fail to extract segments on some platforms",
-                         strict=False)),
-        ("resident_wav_path", "podsai", "podsai_model_path"),
-        pytest.param("transient_wav_path", "fastai", "fastai_model_path",
-                     marks=pytest.mark.xfail(
-                         reason="FastAI model may fail to extract segments on some platforms",
-                         strict=False)),
-        ("transient_wav_path", "podsai", "podsai_model_path"),
-        pytest.param("humpback_wav_path", "fastai", "fastai_model_path",
-                     marks=pytest.mark.xfail(
-                         reason="FastAI model may fail to extract segments on some platforms",
-                         strict=False)),
-        ("humpback_wav_path", "podsai", "podsai_model_path"),
-        pytest.param("vessel_wav_path", "fastai", "fastai_model_path",
-                     marks=pytest.mark.xfail(
-                         reason="FastAI model may fail to extract segments on some platforms",
-                         strict=False)),
-        ("vessel_wav_path", "podsai", "podsai_model_path"),
-        pytest.param("water_wav_path", "fastai", "fastai_model_path",
-                     marks=pytest.mark.xfail(
-                         reason="FastAI model may fail to extract segments on some platforms",
-                         strict=False)),
-        ("water_wav_path", "podsai", "podsai_model_path"),
-        pytest.param("human_wav_path", "fastai", "fastai_model_path",
-                     marks=pytest.mark.xfail(
-                         reason="FastAI model may fail to extract segments on some platforms",
-                         strict=False)),
-        ("human_wav_path", "podsai", "podsai_model_path"),
-        pytest.param("jingle_wav_path", "fastai", "fastai_model_path",
-                     marks=pytest.mark.xfail(
-                         reason="FastAI model may fail to extract segments on some platforms",
-                         strict=False)),
-        ("jingle_wav_path", "podsai", "podsai_model_path"),
-        pytest.param("bird_wav_path", "fastai", "fastai_model_path",
-                     marks=pytest.mark.xfail(
-                         reason="FastAI model may fail to extract segments on some platforms",
-                         strict=False)),
-        ("bird_wav_path", "podsai", "podsai_model_path"),
+    @pytest.mark.parametrize("label,wav_file,model_type,model_path_fixture", [
+        ("resident", "rpi-sunset-bay_2026_01_08_01_52_39_PST.wav", "fastai", "fastai_model_path"),
+        ("resident", "rpi-sunset-bay_2026_01_08_01_52_39_PST.wav", "podsai", "podsai_model_path"),
+        ("transient", "rpi-orcasound-lab_2024_12_29_13_37_23_PST.wav", "fastai", "fastai_model_path"),
+        ("transient", "rpi-orcasound-lab_2024_12_29_13_37_23_PST.wav", "podsai", "podsai_model_path"),
+        ("humpback", "rpi-orcasound-lab_2023_10_28_08_08_03_PST.wav", "fastai", "fastai_model_path"),
+        ("humpback", "rpi-orcasound-lab_2023_10_28_08_08_03_PST.wav", "podsai", "podsai_model_path"),
+        ("vessel", "rpi-orcasound-lab_2025_11_30_12_53_54_PST.wav", "fastai", "fastai_model_path"),
+        ("vessel", "rpi-orcasound-lab_2025_11_30_12_53_54_PST.wav", "podsai", "podsai_model_path"),
+        ("water", "rpi-andrews-bay_2026_08_30_02_22_52_PST.wav", "fastai", "fastai_model_path"),
+        ("water", "rpi-andrews-bay_2026_08_30_02_22_52_PST.wav", "podsai", "podsai_model_path"),
+        ("human", "rpi-sunset-bay_2024_07_19_12_50_08_PST.wav", "fastai", "fastai_model_path"),
+        ("human", "rpi-sunset-bay_2024_07_19_12_50_08_PST.wav", "podsai", "podsai_model_path"),
+        ("jingle", "rpi-bush-point_2026_07_19_09_54_48_PST.wav", "fastai", "fastai_model_path"),
+        ("jingle", "rpi-bush-point_2026_07_19_09_54_48_PST.wav", "podsai", "podsai_model_path"),
+        ("bird", "rpi-bush-point_2026_08_09_17_36_48_PST.wav", "fastai", "fastai_model_path"),
+        ("bird", "rpi-bush-point_2026_08_09_17_36_48_PST.wav", "podsai", "podsai_model_path"),
     ])
     def test_cli_integration(
         self,
-        wav_fixture: str,
+        label: str,
+        wav_file: str,
         model_type: str,
         model_path_fixture: str,
         request: pytest.FixtureRequest
@@ -1264,12 +1357,14 @@ class TestIntegrationWithRealModels:
         """Test CLI integration with various audio types and models."""
         from run_inference import main
 
-        wav_path = request.getfixturevalue(wav_fixture)
+        output_root = Path("output/testing-wav")
+        category_dir = output_root / label
+        wav_path = category_dir / wav_file
         model_path = request.getfixturevalue(model_path_fixture)
 
         with patch("sys.argv", [
             "run_inference.py",
-            wav_path,
+            str(wav_path),
             "--model", model_type,
             "--model-path", model_path
         ]):
@@ -1292,41 +1387,34 @@ class TestIntegrationWithRealModels:
             pytest.skip(f"HuggingFace Hub is not reachable; cannot load model '{hub_id}'")
         return hub_id
 
-    @pytest.mark.parametrize("wav_fixture,label,xfail_reason", [
-        ("resident_wav_path", "resident",
-         "OrcaHello SRKW detector may predict 'other' for resident clips in some environments"),
-        ("transient_wav_path", "transient",
+    @pytest.mark.parametrize("label,wav_file,xfail_reason", [
+        ("resident", "rpi-sunset-bay_2026_01_08_01_52_39_PST.wav", None),
+        ("transient", "rpi-orcasound-lab_2024_12_29_13_37_23_PST.wav",
          "OrcaHello SRKW detector may predict resident on transient clips"),
-        ("humpback_wav_path", "humpback",
-         "OrcaHello SRKW detector may predict resident on humpback clips"),
-        ("vessel_wav_path", "vessel",
+        ("humpback", "rpi-orcasound-lab_2023_10_28_08_08_03_PST.wav", None),
+        ("vessel", "rpi-orcasound-lab_2025_11_30_12_53_54_PST.wav",
          "OrcaHello SRKW detector may predict resident on vessel noise clips"),
-        ("water_wav_path", "water",
-         "OrcaHello SRKW detector may predict resident on ambient water clips"),
-        ("human_wav_path", "human",
+        ("water", "rpi-andrews-bay_2026_08_30_02_22_52_PST.wav", None),
+        ("human", "rpi-sunset-bay_2024_07_19_12_50_08_PST.wav",
          "OrcaHello SRKW detector may predict resident on human voice clips"),
-        ("jingle_wav_path", "jingle",
+        ("jingle", "rpi-bush-point_2026_07_19_09_54_48_PST.wav",
          "OrcaHello SRKW detector may predict resident on jingle clips"),
-        ("bird_wav_path", "bird",
-         "OrcaHello SRKW detector may predict resident on bird clips"),
+        ("bird", "rpi-bush-point_2026_08_09_17_36_48_PST.wav", None),
     ])
     def test_orcahello_model_inference(
         self,
-        wav_fixture: str,
         label: str,
+        wav_file: str,
         xfail_reason: Optional[str],
         orcahello_model_path: str,
         request: pytest.FixtureRequest,
     ) -> None:
         """Test OrcaHello SRKW detector inference on various audio types."""
-        from run_inference import run_inference
 
         if xfail_reason:
             request.node.add_marker(pytest.mark.xfail(reason=xfail_reason, strict=False))
 
-        wav_path = request.getfixturevalue(wav_fixture)
-        print(f"\nProcessing {wav_path}...")
-        result = run_inference(wav_path, model_type="orcahello", model_path=orcahello_model_path)
+        result = model_inference_helper(label, wav_file, "orcahello", orcahello_model_path)
 
         # OrcaHello is a binary model: "resident" or "other".
         _verify_fastai_result_structure(result)

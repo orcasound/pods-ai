@@ -7,15 +7,15 @@ Compare multiple models on a test set of audio samples.
 Usage:
     python compare_models.py [options]
 
-Loads a test set from testing_60s_samples.csv, then runs each enabled model
-(fastai, orcahello, oldpodsai (Wav2Vec2)), podsai (AST) on the corresponding
+Loads a test set from WAV files under output/testing-wav, then runs each enabled model
+(fastai, orcahello, wav2vec2 (old PODS-AI with Wav2Vec2)), oldpodsai or podsai (AST) on the corresponding
 60-second WAV files and reports correct identifications, whale-class F1, and
 per-whale-class false-positive/false-negative rates per model.
 
 A "correct" identification means:
   - For fastai and orcahello, model predicted "resident" (SRKW) when the label is
     "resident", or anything other than "resident" when the label is not "resident".
-  - For podsai and oldpodsai, the actual category is present in the model's
+  - For custom, podsai, oldpodsai, and wav2vec2, the actual category is present in the model's
     multi-label prediction set (with a single-label fallback for older models).
 
 For each whale class X (resident, transient, humpback):
@@ -24,16 +24,24 @@ For each whale class X (resident, transient, humpback):
 """
 
 import argparse
-import csv
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
+from model_inference import get_model_inference
+from model_revisions import (
+    LATEST_PODSAI_MODEL_REVISION,
+    PODSAI_WAV2VEC2_MODEL_REVISION,
+    PREVIOUS_PODSAI_MODEL_REVISION,
+)
 from run_inference import run_inference
 
 RESIDENT_LABEL = "resident"
 WHALE_CLASS_NAMES = {"humpback", "resident", "transient"}
+BACKGROUND_LABELS = {
+    "abiotic", "bird", "human", "jingle", "other", "vessel", "water"
+}
 SUMMARY_LABELS = [
     ("resident", "R"),
     ("transient", "T"),
@@ -41,29 +49,30 @@ SUMMARY_LABELS = [
 ]
 MATRIX_CELL_PADDING = 2
 PODSAI_MODEL_ID = "davethaler/whale-call-detector"
-# renovate: datasource=git-refs depName=https://huggingface.co/davethaler/whale-call-detector versioning=git.
-PODSAI_MODEL_REVISION = "36620370fd59c8a70f9b7be6060d4f40717e796d"
-OLD_PODSAI_MODEL_REVISION = "cef82c6e9ee661646ea0c583aeb68f4f7ec6d9d8"
-# Maps user-facing model names to inference backends. oldpodsai reuses podsai
+
+# Maps user-facing model names to inference backends. wav2vec2 and oldpodsai reuse podsai
 # inference with a different pinned model revision.
 MODEL_TYPE_TO_INFERENCE_TYPE = {
     "fastai": "fastai",
     "orcahello": "orcahello",
+    "wav2vec2": "podsai",
     "oldpodsai": "podsai",
     "podsai": "podsai",
 }
-
-
-@dataclass
-class TestSample:
-    """A single detection row used as a test sample."""
-
-    category: str
-    node_name: str
-    timestamp: str
-    uri: str
-    description: str
-    notes: str
+CUSTOM_MODEL_TYPE = "podsai"
+DEFAULT_MODELS = "fastai,orcahello,wav2vec2,oldpodsai,podsai"
+MODEL_LOAD_ERRORS = (
+    AttributeError,
+    EOFError,
+    ImportError,
+    IndexError,
+    KeyError,
+    NotImplementedError,
+    OSError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+)
 
 
 @dataclass
@@ -206,91 +215,148 @@ class ModelResult:
         return self.false_negative_count_for_label(label) / actual_count
 
 
-def load_test_samples(testing_csv: Path, max_samples: Optional[int] = None,
-                      category_filter: Optional[str] = None) -> list[TestSample]:
+def get_category_from_path(wav_path: Path, wav_dir: Path) -> str:
+    relative_path = wav_path.relative_to(wav_dir)
+    if len(relative_path.parts) != 2:
+        return None
+
+    category = relative_path.parts[0]
+    return category
+
+
+def load_test_samples(wav_dir: Path, max_samples: Optional[int] = None,
+                      category_filter: Optional[str] = None) -> list[Path]:
     """
-    Load test samples from testing_60s_samples.csv.
+    Load test samples from WAV files in the testing directory.
 
     Args:
-        testing_csv: Path to testing_60s_samples.csv.
+        wav_dir: Root directory containing category subdirectories with WAV files.
         max_samples: Maximum number of samples to load. If None, load all samples.
         category_filter: If specified, only load samples matching this category.
                         If None, load samples from all categories.
 
     Returns:
-        List of TestSample objects, or an empty list on error.
+        List of WAV file paths, or an empty list on error.
     """
     samples = []
     try:
-        with open(testing_csv, newline="", encoding="utf-8") as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                category = row.get("Category", "")
+        wav_paths = sorted(
+            path for path in wav_dir.rglob("*")
+            if path.is_file() and path.suffix.lower() == ".wav"
+        )
+        for wav_path in wav_paths:
+            category = get_category_from_path(wav_path, wav_dir)
+            if category is None:
+                continue
+            if category_filter is not None and category != category_filter:
+                continue
 
-                # Skip if category filter is specified and doesn't match.
-                if category_filter is not None and category != category_filter:
-                    continue
+            samples.append(wav_path)
 
-                samples.append(TestSample(
-                    category=category,
-                    node_name=row.get("NodeName", ""),
-                    timestamp=row.get("Timestamp", ""),
-                    uri=row.get("URI", ""),
-                    description=row.get("Description", ""),
-                    notes=row.get("Notes", ""),
-                ))
-
-                # Stop if we've reached the maximum.
-                if max_samples is not None and len(samples) >= max_samples:
-                    break
-
-    except (OSError, csv.Error, UnicodeDecodeError) as e:
-        print(f"Error reading {testing_csv}: {e}", file=sys.stderr)
+            if max_samples is not None and len(samples) >= max_samples:
+                break
+    except OSError as e:
+        print(f"Error reading WAV files from {wav_dir}: {e}", file=sys.stderr)
     return samples
 
 
-def find_wav_file(sample: TestSample, wav_dir: Path) -> Optional[Path]:
-    """
-    Find the 60-second WAV file for a testing sample.
-
-    WAV files are saved by download_wavs.py as:
-        <wav_dir>/<category>/<node_name_with_dashes>_<timestamp>.wav
-
-    Args:
-        sample: The testing sample.
-        wav_dir: Root directory of testing WAV files.
-
-    Returns:
-        Path to the WAV file, or None if not found.
-    """
-    node_name_in_filename = sample.node_name.replace("_", "-")
-    wav_filename = f"{node_name_in_filename}_{sample.timestamp}.wav"
-    wav_path = wav_dir / sample.category / wav_filename
-    if wav_path.exists():
-        return wav_path
-    return None
-
-
-def is_resident_prediction(global_prediction_label: str, model_type: str) -> bool:
-    """
-    Determine whether a model's prediction corresponds to "resident" (SRKW).
-
-    All model types (fastai, orcahello, oldpodsai, podsai) use "resident" as the
-    positive class label, so the check is the same regardless of model type.
-
-    Args:
-        global_prediction_label: The model's predicted class label.
-        model_type: The model type ('fastai', 'orcahello', or 'podsai').
-
-    Returns:
-        True if the prediction is "resident"; False otherwise.
-    """
-    return global_prediction_label == RESIDENT_LABEL
-
-
 def is_exact_match_model(model_type: str) -> bool:
-    """Return True when a model uses exact-category matching for correctness."""
-    return model_type in {"podsai", "oldpodsai"}
+    """Return whether a model uses exact category membership for correctness."""
+    return model_type in {"custom", "podsai", "oldpodsai", "wav2vec2"}
+
+
+def parse_model_spec(spec: str) -> tuple[str, str, Optional[str]]:
+    """Parse one model name from ``--models``.
+
+    Args:
+        spec: A built-in model name or the literal ``custom``.
+
+    Returns:
+        A tuple containing the display name, inference backend, and an empty
+        custom path slot. The custom path is supplied separately by
+        ``--custom-model-path``.
+
+    Raises:
+        ValueError: If ``spec`` is unknown or uses the removed inline custom
+            path syntax.
+    """
+    model = spec.strip()
+    if model == "custom":
+        return model, CUSTOM_MODEL_TYPE, None
+    if model not in MODEL_TYPE_TO_INFERENCE_TYPE:
+        valid = ", ".join(sorted((*MODEL_TYPE_TO_INFERENCE_TYPE, "custom")))
+        raise ValueError(
+            f"unknown model type {model!r}; valid models: {valid}"
+        )
+    return model, MODEL_TYPE_TO_INFERENCE_TYPE[model], None
+
+
+def resolve_custom_model_path(model_path: str) -> tuple[str, bool]:
+    """Validate and normalize a custom model path or Hugging Face ID.
+
+    Args:
+        model_path: Local file/directory path or Hugging Face repository ID.
+
+    Returns:
+        A tuple of the normalized model value and whether it is a local path.
+
+    Raises:
+        ValueError: If the value is empty, names an invalid local path, or
+            cannot be expanded.
+    """
+    if not model_path or not model_path.strip():
+        raise ValueError("--custom-model-path must not be empty")
+    model_path = model_path.strip()
+    try:
+        path = Path(model_path).expanduser()
+    except (RuntimeError, OSError, ValueError) as exc:
+        raise ValueError(f"invalid custom model path: {model_path}") from exc
+
+    try:
+        path_exists = path.exists()
+        valid_local_path = (path.is_file() or path.is_dir()) if path_exists else False
+    except OSError as exc:
+        raise ValueError(f"unable to access local custom model path: {model_path}") from exc
+    if path_exists:
+        if not valid_local_path:
+            raise ValueError(f"local custom model path is not a file or directory: {model_path}")
+        return str(path), True
+    looks_like_local_path = (
+        path.is_absolute()
+        or model_path.startswith((".", "~", "/", "\\"))
+        or (len(model_path) > 1 and model_path[1] == ":")
+    )
+    if looks_like_local_path:
+        raise ValueError(f"local custom model path does not exist: {model_path}")
+    return model_path, False
+
+
+def validate_custom_model_path(model_path: str) -> None:
+    """Validate a custom model path without changing the existing API.
+
+    Args:
+        model_path: Local file/directory path or Hugging Face repository ID.
+
+    Raises:
+        ValueError: If the value is empty or names an invalid local path.
+    """
+    resolve_custom_model_path(model_path)
+
+
+def validate_inference_model(model: Any, model_name: str) -> None:
+    """Validate the prediction method required by a custom model.
+
+    Args:
+        model: Object returned by the inference model factory.
+        model_name: Display name used in the validation error.
+
+    Raises:
+        ValueError: If the object does not expose a callable ``predict``.
+    """
+    if not callable(getattr(model, "predict", None)):
+        raise ValueError(
+            f"{model_name!r} did not load a PODS-AI inference model with predict()"
+        )
 
 
 def is_correct_prediction(
@@ -318,6 +384,8 @@ def is_correct_prediction(
     labels = predicted_labels or [predicted_label]
     if is_exact_match_model(model_type):
         return actual_label in labels
+    if actual_label in BACKGROUND_LABELS:
+        return RESIDENT_LABEL not in labels
     return (RESIDENT_LABEL in labels) == (actual_label == RESIDENT_LABEL)
 
 
@@ -339,51 +407,51 @@ def _labels_seen_in_confusion_matrix(confusion_matrix: dict[str, dict[str, int]]
 def evaluate_model(
     model_type: str,
     model_path: Optional[str],
-    samples: list[TestSample],
+    wav_paths: list[Path],
     wav_dir: Path,
     model_revision: Optional[str] = None,
     result_model_type: Optional[str] = None,
+    inference_model: Optional[Any] = None,
 ) -> ModelResult:
     """
     Run a model against all test samples and accumulate results.
 
     Args:
-        model_type: One of 'fastai', 'orcahello', 'oldpodsai', or 'podsai'.
-                    'oldpodsai' is mapped to 'podsai' inference internally.
+        model_type: One of 'fastai', 'orcahello', 'wav2vec2', 'oldpodsai', 'podsai', or
+                    'custom'. 'oldpodsai', 'wav2vec2', and 'custom' are mapped to
+                    'podsai' inference internally.
         model_path: Path to the model (or HuggingFace Hub model ID).
-        samples: List of testing samples.
+        wav_paths: List of WAV file paths.
         wav_dir: Root directory containing testing WAV files.
         model_revision: Git commit hash to pin the HuggingFace Hub model revision.
                         Only used when model_path is a Hub model ID (not a local path).
         result_model_type: Optional display name to store in ModelResult.model_type.
                            If omitted, model_type is used.
+        inference_model: Optional preloaded model inference instance to reuse.
 
     Returns:
         ModelResult with counts of correct, false positive, and false negative predictions,
         plus timing information for predict() calls.
     """
-    result = ModelResult(model_type=result_model_type or model_type, total=len(samples))
+    result = ModelResult(model_type=result_model_type or model_type, total=len(wav_paths))
+    display_model_type = result.model_type
 
-    for sample in samples:
-        wav_path = find_wav_file(sample, wav_dir)
-        if wav_path is None:
-            print(
-                f"  [{model_type}] Skipping {sample.category}/{sample.node_name}"
-                f"/{sample.timestamp}: WAV not found"
-            )
-            result.skipped += 1
+    for wav_path in wav_paths:
+        category = get_category_from_path(wav_path, wav_dir)
+        if category is None:
             continue
-
-        expected_resident = (sample.category == RESIDENT_LABEL)
+        expected_resident = (category == RESIDENT_LABEL)
+        relative_path = wav_path.relative_to(wav_dir)
 
         try:
             inference_result = run_inference(str(wav_path), model_type=model_type,
                                              model_path=model_path,
-                                             model_revision=model_revision)
+                                             model_revision=model_revision,
+                                             inference_model=inference_model)
             predict_time = inference_result.get("predict_time", 0.0)
             result.predict_times.append(predict_time)
         except Exception as e:
-            print(f"  [{model_type}] Error on {wav_path.name}: {e}")
+            print(f"  [{display_model_type}] Error on {wav_path.name}: {e}")
             result.skipped += 1
             continue
 
@@ -394,7 +462,7 @@ def evaluate_model(
         predicted_resident = RESIDENT_LABEL in predicted_labels
 
         if is_correct_prediction(
-            sample.category, predicted_label, model_type, predicted_labels
+            category, predicted_label, model_type, predicted_labels
         ):
             result.correct += 1
             status = "correct"
@@ -408,7 +476,7 @@ def evaluate_model(
             status = "incorrect"
 
         # Keep a primary-label matrix for display and the complete set for metrics.
-        actual_label = sample.category
+        actual_label = category
         result.prediction_labels.setdefault(actual_label, []).append(set(predicted_labels))
         if actual_label not in result.confusion_matrix:
             result.confusion_matrix[actual_label] = {}
@@ -416,7 +484,7 @@ def evaluate_model(
         preds[predicted_label] = preds.get(predicted_label, 0) + 1
 
         print(
-            f"  [{model_type}] {sample.category}/{sample.node_name}/{sample.timestamp}: "
+            f"  [{display_model_type}] {relative_path}: "
             f"predicted={predicted_label!r} -> {status} ({predict_time:.2f}s)"
         )
 
@@ -529,12 +597,12 @@ def print_summary(results: list[ModelResult]) -> None:
     print()
     print("Definitions:")
     print("  Accuracy     = Correct / Evaluated")
-    print("  Correct      = fastai/orcahello: resident vs other; oldpodsai/podsai: category in prediction set")
+    print("  Correct      = fastai/orcahello: resident vs other; wav2vec2/oldpodsai/podsai/custom: category in prediction set")
     print("  F1           = macro F1 over humpback, resident, and transient classes that are present")
     print("  [R|T|H]FP%   = among non-[R|T|H] samples, fraction predicted as that class")
     print("  [R|T|H]FN%   = among actual samples of that class, fraction predicted as another class")
     print("  Avg Time     = average time spent in model predict() per 60-second WAV file")
-    print("  Note         = compares end-to-end 60-second inference on testing_60s_samples.csv")
+    print("  Note         = compares end-to-end 60-second inference on all WAV files in --wav-dir")
 
     for r in results:
         print()
@@ -549,15 +617,10 @@ def main() -> int:
     """
     parser = argparse.ArgumentParser(
         description=(
-            "Compare model predictions on a test set loaded from testing_60s_samples.csv. "
-            "Runs each enabled model against the corresponding 60-second WAV files "
+            "Compare model predictions on a test set discovered from WAV files in --wav-dir. "
+            "Runs each enabled model against 60-second WAV files "
             "and reports correct identifications, false positives, and false negatives."
         )
-    )
-    parser.add_argument(
-        "--testing-csv",
-        default="output/csv/testing_60s_samples.csv",
-        help="Path to testing_60s_samples.csv (default: output/csv/testing_60s_samples.csv).",
     )
     parser.add_argument(
         "--wav-dir",
@@ -566,10 +629,29 @@ def main() -> int:
     )
     parser.add_argument(
         "--models",
-        default="fastai,orcahello,oldpodsai,podsai",
+        default=DEFAULT_MODELS,
         help=(
-            "Comma-separated list of models to evaluate "
-            "(default: fastai,orcahello,oldpodsai,podsai)."
+            "Comma-separated list of models to evaluate. "
+            "Include custom for an additional PODS-AI-compatible model. "
+            f"(default: {DEFAULT_MODELS})."
+        ),
+    )
+    parser.add_argument(
+        "--custom-model-path",
+        default=None,
+        metavar="PATH_OR_HF_ID",
+        help=(
+            "Local path or Hugging Face model ID for the custom model. "
+            "Providing this option automatically adds custom to --models."
+        ),
+    )
+    parser.add_argument(
+        "--custom-model-revision",
+        default=None,
+        metavar="REVISION",
+        help=(
+            "Optional revision to use when loading a custom Hugging Face model. "
+            "Ignored for local paths."
         ),
     )
     parser.add_argument(
@@ -593,17 +675,17 @@ def main() -> int:
         default=PODSAI_MODEL_ID,
         help=(
             "Path to PODS-AI model directory or HuggingFace Hub ID. "
-            "Used by both oldpodsai (Wav2Vec2) and podsai (AST). "
+            "Used by wav2vec2 (Wav2Vec2), oldpodsai (AST), and podsai (AST). "
             f"Defaults to {PODSAI_MODEL_ID!r} when not specified."
         ),
     )
     parser.add_argument(
         "--podsai-model-revision",
-        default=PODSAI_MODEL_REVISION,
+        default=LATEST_PODSAI_MODEL_REVISION,
         help=(
             "Git commit hash to pin the PODS-AI HuggingFace Hub model revision. "
             "Only used when --podsai-model-path is a Hub model ID. "
-            f"Defaults to the pinned revision ({PODSAI_MODEL_REVISION})."
+            f"Defaults to the pinned revision ({LATEST_PODSAI_MODEL_REVISION})."
         ),
     )
     parser.add_argument(
@@ -621,20 +703,11 @@ def main() -> int:
         help=(
             "Only test samples from this category. "
             "If not specified, all categories are tested. "
-            "Categories: water, resident, transient, humpback, vessel, jingle, human, bird."
+            "Categories: abiotic, water, resident, transient, humpback, vessel, jingle, human, bird."
         ),
     )
 
     args = parser.parse_args()
-
-    testing_csv = Path(args.testing_csv)
-    if not testing_csv.exists():
-        print(f"Error: testing CSV not found: {testing_csv}", file=sys.stderr)
-        print(
-            "Update output/csv/testing_60s_samples.csv before running compare_models.py.",
-            file=sys.stderr,
-        )
-        return 1
 
     wav_dir = Path(args.wav_dir)
     if not wav_dir.exists():
@@ -646,25 +719,53 @@ def main() -> int:
         return 1
 
     models = [m.strip() for m in args.models.split(",") if m.strip()]
-    valid_models = {"fastai", "orcahello", "oldpodsai", "podsai"}
-    for model in models:
-        if model not in valid_models:
-            print(
-                f"Error: unknown model type {model!r}. Valid: {sorted(valid_models)}",
-                file=sys.stderr,
+    try:
+        if args.custom_model_path is not None and "custom" not in models:
+            models.append("custom")
+        if args.custom_model_revision is not None and "custom" not in models:
+            raise ValueError(
+                "--custom-model-revision requires custom in --models or "
+                "--custom-model-path"
             )
-            return 1
+        parsed_models = [parse_model_spec(model) for model in models]
+        seen_models: set[str] = set()
+        for display_name, _, _ in parsed_models:
+            if display_name in seen_models:
+                raise ValueError(
+                    f"{display_name} may be listed only once in --models"
+                )
+            seen_models.add(display_name)
+        custom_count = sum(display_name == "custom" for display_name, _, _ in parsed_models)
+        if custom_count and args.custom_model_path is None:
+            raise ValueError(
+                "custom is listed in --models but --custom-model-path was not provided"
+            )
+        custom_path = None
+        custom_path_is_local = False
+        if args.custom_model_path is not None:
+            custom_path, custom_path_is_local = resolve_custom_model_path(
+                args.custom_model_path
+            )
+        model_specs = [
+            (display_name, inference_type, custom_path if display_name == "custom" else None)
+            for display_name, inference_type, _ in parsed_models
+        ]
+    except ValueError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
 
     model_paths: dict[str, Optional[str]] = {
         "fastai": args.fastai_model_path,
         "orcahello": args.orcahello_model_path,
+        "wav2vec2": args.podsai_model_path,
         "oldpodsai": args.podsai_model_path,
         "podsai": args.podsai_model_path,
     }
     model_revisions: dict[str, Optional[str]] = {
         "fastai": None,
         "orcahello": None,
-        "oldpodsai": OLD_PODSAI_MODEL_REVISION,
+        "wav2vec2": PODSAI_WAV2VEC2_MODEL_REVISION,
+        "oldpodsai": PREVIOUS_PODSAI_MODEL_REVISION,
         "podsai": args.podsai_model_revision,
     }
 
@@ -673,16 +774,16 @@ def main() -> int:
         print(f"Error: --max-samples must be a positive integer, got {args.max_samples}", file=sys.stderr)
         return 1
 
-    samples = load_test_samples(testing_csv, max_samples=args.max_samples,
+    wav_paths = load_test_samples(wav_dir, max_samples=args.max_samples,
                                 category_filter=args.category)
-    if not samples:
+    if not wav_paths:
         if args.category:
             print(f"Error: no test samples found for category '{args.category}'.", file=sys.stderr)
         else:
             print("Error: no test samples found.", file=sys.stderr)
         return 1
 
-    print(f"Loaded {len(samples)} test samples from {testing_csv}")
+    print(f"Loaded {len(wav_paths)} test samples from WAV files in {wav_dir}")
     if args.category:
         print(f"  (filtered to category: {args.category})")
     if args.max_samples is not None:
@@ -692,16 +793,42 @@ def main() -> int:
     print()
 
     results = []
-    for model_type in models:
+    for model_type, inference_model_type, custom_path in model_specs:
         print(f"Evaluating model: {model_type}")
-        inference_model_type = MODEL_TYPE_TO_INFERENCE_TYPE[model_type]
+        effective_model_path = custom_path or model_paths[model_type]
+        if custom_path:
+            effective_revision = (
+                None if custom_path_is_local else args.custom_model_revision
+            )
+        else:
+            effective_revision = model_revisions[model_type]
+        try:
+            inference_model = get_model_inference(
+                model_type=inference_model_type,
+                model_path=effective_model_path,
+                model_revision=effective_revision,
+            )
+            if custom_path:
+                validate_inference_model(inference_model, model_type)
+        except MODEL_LOAD_ERRORS as exc:
+            if custom_path:
+                print(
+                    f"Error loading custom model {custom_path!r}: "
+                    "the model must be compatible with the PODS-AI inference "
+                    f"contract ({type(exc).__name__}: {exc})",
+                    file=sys.stderr,
+                )
+            else:
+                print(f"Error loading {model_type} model: {exc}", file=sys.stderr)
+            return 1
         model_result = evaluate_model(
             model_type=inference_model_type,
-            model_path=model_paths[model_type],
-            samples=samples,
+            model_path=effective_model_path,
+            wav_paths=wav_paths,
             wav_dir=wav_dir,
-            model_revision=model_revisions[model_type],
+            model_revision=effective_revision,
             result_model_type=model_type,
+            inference_model=inference_model,
         )
         results.append(model_result)
         print()

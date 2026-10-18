@@ -379,6 +379,8 @@ def compare_models_on_clip(
                 auto_download=True,
             )
             preds = model.predict(str(path))
+            if preds.get("error"):
+                raise RuntimeError(f"{model_key} inference failed: {preds['error']}")
             global_prediction_label = preds.get("global_prediction_label")
             global_prediction_labels = preds.get("global_prediction_labels")
             if global_prediction_labels is None:

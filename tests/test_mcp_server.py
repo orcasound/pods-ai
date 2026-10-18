@@ -246,6 +246,26 @@ class TestMCPServer(unittest.TestCase):
 
         self.assertEqual(result["details"]["podsai"]["global_prediction_labels"], [])
 
+    @patch("model_inference.get_model_inference")
+    @patch("mcp_server.Path.exists", return_value=True)
+    @patch("mcp_server.Path.is_absolute", return_value=True)
+    def test_compare_models_propagates_inference_error(
+        self, mock_abs, mock_exists, mock_get_model
+    ):
+        """MCP must report decoder failures instead of returning a negative result."""
+        mock_model = MagicMock()
+        mock_model.predict.return_value = {"error": "LibsndfileError: System error"}
+        mock_get_model.return_value = mock_model
+
+        from mcp_server import compare_models_on_clip
+
+        with patch("mcp_server.Path.suffix", new_callable=unittest.mock.PropertyMock) as mock_suffix:
+            mock_suffix.return_value = ".wav"
+            result = compare_models_on_clip("/abs/path/test.wav")
+
+        self.assertIn("error", result["details"]["podsai"])
+        self.assertIn("LibsndfileError", result["details"]["podsai"]["error"])
+
     @patch("mcp_server.find_unlabeled_detections")
     @patch("builtins.open", new_callable=unittest.mock.mock_open)
     @patch("mcp_server.csv.DictWriter")
