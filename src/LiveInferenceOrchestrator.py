@@ -9,6 +9,7 @@ import os
 import sys
 import time
 import uuid
+from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
@@ -234,16 +235,66 @@ def setup_logger(connection_string: Optional[str], log_level: str = "DEBUG") -> 
 
     return logger
 
+def apply_model_config_overrides(
+    model_config: Any,
+    overrides: Optional[dict[str, Any]] = None,
+    logger: Optional[logging.Logger] = None,
+) -> Any:
+    """Apply nested config overrides onto a dict-like model config.
+
+    Supports both plain dicts and model config objects exposing as_dict().
+    Nested dicts are merged recursively so a ConfigMap override can update a
+    specific subsection without replacing the entire config tree.
+    """
+    if not overrides:
+        return model_config
+
+    if hasattr(model_config, "as_dict"):
+        config_dict = model_config.as_dict()
+    elif isinstance(model_config, dict):
+        config_dict = deepcopy(model_config)
+    else:
+        if logger is not None:
+            logger.warning(
+                "model_config_overrides: unsupported model config type %s; skipping",
+                type(model_config).__name__,
+            )
+        return model_config
+
+    for key, value in overrides.items():
+        if isinstance(value, dict) and isinstance(config_dict.get(key), dict):
+            config_dict[key] = apply_model_config_overrides(
+                config_dict[key],
+                value,
+                logger,
+            )
+        else:
+            config_dict[key] = value
+
+    return config_dict
+
 
 def load_model(orch_config: dict[str, Any], logger: logging.Logger) -> Any:
     """Load PODS-AI model using the model_inference factory."""
-    model_path = orch_config.get("model_hf_repo_id", PODSAI_MODEL_ID)
-    model_revision = orch_config.get("model_hf_repo_revision", LATEST_PODSAI_MODEL_REVISION)
-    threshold = float(orch_config.get("threshold", 0.5))
-    min_num_positive_calls_threshold = int(
-        orch_config.get("min_num_positive_calls_threshold", 2)
+    effective_config = deepcopy(orch_config)
+    overrides = effective_config.get("model_config_overrides")
+    if overrides:
+        logger.info("Applying model_config_overrides: %s", overrides)
+        effective_config = apply_model_config_overrides(
+            effective_config,
+            overrides,
+            logger,
+        )
+
+    model_path = effective_config.get("model_hf_repo_id", PODSAI_MODEL_ID)
+    model_revision = effective_config.get(
+        "model_hf_repo_revision", LATEST_PODSAI_MODEL_REVISION
     )
-    device = orch_config.get("device")
+    threshold = float(effective_config.get("threshold", 0.5))
+    min_num_positive_calls_threshold = int(
+        effective_config.get("min_num_positive_calls_threshold", 2)
+    )
+    device = effective_config.get("device")
 
     kwargs: dict[str, Any] = {
         "threshold": threshold,

@@ -72,6 +72,26 @@ def test_build_prediction_list_filters_negative_labels() -> None:
     assert predictions[1]["startTime"] == 4.0
 
 
+def test_apply_model_config_overrides_deep_merges_nested_values() -> None:
+    """Nested model config overrides should override only the targeted keys."""
+    base = {
+        "threshold": 0.5,
+        "inference": {"max_batch_size": 16, "window_hop_s": 2.0},
+        "global_prediction": {"pred_global_threshold": 0.5},
+    }
+    overrides = {
+        "inference": {"max_batch_size": 8},
+        "global_prediction": {"pred_global_threshold": 0.8},
+    }
+
+    result = orchestrator.apply_model_config_overrides(base, overrides)
+
+    assert result["threshold"] == 0.5
+    assert result["inference"]["max_batch_size"] == 8
+    assert result["inference"]["window_hop_s"] == 2.0
+    assert result["global_prediction"]["pred_global_threshold"] == 0.8
+
+
 def test_build_cosmosdb_metadata_includes_multiclass_fields() -> None:
     """Metadata should include global prediction label, positive segment list, and tags."""
     result = {
