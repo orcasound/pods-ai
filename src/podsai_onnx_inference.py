@@ -213,7 +213,7 @@ class PodsAIOnnxInference(ModelInference):
         probs = softmax(logits_np)
         segment_probs = [row.tolist() for row in probs]
         local_pred_ids = [int(np.argmax(row)) for row in probs]
-        local_confidences = [float(np.max(row)) for row in probs]
+local_confidences = [float(1.0 - sum(row[class_id] for class_id in self.negative_class_ids)) for row in probs]
 
         # Per-class average local confidence, conditioned on the predicted class.
         num_labels = probs.shape[1]
