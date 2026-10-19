@@ -1,3 +1,5 @@
+# Copyright (c) PODS-AI contributors
+# SPDX-License-Identifier: MIT
 import numpy as np
 import pytest
 

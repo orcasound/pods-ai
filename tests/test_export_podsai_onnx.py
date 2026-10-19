@@ -1,3 +1,5 @@
+# Copyright (c) PODS-AI contributors
+# SPDX-License-Identifier: MIT
 import sys
 from types import SimpleNamespace
 from unittest.mock import Mock
