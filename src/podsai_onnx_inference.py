@@ -90,11 +90,14 @@ class PodsAIOnnxInference(ModelInference):
                 # Fallback: leave empty
                 self.label2id = {}
 
-        # Negative/background labels consistent with podsai_inference.
-        self.negative_label_names = {"jingle", "bird"}
-        self.background_label_names = {"abiotic", "other", "water", "vessel", "human"}
-        self.negative_class_ids = {self.label2id[n] for n in self.negative_label_names if n in self.label2id}
-        self.background_class_ids = {self.label2id[n] for n in self.background_label_names if n in self.label2id}
+        self.negative_label_names = {
+            "abiotic", "bird", "human", "jingle", "other", "vessel", "water"
+        }
+        self.negative_class_ids = {
+            self.label2id[name]
+            for name in self.negative_label_names
+            if name in self.label2id
+        }
 
         # Create ONNX Runtime session with CPU provider.
         sess_opts = ort.SessionOptions()
