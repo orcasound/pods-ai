@@ -25,6 +25,36 @@ import numpy as np
 from model_inference import ModelInference
 
 
+def _count_non_adjacent_positive_events(positive_mask: list[bool]) -> int:
+    events = 0
+    run_length = 0
+    for value in positive_mask:
+        if value:
+            run_length += 1
+        elif run_length:
+            events += (run_length + 1) // 2
+            run_length = 0
+    if run_length:
+        events += (run_length + 1) // 2
+    return events
+
+
+def _positive_event_ids(positive_mask: list[bool]) -> list[Optional[int]]:
+    event_ids = []
+    event_id = -1
+    run_length = 0
+    for value in positive_mask:
+        if not value:
+            run_length = 0
+            event_ids.append(None)
+            continue
+        if run_length % 2 == 0:
+            event_id += 1
+        event_ids.append(event_id)
+        run_length += 1
+    return event_ids
+
+
 class PodsAIOnnxInference(ModelInference):
     def __init__(
         self,
@@ -213,7 +243,10 @@ class PodsAIOnnxInference(ModelInference):
         probs = softmax(logits_np)
         segment_probs = [row.tolist() for row in probs]
         local_pred_ids = [int(np.argmax(row)) for row in probs]
-local_confidences = [float(1.0 - sum(row[class_id] for class_id in self.negative_class_ids)) for row in probs]
+        local_confidences = [
+            float(1.0 - sum(row[class_id] for class_id in self.negative_class_ids))
+            for row in probs
+        ]
 
         # Per-class average local confidence, conditioned on the predicted class.
         num_labels = probs.shape[1]
@@ -228,11 +261,152 @@ local_confidences = [float(1.0 - sum(row[class_id] for class_id in self.negative
                 float(np.mean(matching_confidences)) if matching_confidences else 0.0
             )
 
-        # Global prediction: highest mean probability across classes
-        class_means = {i: float(np.mean(probs[:, i])) for i in range(num_labels)}
-        global_id = max(class_means.keys(), key=lambda k: class_means[k])
+        positive_mask = [
+            class_id not in self.negative_class_ids and confidence >= threshold
+            for class_id, confidence in zip(local_pred_ids, local_confidences)
+        ]
+        total_segments = len(local_pred_ids)
+        scaled_threshold = max(1, (total_segments + 9) // 10)
+        effective_threshold = min(scaled_threshold, min_num_positive_calls_threshold)
+
+        event_ids = _positive_event_ids(positive_mask)
+        class_event_confidences = {}
+        for class_id, confidence, event_id in zip(
+            local_pred_ids, local_confidences, event_ids
+        ):
+            if (
+                event_id is None
+                or class_id in self.negative_class_ids
+                or confidence < threshold
+            ):
+                continue
+            class_event_confidences.setdefault(class_id, {}).setdefault(
+                event_id, []
+            ).append(confidence)
+
+        class_votes = {
+            class_id: [float(np.mean(values)) for values in events.values()]
+            for class_id, events in class_event_confidences.items()
+        }
+        qualifying_classes = {
+            class_id: confidences
+            for class_id, confidences in class_votes.items()
+            if len(confidences) >= effective_threshold
+        }
+        if qualifying_classes:
+            ordered_classes = sorted(
+                qualifying_classes,
+                key=lambda class_id: (
+                    -len(qualifying_classes[class_id]),
+                    -float(np.mean(qualifying_classes[class_id])),
+                    self.id2label.get(class_id, str(class_id)),
+                ),
+            )
+            global_id = ordered_classes[0]
+            global_confidence = float(np.mean(qualifying_classes[global_id]))
+        elif (
+            _count_non_adjacent_positive_events(positive_mask) >= effective_threshold
+            and class_votes
+        ):
+            global_id = sorted(
+                class_votes,
+                key=lambda class_id: (
+                    -len(class_votes[class_id]),
+                    -float(np.mean(class_votes[class_id])),
+                    self.id2label.get(class_id, str(class_id)),
+                ),
+            )[0]
+            global_confidence = float(np.mean(class_votes[global_id]))
+        else:
+            background_predictions = [
+                class_id
+                for class_id in local_pred_ids
+                if class_id in self.negative_class_ids
+            ]
+            if background_predictions:
+                global_id = max(
+                    dict.fromkeys(background_predictions),
+                    key=background_predictions.count,
+                )
+                global_confidence = float(np.mean([
+                    row[global_id] for row in segment_probs
+                ]))
+            elif "other" in self.label2id:
+                global_id = self.label2id["other"]
+                global_confidence = 0.0
+            elif self.negative_class_ids:
+                global_id = min(self.negative_class_ids)
+                global_confidence = 0.0
+            else:
+                global_id = local_pred_ids[0]
+                global_confidence = 0.0
+
+        class_means = {
+            class_id: float(np.mean([
+                confidence
+                for confidence, predicted_id in zip(local_confidences, local_pred_ids)
+                if predicted_id == class_id
+            ]))
+            for class_id in range(num_labels)
+            if class_id in local_pred_ids
+        }
+        seen_local_ids = list(dict.fromkeys(local_pred_ids))
+        negative_ids = {
+            self.label2id[name]
+            for name in {"jingle", "bird"}
+            if name in self.label2id
+        }
+        background_ids = {
+            self.label2id[name]
+            for name in {"abiotic", "other", "water", "vessel", "human"}
+            if name in self.label2id
+        }
+        positive_ids = set(seen_local_ids) - negative_ids - background_ids
+        qualifying_ids = list(qualifying_classes)
+        class_event_counts = {}
+        for class_id in seen_local_ids:
+            event_count = _count_non_adjacent_positive_events([
+                prediction == class_id for prediction in local_pred_ids
+            ])
+            class_event_counts[class_id] = event_count
+            if (
+                class_id not in qualifying_classes
+                and (class_id in negative_ids or class_id in background_ids)
+                and event_count >= effective_threshold
+            ):
+                qualifying_ids.append(class_id)
+
+        def sort_group(class_ids):
+            return sorted(
+                class_ids,
+                key=lambda class_id: (
+                    -class_event_counts.get(class_id, 0),
+                    -class_means.get(class_id, 0.0),
+                    self.id2label.get(class_id, str(class_id)),
+                ),
+            )
+
+        ordered_ids = (
+            sort_group(class_id for class_id in qualifying_ids if class_id in positive_ids)
+            + sort_group(class_id for class_id in qualifying_ids if class_id in negative_ids)
+            + sort_group(
+                class_id
+                for class_id in qualifying_ids
+                if class_id in background_ids
+                or (class_id not in positive_ids and class_id not in negative_ids)
+            )
+        )
+        if ordered_ids:
+            global_id = ordered_ids[0]
+            global_confidence = (
+                float(np.mean([row[global_id] for row in segment_probs]))
+                if global_id in self.negative_class_ids
+                else class_means.get(global_id, 0.0)
+            )
         global_label = self.id2label.get(global_id, str(global_id))
-        global_confidence = class_means.get(global_id, 0.0)
+        global_labels = [
+            self.id2label.get(class_id, str(class_id)) for class_id in ordered_ids
+        ]
 
         return {
             "local_predictions": local_pred_ids,
@@ -240,7 +414,7 @@ local_confidences = [float(1.0 - sum(row[class_id] for class_id in self.negative
             "local_probs": segment_probs,
             "global_prediction": int(global_id),
             "global_prediction_label": global_label,
-            "global_prediction_labels": [self.id2label.get(i, str(i)) for i in sorted(class_means.keys(), key=lambda k: -class_means[k])],
+            "global_prediction_labels": global_labels,
             "global_confidence": float(global_confidence),
             "per_class_probabilities": per_class_probs,
             "hop_duration": float(hop_duration),
