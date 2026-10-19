@@ -98,6 +98,16 @@ choco install ffmpeg -y
 pip install -r requirements.txt
 ```
 
+Optional: ONNX support
+
+If you plan to use the ONNX export or the ONNX inference backend (compare_models --compare-onnx or podsai-onnx), install the ONNX dependencies:
+
+```
+pip install -r requirements-onnx.txt
+```
+
+On some platforms you may prefer an optimized ONNXRuntime provider (OpenVINO, DirectML, TensorRT). See the ONNX Runtime docs for platform-specific wheels.
+
 4. Patch fastai_audio
 
 Linux:
