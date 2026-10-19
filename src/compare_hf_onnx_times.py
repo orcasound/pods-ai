@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# Copyright (c) PODS-AI contributors
+# SPDX-License-Identifier: MIT
 from pathlib import Path
 import time
 import numpy as np

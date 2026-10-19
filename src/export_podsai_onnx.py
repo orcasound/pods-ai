@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Copyright (c) PODS-AI contributors
+# SPDX-License-Identifier: MIT
 """Export PODS-AI HuggingFace model to ONNX for CPU inference.
 
 Usage:

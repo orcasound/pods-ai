@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Copyright (c) PODS-AI contributors
+# SPDX-License-Identifier: MIT
 """Validate ONNX export against PyTorch model and benchmark runtimes.
 
 Usage:

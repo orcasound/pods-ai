@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Copyright (c) PODS-AI contributors
+# SPDX-License-Identifier: MIT
 """ONNX Runtime-backed PODS-AI inference wrapper.
 
 This provides a lightweight replacement for PodsAIInference that runs the

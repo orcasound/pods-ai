@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Copyright (c) PODS-AI contributors
+# SPDX-License-Identifier: MIT
 """Simple helper to measure WAV load/decode time by different libraries.
 
 Usage:
