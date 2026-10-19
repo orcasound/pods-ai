@@ -126,6 +126,10 @@ class PodsAIOnnxInference(ModelInference):
             for name in self.negative_label_names
             if name in self.label2id
         }
+        if not self.negative_class_ids:
+            raise ValueError(
+                "Model must include at least one negative/background class"
+            )
 
         # Create ONNX Runtime session with CPU provider.
         sess_opts = ort.SessionOptions()
