@@ -16,7 +16,6 @@ Usage:
 """
 from __future__ import annotations
 
-import os
 import math
 import time
 from pathlib import Path
@@ -82,11 +81,8 @@ class PodsAIOnnxInference(ModelInference):
 
         # Load feature extractor/config to obtain spectrogram params and labels.
         if not feature_extractor:
-            # Allow override via environment variable for convenience.
-            feature_extractor = os.environ.get("PODSAI_FEATURE_EXTRACTOR")
-        if not feature_extractor:
             raise ValueError(
-                "feature_extractor must be provided (HF model id or local path) via argument or PODSAI_FEATURE_EXTRACTOR env var when using ONNX model"
+                "feature_extractor must be provided (HF model id or local path) when using ONNX model"
             )
 
         self.feature_extractor = AutoFeatureExtractor.from_pretrained(feature_extractor)

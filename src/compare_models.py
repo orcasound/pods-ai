@@ -29,7 +29,6 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
-import os
 
 from model_inference import get_model_inference
 from model_revisions import (
@@ -706,6 +705,12 @@ def main() -> int:
         ),
     )
     parser.add_argument(
+        "--feature-extractor",
+        default=None,
+        metavar="PATH_OR_HF_ID",
+        help="Feature extractor/config to use with an ONNX model (defaults to the PODS-AI model).",
+    )
+    parser.add_argument(
         "--max-samples",
         type=int,
         default=None,
@@ -839,7 +844,7 @@ def main() -> int:
             if is_onnx_model:
                 # Prefer an explicit extractor, then the configured PODS-AI model,
                 # unless that path is itself an ONNX file.
-                fe = os.environ.get("PODSAI_FEATURE_EXTRACTOR") or model_paths.get("podsai")
+                fe = args.feature_extractor or model_paths.get("podsai")
                 if isinstance(fe, str) and fe.lower().endswith(".onnx"):
                     fe = None
                 fe = fe or PODSAI_MODEL_ID

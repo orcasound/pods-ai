@@ -268,6 +268,7 @@ def test_main_loads_onnx_from_model_path_options(tmp_path, model_name, path_opti
         "--wav-dir", str(wav_dir),
         "--models", model_name,
         path_option, str(onnx_model),
+        "--feature-extractor", "example/extractor",
         "--max-samples", "1",
     ]
     model = type("Model", (), {"predict": lambda self, _: {}})()
@@ -279,7 +280,7 @@ def test_main_loads_onnx_from_model_path_options(tmp_path, model_name, path_opti
     load_model.assert_called_once_with(
         model_type="podsai",
         model_path=str(onnx_model),
-        feature_extractor="davethaler/whale-call-detector",
+        feature_extractor="example/extractor",
     )
     assert evaluate.call_args.kwargs["model_type"] == "podsai"
     assert evaluate.call_args.kwargs["result_model_type"] == display_name
