@@ -22,7 +22,7 @@ def main():
     parser.add_argument("--out", default="podsai.onnx", help="Output ONNX path")
     parser.add_argument("--device", default="cpu", choices=("cpu", "cuda"), help="Export device")
     parser.add_argument("--batch-size", type=int, default=1)
-    parser.add_argument("--frames", type=int, default=512, help="Representative number of frames (time axis) for export")
+    parser.add_argument("--frames", type=int, default=300, help="Representative number of frames (time axis) for export")
     parser.add_argument("--mel-bins", type=int, default=128, help="Representative mel bins for export")
     args = parser.parse_args()
 
