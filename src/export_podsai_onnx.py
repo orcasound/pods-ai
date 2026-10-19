@@ -7,8 +7,8 @@ Usage:
   python src/export_podsai_onnx.py --model davethaler/whale-call-detector --revision <revision> --out podsai.onnx
 
 This script loads the HF model, builds a representative dummy input tensor
-matching the AST spectrogram input shape, and exports the model to ONNX with
-dynamic time axis so it can be reused for different clip lengths.
+matching the AST spectrogram input shape, and exports the model to ONNX with a
+dynamic batch axis and fixed spectrogram dimensions.
 """
 import argparse
 import torch
@@ -105,7 +105,7 @@ def main():
         hop_duration = 2
         sr = 16000
 
-num_positions = max(1, args.batch_size)
+        num_positions = max(1, args.batch_size)
 
         audio_duration_s = segment_duration + hop_duration * (max(1, num_positions) - 1)
         audio_samples = int(audio_duration_s * sr)
@@ -125,7 +125,7 @@ num_positions = max(1, args.batch_size)
         dummy = torch.randn(args.batch_size, frames, mel_bins, dtype=torch.float32, device=device)
 
     out_path = Path(args.out)
-    print(f"Exporting to {out_path} (opset=13, dynamic axes for time dimension)")
+    print(f"Exporting to {out_path} (opset=13, dynamic batch axis; fixed spectrogram dimensions)")
 
     # The HF model expects keyword argument 'input_values' or similar; export by positional input
     # Export with a fixed time dimension (frames) to avoid symbolic-shape

@@ -7,6 +7,8 @@ This provides a lightweight replacement for PodsAIInference that runs the
 core model forward using an ONNX InferenceSession. It reuses the same
 preprocessing (mel fbank windows) as PodsAIInference by loading the
 feature-extractor configuration from a HuggingFace model id or local folder.
+The exported model must have fixed spectrogram dimensions; prediction rejects
+segment durations whose preprocessed inputs do not match those dimensions.
 
 Usage:
   inf = get_podsai_onnx_inference(onnx_path='podsai.onnx', feature_extractor='davethaler/whale-call-detector')
@@ -139,7 +141,9 @@ class PodsAIOnnxInference(ModelInference):
         providers = ["CPUExecutionProvider"]
         self.sess = ort.InferenceSession(self.onnx_path, sess_options=sess_opts, providers=providers)
         # Input name expected by exported model.
-        self._input_name = self.sess.get_inputs()[0].name
+        model_input = self.sess.get_inputs()[0]
+        self._input_name = model_input.name
+        self._input_shape = model_input.shape
 
     def _compute_input_values(self, audio: np.ndarray, sr: int, num_positions: int, hop_samples: int, segment_samples: int):
         """Compute mel fbank windows replicating PodsAIInference behavior."""
@@ -191,6 +195,11 @@ class PodsAIOnnxInference(ModelInference):
         return input_values.detach().cpu().numpy().astype(np.float32)
 
     def predict(self, wav_path: str, segment_duration: int = 3, hop_duration: int = 2, threshold: Optional[float] = None, min_num_positive_calls_threshold: Optional[int] = None) -> dict:
+        """Predict using the exported fixed spectrogram shape.
+
+        Segment durations are supported only when preprocessing produces the
+        same time and mel dimensions as the exported model.
+        """
         threshold = threshold if threshold is not None else self.threshold
         min_num_positive_calls_threshold = min_num_positive_calls_threshold if min_num_positive_calls_threshold is not None else self.min_num_positive_calls_threshold
 
@@ -208,6 +217,19 @@ class PodsAIOnnxInference(ModelInference):
         # Build model input batch
         batch_np = self._compute_input_values(audio, sr, num_positions, hop_samples, segment_samples)
         # batch_np shape: (num_positions, frames, mel_bins)
+        expected_shape = getattr(self, "_input_shape", None)
+        if expected_shape is not None:
+            actual_shape = batch_np.shape
+            if len(expected_shape) != batch_np.ndim or any(
+                isinstance(expected_shape[dimension], (int, np.integer))
+                and expected_shape[dimension] != actual_shape[dimension]
+                for dimension in range(1, min(len(expected_shape), batch_np.ndim))
+            ):
+                raise ValueError(
+                    "Input spectrogram dimensions do not match the ONNX model "
+                    f"for segment_duration={segment_duration}: "
+                    f"expected {tuple(expected_shape[1:])}, got {tuple(actual_shape[1:])}"
+                )
 
         # Run ORT in batches
         all_logits = []

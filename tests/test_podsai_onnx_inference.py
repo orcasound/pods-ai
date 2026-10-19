@@ -2,6 +2,7 @@ import sys
 from types import SimpleNamespace
 
 import numpy as np
+import pytest
 
 from podsai_onnx_inference import PodsAIOnnxInference
 
@@ -24,6 +25,7 @@ def _inference_for_logits(monkeypatch, logits):
     inference.inference_batch_size = 32
     inference.sess = FakeSession()
     inference._input_name = "input_values"
+    inference._input_shape = [None, 3, 2]
     inference.id2label = {0: "water", 1: "resident", 2: "other"}
     inference.label2id = {"water": 0, "resident": 1, "other": 2}
     inference.negative_class_ids = {0, 2}
@@ -50,6 +52,7 @@ def test_per_class_probabilities_average_matching_local_confidences(monkeypatch)
     inference.inference_batch_size = 8
     inference.sess = FakeSession()
     inference._input_name = "input_values"
+    inference._input_shape = [None, 3, 2]
     inference.id2label = {0: "water", 1: "resident", 2: "other"}
     inference.label2id = {"water": 0, "resident": 1, "other": 2}
     inference.negative_class_ids = {0, 2}
@@ -63,6 +66,14 @@ def test_per_class_probabilities_average_matching_local_confidences(monkeypatch)
         "resident": result["local_confidences"][1],
         "other": 0.0,
     }
+
+
+def test_rejects_input_dimensions_unsupported_by_export(monkeypatch):
+    inference = _inference_for_logits(monkeypatch, np.log([[0.1, 0.8, 0.1]] * 2))
+    inference._compute_input_values = lambda *args: np.zeros((2, 4, 2), dtype=np.float32)
+
+    with pytest.raises(ValueError, match=r"expected \(3, 2\), got \(4, 2\)"):
+        inference.predict("sample.wav")
 
 
 def test_global_prediction_labels_exclude_positive_classes_below_threshold(monkeypatch):
