@@ -649,7 +649,7 @@ def main() -> int:
         default=None,
         metavar="PATH_OR_HF_ID",
         help=(
-            "Local path or Hugging Face model ID for the custom model. "
+            "Local path, Hugging Face model ID, or PODS-AI-compatible ONNX file for the custom model. "
             "Providing this option automatically adds custom to --models."
         ),
     )
@@ -674,7 +674,7 @@ def main() -> int:
         "--orcahello-model-path",
         default="orcasound/orcahello-srkw-detector-v1",
         help=(
-            "Path or HuggingFace Hub ID for the OrcaHello model. "
+            "Path, HuggingFace Hub ID, or PODS-AI-compatible ONNX file for the model. "
             "Defaults to orcasound/orcahello-srkw-detector-v1 when not specified."
         ),
     )
@@ -692,7 +692,7 @@ def main() -> int:
         "--podsai-model-path",
         default=PODSAI_MODEL_ID,
         help=(
-            "Path to PODS-AI model directory or HuggingFace Hub ID. "
+            "Path to PODS-AI model directory, HuggingFace Hub ID, or PODS-AI-compatible ONNX file. "
             "Used by wav2vec2 (Wav2Vec2), oldpodsai (AST), and podsai (AST). "
             f"Defaults to {PODSAI_MODEL_ID!r} when not specified."
         ),
@@ -831,53 +831,72 @@ def main() -> int:
     results = []
     for model_type, inference_model_type, custom_path in model_specs:
         print(f"Evaluating model: {model_type}")
-        effective_model_path = custom_path or model_paths[model_type]
-        # If compare-onnx requested and this spec references an ONNX file that doesn't exist,
-        # try to export the HF model to ONNX first.
-        if isinstance(effective_model_path, str) and effective_model_path.lower().endswith('.onnx'):
+        effective_model_path = custom_path or model_paths.get(model_type)
+        is_generated_onnx = model_type == "podsai-onnx"
+        is_custom_model = model_type == "custom"
+        is_onnx_model = (
+            isinstance(effective_model_path, str)
+            and effective_model_path.lower().endswith(".onnx")
+        )
+        # Only the --compare-onnx variant is generated automatically. Explicit
+        # paths from the model-path options must refer to an existing ONNX file.
+        if is_onnx_model and not Path(effective_model_path).is_file():
+            if not is_generated_onnx:
+                print(f"ONNX model file not found: {effective_model_path}", file=sys.stderr)
+                return 1
             onnx_path = Path(effective_model_path)
-            if not onnx_path.exists():
-                # Determine HF source model id from model_paths mapping for podsai
-                hf_model = model_paths.get('podsai')
-                if not hf_model:
-                    print(f"Cannot export ONNX: no HF podsai model path configured.", file=sys.stderr)
-                    return 1
-                print(f"ONNX file {onnx_path} not found — exporting HF model {hf_model} to ONNX (this may take a while)...")
-                try:
-                    subprocess.run([
-                        sys.executable,
-                        'src/export_podsai_onnx.py',
-                        '--model', hf_model,
-                        '--out', str(onnx_path),
-                        '--frames', '512',
-                        '--mel-bins', '128',
-                    ], check=True)
-                except subprocess.CalledProcessError as exc:
-                    print(f"ONNX export failed: {exc}", file=sys.stderr)
-                    return 1
-        if custom_path:
+            # Determine HF source model id from model_paths mapping for podsai.
+            hf_model = model_paths.get('podsai')
+            if isinstance(hf_model, str) and hf_model.lower().endswith(".onnx"):
+                hf_model = PODSAI_MODEL_ID
+            if not hf_model:
+                print(f"Cannot export ONNX: no HF podsai model path configured.", file=sys.stderr)
+                return 1
+            print(f"ONNX file {onnx_path} not found — exporting HF model {hf_model} to ONNX (this may take a while)...")
+            try:
+                subprocess.run([
+                    sys.executable,
+                    'src/export_podsai_onnx.py',
+                    '--model', hf_model,
+                    '--out', str(onnx_path),
+                    '--frames', '512',
+                    '--mel-bins', '128',
+                ], check=True)
+            except subprocess.CalledProcessError as exc:
+                print(f"ONNX export failed: {exc}", file=sys.stderr)
+                return 1
+        if is_custom_model:
             effective_revision = (
                 None if custom_path_is_local else args.custom_model_revision
             )
+        elif is_generated_onnx or is_onnx_model:
+            effective_revision = None
         else:
-            effective_revision = model_revisions[model_type]
+            effective_revision = model_revisions.get(model_type)
+        if is_onnx_model:
+            inference_model_type = "podsai"
         try:
-            # If using ONNX podsai, pass feature_extractor kwarg so the ONNX wrapper can preprocess.
+            # ONNX inference uses the PODS-AI feature extractor/configuration.
             kwargs = {}
-            if isinstance(effective_model_path, str) and effective_model_path.lower().endswith('.onnx'):
-                # prefer explicit CLI arg or env var; fall back to default PODSAI_MODEL_ID
-                fe = os.environ.get('PODSAI_FEATURE_EXTRACTOR') or model_paths.get('podsai') or PODSAI_MODEL_ID
+            if not is_onnx_model:
+                kwargs["model_revision"] = effective_revision
+            if is_onnx_model:
+                # Prefer an explicit extractor, then the configured PODS-AI model,
+                # unless that path is itself an ONNX file.
+                fe = os.environ.get("PODSAI_FEATURE_EXTRACTOR") or model_paths.get("podsai")
+                if isinstance(fe, str) and fe.lower().endswith(".onnx"):
+                    fe = None
+                fe = fe or PODSAI_MODEL_ID
                 kwargs['feature_extractor'] = fe
             inference_model = get_model_inference(
                 model_type=inference_model_type,
                 model_path=effective_model_path,
-                model_revision=effective_revision,
                 **kwargs,
             )
-            if custom_path:
+            if is_custom_model:
                 validate_inference_model(inference_model, model_type)
         except MODEL_LOAD_ERRORS as exc:
-            if custom_path:
+            if is_custom_model:
                 print(
                     f"Error loading custom model {custom_path!r}: "
                     "the model must be compatible with the PODS-AI inference "
