@@ -4,7 +4,7 @@
 """Validate ONNX export against PyTorch model and benchmark runtimes.
 
 Usage:
-  python src/validate_podsai_onnx.py --onnx podsai.onnx --model davethaler/whale-call-detector --wav path/to/sample.wav
+  python src/validate_podsai_onnx.py --onnx podsai.onnx --model davethaler/whale-call-detector --revision <revision> --wav path/to/sample.wav
 
 This will:
  - Load a sample WAV and compute input_values via PodsAIInference._compute_input_values
@@ -17,10 +17,10 @@ import numpy as np
 import torch
 
 
-def compute_input_values_from_wav(wav_path: str, model_path: str):
+def compute_input_values_from_wav(wav_path: str, model_path: str, model_revision: str = None):
     # Reuse PodsAIInference helper by loading the class
     from podsai_inference import PodsAIInference
-    inf = PodsAIInference(model_path, device='cpu')
+    inf = PodsAIInference(model_path, device='cpu', model_revision=model_revision)
     # Load wav and compute input_values for a single sample using default segment/hop
     import librosa
     audio, sr = librosa.load(wav_path, sr=16000, mono=True)
@@ -68,11 +68,14 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--onnx", required=True)
     parser.add_argument("--model", default="davethaler/whale-call-detector")
+    parser.add_argument("--revision", default=None, help="HuggingFace model revision")
     parser.add_argument("--wav", required=True)
     args = parser.parse_args()
 
     print("Computing input values from WAV using PodsAIInference helper (may load HF config)...")
-    input_values, torch_model = compute_input_values_from_wav(args.wav, args.model)
+    input_values, torch_model = compute_input_values_from_wav(
+        args.wav, args.model, model_revision=args.revision
+    )
 
     # Collapse positions into batch dimension
     inp = input_values.detach().cpu().numpy()
