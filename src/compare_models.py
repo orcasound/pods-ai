@@ -29,6 +29,8 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
+import subprocess
+import os
 
 from model_inference import get_model_inference
 from model_revisions import (
@@ -705,6 +707,15 @@ def main() -> int:
         ),
     )
     parser.add_argument(
+        "--compare-onnx",
+        action="store_true",
+        default=False,
+        help=(
+            "When set, add an ONNX variant of the podsai model to the evaluation list. "
+            "The ONNX model file podsai.onnx will be used (exported from the HF model if missing)."
+        ),
+    )
+    parser.add_argument(
         "--max-samples",
         type=int,
         default=None,
@@ -766,6 +777,15 @@ def main() -> int:
             (display_name, inference_type, custom_path if display_name == "custom" else None)
             for display_name, inference_type, _ in parsed_models
         ]
+
+        # If requested, add an ONNX variant for podsai to compare HF vs ONNX.
+        if args.compare_onnx:
+            for i, (display_name, inference_type, custom_path) in enumerate(list(model_specs)):
+                if display_name == "podsai":
+                    # Add an ONNX model spec after the original podsai spec.
+                    onnx_path = Path("podsai.onnx").resolve()
+                    model_specs.insert(i + 1, (display_name + "-onnx", inference_type, str(onnx_path)))
+                    break
     except ValueError as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 1
@@ -812,6 +832,29 @@ def main() -> int:
     for model_type, inference_model_type, custom_path in model_specs:
         print(f"Evaluating model: {model_type}")
         effective_model_path = custom_path or model_paths[model_type]
+        # If compare-onnx requested and this spec references an ONNX file that doesn't exist,
+        # try to export the HF model to ONNX first.
+        if isinstance(effective_model_path, str) and effective_model_path.lower().endswith('.onnx'):
+            onnx_path = Path(effective_model_path)
+            if not onnx_path.exists():
+                # Determine HF source model id from model_paths mapping for podsai
+                hf_model = model_paths.get('podsai')
+                if not hf_model:
+                    print(f"Cannot export ONNX: no HF podsai model path configured.", file=sys.stderr)
+                    return 1
+                print(f"ONNX file {onnx_path} not found — exporting HF model {hf_model} to ONNX (this may take a while)...")
+                try:
+                    subprocess.run([
+                        sys.executable,
+                        'src/export_podsai_onnx.py',
+                        '--model', hf_model,
+                        '--out', str(onnx_path),
+                        '--frames', '512',
+                        '--mel-bins', '128',
+                    ], check=True)
+                except subprocess.CalledProcessError as exc:
+                    print(f"ONNX export failed: {exc}", file=sys.stderr)
+                    return 1
         if custom_path:
             effective_revision = (
                 None if custom_path_is_local else args.custom_model_revision
@@ -819,10 +862,17 @@ def main() -> int:
         else:
             effective_revision = model_revisions[model_type]
         try:
+            # If using ONNX podsai, pass feature_extractor kwarg so the ONNX wrapper can preprocess.
+            kwargs = {}
+            if isinstance(effective_model_path, str) and effective_model_path.lower().endswith('.onnx'):
+                # prefer explicit CLI arg or env var; fall back to default PODSAI_MODEL_ID
+                fe = os.environ.get('PODSAI_FEATURE_EXTRACTOR') or model_paths.get('podsai') or PODSAI_MODEL_ID
+                kwargs['feature_extractor'] = fe
             inference_model = get_model_inference(
                 model_type=inference_model_type,
                 model_path=effective_model_path,
                 model_revision=effective_revision,
+                **kwargs,
             )
             if custom_path:
                 validate_inference_model(inference_model, model_type)
