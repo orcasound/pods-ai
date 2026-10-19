@@ -29,7 +29,6 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
-import subprocess
 import os
 
 from model_inference import get_model_inference
@@ -707,15 +706,6 @@ def main() -> int:
         ),
     )
     parser.add_argument(
-        "--compare-onnx",
-        action="store_true",
-        default=False,
-        help=(
-            "When set, add an ONNX variant of the podsai model to the evaluation list. "
-            "The ONNX model file podsai.onnx will be used (exported from the HF model if missing)."
-        ),
-    )
-    parser.add_argument(
         "--max-samples",
         type=int,
         default=None,
@@ -777,15 +767,6 @@ def main() -> int:
             (display_name, inference_type, custom_path if display_name == "custom" else None)
             for display_name, inference_type, _ in parsed_models
         ]
-
-        # If requested, add an ONNX variant for podsai to compare HF vs ONNX.
-        if args.compare_onnx:
-            for i, (display_name, inference_type, custom_path) in enumerate(list(model_specs)):
-                if display_name == "podsai":
-                    # Add an ONNX model spec after the original podsai spec.
-                    onnx_path = Path("podsai.onnx").resolve()
-                    model_specs.insert(i + 1, (display_name + "-onnx", inference_type, str(onnx_path)))
-                    break
     except ValueError as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 1
@@ -832,44 +813,19 @@ def main() -> int:
     for model_type, inference_model_type, custom_path in model_specs:
         print(f"Evaluating model: {model_type}")
         effective_model_path = custom_path or model_paths.get(model_type)
-        is_generated_onnx = model_type == "podsai-onnx"
         is_custom_model = model_type == "custom"
         is_onnx_model = (
             isinstance(effective_model_path, str)
             and effective_model_path.lower().endswith(".onnx")
         )
-        # Only the --compare-onnx variant is generated automatically. Explicit
-        # paths from the model-path options must refer to an existing ONNX file.
         if is_onnx_model and not Path(effective_model_path).is_file():
-            if not is_generated_onnx:
-                print(f"ONNX model file not found: {effective_model_path}", file=sys.stderr)
-                return 1
-            onnx_path = Path(effective_model_path)
-            # Determine HF source model id from model_paths mapping for podsai.
-            hf_model = model_paths.get('podsai')
-            if isinstance(hf_model, str) and hf_model.lower().endswith(".onnx"):
-                hf_model = PODSAI_MODEL_ID
-            if not hf_model:
-                print(f"Cannot export ONNX: no HF podsai model path configured.", file=sys.stderr)
-                return 1
-            print(f"ONNX file {onnx_path} not found — exporting HF model {hf_model} to ONNX (this may take a while)...")
-            try:
-                subprocess.run([
-                    sys.executable,
-                    'src/export_podsai_onnx.py',
-                    '--model', hf_model,
-                    '--out', str(onnx_path),
-                    '--frames', '512',
-                    '--mel-bins', '128',
-                ], check=True)
-            except subprocess.CalledProcessError as exc:
-                print(f"ONNX export failed: {exc}", file=sys.stderr)
-                return 1
+            print(f"ONNX model file not found: {effective_model_path}", file=sys.stderr)
+            return 1
         if is_custom_model:
             effective_revision = (
                 None if custom_path_is_local else args.custom_model_revision
             )
-        elif is_generated_onnx or is_onnx_model:
+        elif is_onnx_model:
             effective_revision = None
         else:
             effective_revision = model_revisions.get(model_type)
