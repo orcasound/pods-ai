@@ -9,6 +9,7 @@ Usage:
 This will:
  - Load a sample WAV and compute input_values via PodsAIInference._compute_input_values
  - Run the HF model forward and the ONNX session forward and compare logits
+ - Require logits to match within rtol=1e-4 and atol=1e-5, with matching top-5 classes
  - Report timings for PyTorch and ONNX runs
 """
 import argparse
@@ -64,12 +65,49 @@ def run_torch(model, input_tensor: torch.Tensor, runs: int = 3):
     return out, np.mean(times), np.std(times)
 
 
+def validate_outputs(
+    torch_out: np.ndarray,
+    onnx_out: np.ndarray,
+    *,
+    rtol: float = 1e-4,
+    atol: float = 1e-5,
+    top_k: int = 5,
+) -> float:
+    """Validate ONNX logits against PyTorch using numeric and top-k checks."""
+    if torch_out.shape != onnx_out.shape:
+        raise ValueError(
+            f"Shape mismatch: torch {torch_out.shape} vs onnx {onnx_out.shape}"
+        )
+    if top_k < 1:
+        raise ValueError("top_k must be at least 1")
+
+    max_abs_diff = float(np.max(np.abs(torch_out - onnx_out)))
+    if not np.allclose(torch_out, onnx_out, rtol=rtol, atol=atol):
+        raise ValueError(
+            f"Logits exceed tolerance (rtol={rtol}, atol={atol}); "
+            f"max absolute difference: {max_abs_diff:.6f}"
+        )
+
+    compared_k = min(top_k, torch_out.shape[-1])
+    torch_top_k = np.argsort(torch_out, axis=-1)[:, -compared_k:][:, ::-1]
+    onnx_top_k = np.argsort(onnx_out, axis=-1)[:, -compared_k:][:, ::-1]
+    if not np.array_equal(torch_top_k, onnx_top_k):
+        raise ValueError(
+            f"Top-{compared_k} predictions differ: "
+            f"torch {torch_top_k.tolist()} vs onnx {onnx_top_k.tolist()}"
+        )
+    return max_abs_diff
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--onnx", required=True)
     parser.add_argument("--model", default="davethaler/whale-call-detector")
     parser.add_argument("--revision", default=None, help="HuggingFace model revision")
     parser.add_argument("--wav", required=True)
+    parser.add_argument("--rtol", type=float, default=1e-4, help="Logit relative tolerance")
+    parser.add_argument("--atol", type=float, default=1e-5, help="Logit absolute tolerance")
+    parser.add_argument("--top-k", type=int, default=5, help="Number of leading classes to compare")
     args = parser.parse_args()
 
     print("Computing input values from WAV using PodsAIInference helper (may load HF config)...")
@@ -93,14 +131,10 @@ def main():
     onnx_out, onnx_mean, onnx_sd = run_onnx(args.onnx, batch_np, runs=3)
     print(f"ONNX logits shape: {onnx_out.shape}, mean time: {onnx_mean:.3f}s (sd {onnx_sd:.3f})")
 
-    # Compare outputs (per-sample logits) using absolute difference
-    import numpy as np
-    # Align shapes: logits shape (batch, num_labels)
-    if torch_out.shape != onnx_out.shape:
-        print(f"Shape mismatch: torch {torch_out.shape} vs onnx {onnx_out.shape}")
-    else:
-        diff = np.max(np.abs(torch_out - onnx_out))
-        print(f"Max abs difference between PyTorch and ONNX logits: {diff:.6f}")
+    diff = validate_outputs(
+        torch_out, onnx_out, rtol=args.rtol, atol=args.atol, top_k=args.top_k
+    )
+    print(f"ONNX validation passed; max abs difference: {diff:.6f}")
 
 
 if __name__ == '__main__':
