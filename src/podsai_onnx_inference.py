@@ -215,9 +215,18 @@ class PodsAIOnnxInference(ModelInference):
         local_pred_ids = [int(np.argmax(row)) for row in probs]
         local_confidences = [float(np.max(row)) for row in probs]
 
-        # Per-class average probability
+        # Per-class average local confidence, conditioned on the predicted class.
         num_labels = probs.shape[1]
-        per_class_probs = {self.id2label.get(i, str(i)): float(np.mean(probs[:, i])) for i in range(num_labels)}
+        per_class_probs = {}
+        for class_id in range(num_labels):
+            matching_confidences = [
+                confidence
+                for confidence, predicted_id in zip(local_confidences, local_pred_ids)
+                if predicted_id == class_id
+            ]
+            per_class_probs[self.id2label.get(class_id, str(class_id))] = (
+                float(np.mean(matching_confidences)) if matching_confidences else 0.0
+            )
 
         # Global prediction: highest mean probability across classes
         class_means = {i: float(np.mean(probs[:, i])) for i in range(num_labels)}
