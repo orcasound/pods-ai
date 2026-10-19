@@ -105,7 +105,7 @@ def main():
         hop_duration = 2
         sr = 16000
 
-        num_positions = int(target_patches) if 'target_patches' in locals() else max(1, args.frames // int(getattr(inf.feature_extractor, 'hop_length', 10)))
+num_positions = max(1, args.batch_size)
 
         audio_duration_s = segment_duration + hop_duration * (max(1, num_positions) - 1)
         audio_samples = int(audio_duration_s * sr)
