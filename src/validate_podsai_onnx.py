@@ -17,14 +17,6 @@ import numpy as np
 import torch
 
 
-def load_pytorch_model(model_id: str, device: str = "cpu"):
-    from transformers import AutoModelForAudioClassification
-    model = AutoModelForAudioClassification.from_pretrained(model_id)
-    model.eval()
-    model.to(device)
-    return model
-
-
 def compute_input_values_from_wav(wav_path: str, model_path: str):
     # Reuse PodsAIInference helper by loading the class
     from podsai_inference import PodsAIInference
@@ -40,7 +32,7 @@ def compute_input_values_from_wav(wav_path: str, model_path: str):
     input_values = inf._compute_input_values(audio, sr, num_positions, hop_samples, segment_samples)
     # Input shape produced: (num_positions, frames, mel_bins)
     # For export/onnx we will use a single batch of all positions flattened as batch dimension
-    return input_values
+    return input_values, inf.model
 
 
 def run_onnx(onnx_path: str, input_np: np.ndarray, runs: int = 3):
@@ -80,15 +72,12 @@ def main():
     args = parser.parse_args()
 
     print("Computing input values from WAV using PodsAIInference helper (may load HF config)...")
-    input_values = compute_input_values_from_wav(args.wav, args.model)
+    input_values, torch_model = compute_input_values_from_wav(args.wav, args.model)
 
     # Collapse positions into batch dimension
     inp = input_values.detach().cpu().numpy()
     batch_np = inp  # shape (num_positions, frames, mel)
     print(f"Prepared input batch shape for ONNX: {batch_np.shape}")
-
-    print("Loading PyTorch model...")
-    torch_model = load_pytorch_model(args.model, device='cpu')
 
     # Run a single forward on torch
     import torch
