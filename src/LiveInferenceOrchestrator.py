@@ -462,10 +462,17 @@ def _process_segment(
         return
 
     start_timestamp = segment.start_iso
+    inference_overrides = (
+        (orch_config.get("model_config_overrides") or {}).get("inference", {}) or {}
+    )
     result = model.predict(
         clip_path,
         segment_duration=int(orch_config.get("segment_duration", 3)),
-        hop_duration=int(orch_config.get("hop_duration", 2)),
+        hop_duration=float(
+            inference_overrides.get(
+                "window_hop_s", orch_config.get("hop_duration", 2)
+            )
+        ),
     )
 
     id2label = getattr(model, "id2label", None)
@@ -475,7 +482,15 @@ def _process_segment(
     )
     global_confidence = float(result.get("global_confidence", 0.0))
     positive_segments = count_positive_segments(result, id2label=id2label)
-    detected = is_positive_label(global_prediction_label)
+    global_prediction_threshold = (
+        (orch_config.get("model_config_overrides") or {})
+        .get("global_prediction", {})
+        .get("pred_global_threshold")
+    )
+    detected = is_positive_label(global_prediction_label) and (
+        global_prediction_threshold is None
+        or global_confidence >= float(global_prediction_threshold)
+    )
 
     logger.info(
         f"Inference: prediction={global_prediction_label}, "
