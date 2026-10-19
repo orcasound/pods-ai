@@ -330,10 +330,15 @@ def run_inference(wav_path: str, model_type: str = "podsai",
         if inference_model is not None:
             model = inference_model
         elif isinstance(model_path, str) and model_path.lower().endswith(".onnx"):
+            effective_feature_extractor = feature_extractor or PODSAI_MODEL_ID
+            effective_revision = model_revision
+            if feature_extractor is None and effective_revision is None:
+                effective_revision = LATEST_PODSAI_MODEL_REVISION
             model = get_model_inference(
                 model_type="podsai",
                 model_path=model_path,
-                feature_extractor=feature_extractor,
+                feature_extractor=effective_feature_extractor,
+                model_revision=effective_revision,
             )
         else:
             model = get_model_inference(

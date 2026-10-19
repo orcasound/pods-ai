@@ -36,93 +36,29 @@ def main():
     model = inf.model
     model.eval()
     model.to(device)
-    fe = inf.feature_extractor
+    if not inf._use_spectrogram_input:
+        raise ValueError(
+            "ONNX export currently supports only spectrogram-based models; "
+            "raw-audio models such as Wav2Vec2 are not supported."
+        )
 
-    # Attempt to compute a representative frames value from the feature-extractor
-    # configuration so that patch/stride arithmetic used by AST-style models
-    # is consistent during export. Fall back to the CLI --frames value when
-    # attributes are missing or loading fails.
+    # Build a dummy input with the dimensions requested on the command line.
     try:
-        fe = inf.feature_extractor
-        # Defaults matching podsai_inference / AST expectations
-        DEFAULT_AST_PATCH_SIZE = 16
-        DEFAULT_AST_TIME_STRIDE = 10
-        DEFAULT_AST_FREQUENCY_STRIDE = 10
-
-        patch_size = int(getattr(fe, "patch_size", DEFAULT_AST_PATCH_SIZE))
-        # hop_length/hop are often frame shift; prefer hop_length then time_stride
-        time_stride = int(getattr(fe, "hop_length", getattr(fe, "time_stride", DEFAULT_AST_TIME_STRIDE)))
-        mel_bins = int(getattr(fe, "num_mel_bins", args.mel_bins))
-
-        # Try to infer target frames so that the number of patch tokens matches
-        # the model's position embeddings length when possible.
-        target_patches = getattr(fe, "max_length", None)
-
-        # If the model exposes positional embeddings (AST), use them to compute
-        # a compatible frames value.
-        pos_len = None
         try:
-            pos_len = getattr(model, "audio_spectrogram_transformer", None)
-            if pos_len is not None:
-                pos_len = int(model.audio_spectrogram_transformer.embeddings.position_embeddings.shape[1])
-        except Exception:
-            pos_len = None
-
-        if pos_len:
-            NUM_SPECIAL_TOKENS = 2
-            freq_stride = int(getattr(fe, "frequency_stride", DEFAULT_AST_FREQUENCY_STRIDE))
-            # number of frequency patches (ceil to cover mel bins)
-            freq_patches = (mel_bins + freq_stride - 1) // freq_stride
-            time_patches = max(1, (pos_len - NUM_SPECIAL_TOKENS) // freq_patches)
-            frames = (time_patches - 1) * time_stride + patch_size
-            print(f"Inferred frames from position embeddings: frames={frames} (time_patches={time_patches}, freq_patches={freq_patches}, pos_len={pos_len})")
-        else:
-            if target_patches is None:
-                target_patches = max(1, args.frames // int(time_stride))
-            frames = int(target_patches) * int(time_stride) + int(patch_size)
-            print(f"Computed export frames={frames} (patch={patch_size}, stride={time_stride}, patches={target_patches}), mel_bins={mel_bins}")
-    except Exception:
-        frames = args.frames
-        mel_bins = args.mel_bins
-        print(f"Warning: could not read feature extractor config; falling back to frames={frames}, mel_bins={mel_bins}")
-
-    # Build a dummy input: try to use PodsAIInference helper to compute the
-    # exact spectrogram-window layout the HF model expects. This produces a
-    # shape (num_positions, frames, mel_bins) which we treat as a batch of
-    # windows for export. If that fails, fall back to a random tensor.
-    try:
-        import numpy as _np
-
-        # Ensure AST positional embeddings match our target frames/mel_bins
-        try:
-            resized = inf._ensure_ast_position_embeddings(int(frames), int(mel_bins))
+            resized = inf._ensure_ast_position_embeddings(
+                args.frames, args.mel_bins
+            )
             print(f"_ensure_ast_position_embeddings returned: {resized}")
         except Exception as e:
             print(f"Warning: _ensure_ast_position_embeddings failed: {e}")
 
-        # Default sliding-window settings matching PodsAIInference defaults.
-        segment_duration = 3
-        hop_duration = 2
-        sr = 16000
-
-        num_positions = max(1, args.batch_size)
-
-        audio_duration_s = segment_duration + hop_duration * (max(1, num_positions) - 1)
-        audio_samples = int(audio_duration_s * sr)
-        audio = _np.zeros(audio_samples, dtype=_np.float32)
-
-        input_values = inf._compute_input_values(audio, sr, num_positions, int(hop_duration * sr), int(segment_duration * sr))
-        # input_values is a torch tensor in PodsAIInference implementation; ensure numpy->torch
-        if hasattr(input_values, 'numpy'):
-            input_np = input_values.detach().cpu().numpy()
-        else:
-            input_np = _np.array(input_values)
-
-        dummy = torch.from_numpy(input_np).float().to(device)
-        print(f"Prepared dummy from PodsAIInference helper with shape {tuple(dummy.shape)}")
+        dummy = torch.randn(
+            args.batch_size, args.frames, args.mel_bins,
+            dtype=torch.float32, device=device,
+        )
+        print(f"Prepared dummy with shape {tuple(dummy.shape)}")
     except Exception as e:
-        print(f"Warning: failed to prepare dummy via PodsAIInference helper: {e}; falling back to random tensor")
-        dummy = torch.randn(args.batch_size, frames, mel_bins, dtype=torch.float32, device=device)
+        raise RuntimeError(f"Failed to prepare ONNX export input: {e}") from e
 
     out_path = Path(args.out)
     print(f"Exporting to {out_path} (opset=13, dynamic batch axis; fixed spectrogram dimensions)")

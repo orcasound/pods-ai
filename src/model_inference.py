@@ -658,8 +658,11 @@ def get_model_inference(model_path: Optional[str] = None, model_type: str = "fas
         if isinstance(model_path, str) and model_path.lower().endswith('.onnx'):
             from podsai_onnx_inference import get_podsai_onnx_inference
             feature_extractor = kwargs.pop('feature_extractor', None)
-            kwargs.pop('model_revision', None)
-            return get_podsai_onnx_inference(model_path, feature_extractor=feature_extractor, **kwargs)
+            return get_podsai_onnx_inference(
+                model_path,
+                feature_extractor=feature_extractor,
+                **kwargs,
+            )
 
         from podsai_inference import get_podsai_inference
 

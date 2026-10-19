@@ -17,6 +17,7 @@ Usage:
 from __future__ import annotations
 
 import math
+import os
 import time
 from pathlib import Path
 from typing import Optional
@@ -66,6 +67,7 @@ class PodsAIOnnxInference(ModelInference):
         inference_batch_size: int = 8,
         ort_intra_threads: Optional[int] = None,
         ort_inter_threads: Optional[int] = None,
+        model_revision: Optional[str] = None,
     ) -> None:
         super().__init__(onnx_path)
         try:
@@ -85,8 +87,18 @@ class PodsAIOnnxInference(ModelInference):
                 "feature_extractor must be provided (HF model id or local path) when using ONNX model"
             )
 
-        self.feature_extractor = AutoFeatureExtractor.from_pretrained(feature_extractor)
-        cfg = AutoConfig.from_pretrained(feature_extractor)
+        pretrained_kwargs = {}
+        if not Path(feature_extractor).exists():
+            if model_revision:
+                pretrained_kwargs["revision"] = model_revision
+            hf_token = os.getenv("HF_TOKEN")
+            if hf_token:
+                pretrained_kwargs["token"] = hf_token
+
+        self.feature_extractor = AutoFeatureExtractor.from_pretrained(
+            feature_extractor, **pretrained_kwargs
+        )
+        cfg = AutoConfig.from_pretrained(feature_extractor, **pretrained_kwargs)
         # Build id2label/label2id mapping from config if present.
         raw_id2label = getattr(cfg, "id2label", None) or {}
         raw_label2id = getattr(cfg, "label2id", None) or {}
@@ -203,9 +215,38 @@ class PodsAIOnnxInference(ModelInference):
         threshold = threshold if threshold is not None else self.threshold
         min_num_positive_calls_threshold = min_num_positive_calls_threshold if min_num_positive_calls_threshold is not None else self.min_num_positive_calls_threshold
 
+        if "other" in self.label2id:
+            primary_negative_id = self.label2id["other"]
+        else:
+            primary_negative_id = min(self.negative_class_ids)
+        empty_per_class_probabilities = {
+            label: 0.0 for label in self.id2label.values()
+        }
+
+        def empty_result():
+            return {
+                "local_predictions": [],
+                "local_confidences": [],
+                "local_probs": [],
+                "global_prediction": primary_negative_id,
+                "global_prediction_label": self.id2label[primary_negative_id],
+                "global_prediction_labels": [],
+                "global_confidence": 0.0,
+                "per_class_probabilities": empty_per_class_probabilities,
+                "hop_duration": float(hop_duration),
+                "segment_duration": float(segment_duration),
+            }
+
         # Load audio
         import librosa
-        audio, sr = librosa.load(wav_path, sr=16000, mono=True)
+        try:
+            audio, sr = librosa.load(wav_path, sr=16000, mono=True)
+        except Exception as e:
+            print(f"Error loading audio file {wav_path}: {type(e).__name__}: {e}")
+            return empty_result()
+        if len(audio) == 0:
+            print(f"Warning: Audio file {wav_path} is empty")
+            return empty_result()
         audio_duration = len(audio) / sr
         segment_samples = int(segment_duration * sr)
         hop_samples = int(hop_duration * sr)

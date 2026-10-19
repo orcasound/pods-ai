@@ -316,12 +316,32 @@ class TestRunInferencePodsAI:
                 model_type="podsai",
                 model_path="model.onnx",
                 feature_extractor="example/extractor",
+                model_revision="0123456789abcdef",
             )
 
         load_model.assert_called_once_with(
             model_type="podsai",
             model_path="model.onnx",
             feature_extractor="example/extractor",
+            model_revision="0123456789abcdef",
+        )
+
+    def test_onnx_model_defaults_to_pinned_feature_extractor_revision(self):
+        from run_inference import run_inference
+
+        model = _make_podsai_model_mock()
+        with patch("run_inference.get_model_inference", return_value=model) as load_model:
+            run_inference(
+                "sample.wav",
+                model_type="podsai",
+                model_path="model.onnx",
+            )
+
+        load_model.assert_called_once_with(
+            model_type="podsai",
+            model_path="model.onnx",
+            feature_extractor="davethaler/whale-call-detector",
+            model_revision=LATEST_PODSAI_MODEL_REVISION,
         )
 
     def test_returns_expected_keys(self):

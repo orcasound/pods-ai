@@ -3,6 +3,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 import numpy as np
+import pytest
 
 import export_podsai_onnx
 
@@ -43,11 +44,7 @@ def test_export_uses_cli_model_revision_and_batch_size(monkeypatch):
         model=model,
         feature_extractor=feature_extractor,
         _ensure_ast_position_embeddings=Mock(return_value=False),
-        _compute_input_values=Mock(
-            side_effect=lambda _audio, _sr, count, *_args: FakeTensor(
-                np.zeros((count, 20, 4), dtype=np.float32)
-            )
-        ),
+        _use_spectrogram_input=True,
     )
     inference_factory = Mock(return_value=inference)
     monkeypatch.setitem(
@@ -66,8 +63,9 @@ def test_export_uses_cli_model_revision_and_batch_size(monkeypatch):
     export = Mock()
     fake_torch = SimpleNamespace(
         device=lambda value: value,
+        float32=np.float32,
         nn=SimpleNamespace(Module=FakeModule),
-        from_numpy=FakeTensor,
+        randn=lambda *shape, **_kwargs: FakeTensor(np.zeros(shape, dtype=np.float32)),
         onnx=SimpleNamespace(export=export),
     )
     monkeypatch.setattr(export_podsai_onnx, "torch", fake_torch)
@@ -83,6 +81,10 @@ def test_export_uses_cli_model_revision_and_batch_size(monkeypatch):
             "model.onnx",
             "--batch-size",
             "3",
+            "--frames",
+            "17",
+            "--mel-bins",
+            "7",
         ],
     )
 
@@ -91,10 +93,34 @@ def test_export_uses_cli_model_revision_and_batch_size(monkeypatch):
     inference_factory.assert_called_once_with(
         "example/model", device="cpu", model_revision="0123456789abcdef"
     )
-    assert inference._compute_input_values.call_args.args[2] == 3
-    assert export.call_args.args[1][0].array.shape == (3, 20, 4)
+    inference._ensure_ast_position_embeddings.assert_called_once_with(17, 7)
+    assert export.call_args.args[1][0].array.shape == (3, 17, 7)
     assert export.call_args.args[2] == "model.onnx"
     assert export.call_args.kwargs["dynamic_axes"] == {
         "input_values": {0: "batch"},
         "logits": {0: "batch"},
     }
+
+
+def test_export_rejects_raw_audio_model(monkeypatch):
+    inference = SimpleNamespace(
+        model=Mock(),
+        _use_spectrogram_input=False,
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "podsai_inference",
+        SimpleNamespace(PodsAIInference=Mock(return_value=inference)),
+    )
+    monkeypatch.setattr(
+        "sys.argv",
+        ["export_podsai_onnx.py", "--model", "example/wav2vec2"],
+    )
+    monkeypatch.setattr(
+        export_podsai_onnx,
+        "torch",
+        SimpleNamespace(device=lambda value: value),
+    )
+
+    with pytest.raises(ValueError, match="only spectrogram-based models"):
+        export_podsai_onnx.main()

@@ -831,7 +831,7 @@ def main() -> int:
                 None if custom_path_is_local else args.custom_model_revision
             )
         elif is_onnx_model:
-            effective_revision = None
+            effective_revision = model_revisions.get(model_type)
         else:
             effective_revision = model_revisions.get(model_type)
         if is_onnx_model:
@@ -839,8 +839,7 @@ def main() -> int:
         try:
             # ONNX inference uses the PODS-AI feature extractor/configuration.
             kwargs = {}
-            if not is_onnx_model:
-                kwargs["model_revision"] = effective_revision
+            kwargs["model_revision"] = effective_revision
             if is_onnx_model:
                 # Prefer an explicit extractor, then the configured PODS-AI model,
                 # unless that path is itself an ONNX file.

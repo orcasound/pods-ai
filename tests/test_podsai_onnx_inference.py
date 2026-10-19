@@ -96,3 +96,87 @@ def test_global_prediction_labels_require_enough_non_adjacent_events(monkeypatch
 
     assert result["global_prediction_labels"] == ["water"]
     assert result["global_prediction_label"] == "water"
+
+
+def test_feature_extractor_and_config_use_pinned_authenticated_revision(
+    monkeypatch,
+):
+    from unittest.mock import Mock
+
+    feature_extractor_loader = Mock(return_value=object())
+    config_loader = Mock(return_value=SimpleNamespace(
+        id2label={0: "other"},
+        label2id={"other": 0},
+    ))
+    fake_transformers = SimpleNamespace(
+        AutoFeatureExtractor=SimpleNamespace(
+            from_pretrained=feature_extractor_loader
+        ),
+        AutoConfig=SimpleNamespace(from_pretrained=config_loader),
+    )
+    monkeypatch.setenv("HF_TOKEN", "test-token")
+
+    class FakeSession:
+        def get_inputs(self):
+            return [SimpleNamespace(name="input_values", shape=[None, 3, 2])]
+
+    fake_onnxruntime = SimpleNamespace(
+        InferenceSession=lambda *_args, **_kwargs: FakeSession(),
+        SessionOptions=lambda: SimpleNamespace(),
+    )
+    monkeypatch.setitem(sys.modules, "transformers", fake_transformers)
+    monkeypatch.setitem(sys.modules, "onnxruntime", fake_onnxruntime)
+
+    revision = "0123456789abcdef"
+    PodsAIOnnxInference(
+        "model.onnx",
+        feature_extractor="example/model",
+        model_revision=revision,
+    )
+
+    expected_kwargs = {"revision": revision, "token": "test-token"}
+    feature_extractor_loader.assert_called_once_with(
+        "example/model", **expected_kwargs
+    )
+    config_loader.assert_called_once_with("example/model", **expected_kwargs)
+
+
+@pytest.mark.parametrize(
+    "audio_load",
+    [
+        lambda: (np.array([], dtype=np.float32), 16000),
+        lambda: (_ for _ in ()).throw(OSError("invalid audio")),
+    ],
+)
+def test_empty_or_unreadable_audio_returns_negative_result(
+    monkeypatch, audio_load
+):
+    from unittest.mock import Mock
+
+    monkeypatch.setitem(
+        sys.modules,
+        "librosa",
+        SimpleNamespace(load=lambda *_args, **_kwargs: audio_load()),
+    )
+    inference = PodsAIOnnxInference.__new__(PodsAIOnnxInference)
+    inference.threshold = 0.5
+    inference.min_num_positive_calls_threshold = 2
+    inference.id2label = {0: "water", 1: "resident", 2: "other"}
+    inference.label2id = {"water": 0, "resident": 1, "other": 2}
+    inference.negative_class_ids = {0, 2}
+    inference._compute_input_values = Mock(side_effect=AssertionError)
+
+    result = inference.predict("bad.wav")
+
+    assert result["local_predictions"] == []
+    assert result["local_confidences"] == []
+    assert result["local_probs"] == []
+    assert result["global_prediction"] == 2
+    assert result["global_prediction_label"] == "other"
+    assert result["global_prediction_labels"] == []
+    assert result["global_confidence"] == 0.0
+    assert result["per_class_probabilities"] == {
+        "water": 0.0,
+        "resident": 0.0,
+        "other": 0.0,
+    }
