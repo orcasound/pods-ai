@@ -42,7 +42,7 @@ def main():
     # is consistent during export. Fall back to the CLI --frames value when
     # attributes are missing or loading fails.
     try:
-        fe = AutoFeatureExtractor.from_pretrained(args.model)
+        fe = inf.feature_extractor
         # Defaults matching podsai_inference / AST expectations
         DEFAULT_AST_PATCH_SIZE = 16
         DEFAULT_AST_TIME_STRIDE = 10
