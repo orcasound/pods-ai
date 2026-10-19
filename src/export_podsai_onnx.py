@@ -4,7 +4,7 @@
 """Export PODS-AI HuggingFace model to ONNX for CPU inference.
 
 Usage:
-  python src/export_podsai_onnx.py --model davethaler/whale-call-detector --out podsai.onnx
+  python src/export_podsai_onnx.py --model davethaler/whale-call-detector --revision <revision> --out podsai.onnx
 
 This script loads the HF model, builds a representative dummy input tensor
 matching the AST spectrogram input shape, and exports the model to ONNX with
@@ -18,6 +18,7 @@ from pathlib import Path
 def main():
     parser = argparse.ArgumentParser(description="Export PODS-AI HF model to ONNX")
     parser.add_argument("--model", default="davethaler/whale-call-detector", help="HF model id or local path")
+    parser.add_argument("--revision", default=None, help="HuggingFace model revision")
     parser.add_argument("--out", default="podsai.onnx", help="Output ONNX path")
     parser.add_argument("--device", default="cpu", choices=("cpu", "cuda"), help="Export device")
     parser.add_argument("--batch-size", type=int, default=1)
@@ -31,7 +32,7 @@ def main():
     from podsai_inference import PodsAIInference
 
     device = torch.device(args.device)
-    inf = PodsAIInference(args.model, device=str(device))
+    inf = PodsAIInference(args.model, device=str(device), model_revision=args.revision)
     model = inf.model
     model.eval()
     model.to(device)
