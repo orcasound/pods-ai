@@ -185,7 +185,7 @@ class PodsAIOnnxInference(ModelInference):
         hop_frames = round(hop_samples / sr * frames_per_second)
         seg_frames = round(segment_samples / sr * frames_per_second)
 
-        target_frames = max(1, min(max_length, seg_frames))
+        target_frames = self._get_target_frames(seg_frames, max_length)
 
         windows = []
         for pos_idx in range(num_positions):
@@ -205,6 +205,16 @@ class PodsAIOnnxInference(ModelInference):
             input_values = (input_values - fe_mean) / (fe_std * 2.0)
 
         return input_values.detach().cpu().numpy().astype(np.float32)
+
+    def _get_target_frames(self, seg_frames: int, max_length: int) -> int:
+        input_shape = getattr(self, "_input_shape", None)
+        if (
+            input_shape
+            and len(input_shape) > 1
+            and isinstance(input_shape[1], (int, np.integer))
+        ):
+            return int(input_shape[1])
+        return max(1, min(max_length, seg_frames))
 
     def predict(self, wav_path: str, segment_duration: int = 3, hop_duration: int = 2, threshold: Optional[float] = None, min_num_positive_calls_threshold: Optional[int] = None) -> dict:
         """Predict using the exported fixed spectrogram shape.

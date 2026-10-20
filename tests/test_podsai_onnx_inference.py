@@ -78,6 +78,13 @@ def test_rejects_input_dimensions_unsupported_by_export(monkeypatch):
         inference.predict("sample.wav")
 
 
+def test_preprocessing_uses_fixed_onnx_frame_dimension():
+    inference = PodsAIOnnxInference.__new__(PodsAIOnnxInference)
+    inference._input_shape = [None, 1024, 128]
+
+    assert inference._get_target_frames(seg_frames=300, max_length=1024) == 1024
+
+
 def test_global_prediction_labels_exclude_positive_classes_below_threshold(monkeypatch):
     logits = np.log([[0.35, 0.4, 0.25]] * 2)
     inference = _inference_for_logits(monkeypatch, logits)
