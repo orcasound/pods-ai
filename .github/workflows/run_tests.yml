@@ -234,6 +234,8 @@ jobs:
 
       - name: Export PODS-AI ONNX model
         if: steps.skip_check.outputs.should_skip != 'true'
+        env:
+          PYTHONIOENCODING: utf-8
         run: |
           $revision = python -c "from src.model_revisions import LATEST_PODSAI_MODEL_REVISION; print(LATEST_PODSAI_MODEL_REVISION)"
           python src/export_podsai_onnx.py --revision $revision --out podsai.onnx
