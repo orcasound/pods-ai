@@ -204,3 +204,27 @@ def test_empty_or_unreadable_audio_returns_negative_result(
         "resident": 0.0,
         "other": 0.0,
     }
+
+
+def test_empty_audio_uses_label2id_when_id2label_is_missing(monkeypatch):
+    from unittest.mock import Mock
+
+    monkeypatch.setitem(
+        sys.modules,
+        "librosa",
+        SimpleNamespace(
+            load=lambda *_args, **_kwargs: (np.array([], dtype=np.float32), 16000)
+        ),
+    )
+    inference = PodsAIOnnxInference.__new__(PodsAIOnnxInference)
+    inference.threshold = 0.5
+    inference.min_num_positive_calls_threshold = 2
+    inference.id2label = {}
+    inference.label2id = {"other": 0}
+    inference.negative_class_ids = {0}
+    inference._compute_input_values = Mock(side_effect=AssertionError)
+
+    result = inference.predict("empty.wav")
+
+    assert result["global_prediction"] == 0
+    assert result["global_prediction_label"] == "other"

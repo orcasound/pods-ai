@@ -237,6 +237,16 @@ class PodsAIOnnxInference(ModelInference):
         empty_per_class_probabilities = {
             label: 0.0 for label in self.id2label.values()
         }
+        primary_negative_label = self.id2label.get(primary_negative_id)
+        if primary_negative_label is None:
+            primary_negative_label = next(
+                (
+                    label
+                    for label, class_id in self.label2id.items()
+                    if class_id == primary_negative_id
+                ),
+                "other",
+            )
 
         def empty_result():
             return {
@@ -244,7 +254,7 @@ class PodsAIOnnxInference(ModelInference):
                 "local_confidences": [],
                 "local_probs": [],
                 "global_prediction": primary_negative_id,
-                "global_prediction_label": self.id2label[primary_negative_id],
+                "global_prediction_label": primary_negative_label,
                 "global_prediction_labels": [],
                 "global_confidence": 0.0,
                 "per_class_probabilities": empty_per_class_probabilities,

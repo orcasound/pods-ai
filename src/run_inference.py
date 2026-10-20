@@ -275,14 +275,19 @@ def run_inference(wav_path: str, model_type: str = "podsai",
     elif model_type == "orcahello":
         if model_path is None:
             model_path = "orcasound/orcahello-srkw-detector-v1"
+        orcahello_model_kwargs = {
+            "model_type": "orcahello",
+            "model_path": model_path,
+            "model_revision": model_revision,
+        }
+        if isinstance(model_path, str) and model_path.lower().endswith(".onnx"):
+            orcahello_model_kwargs["feature_extractor"] = feature_extractor or PODSAI_MODEL_ID
+            if feature_extractor is None and model_revision is None:
+                orcahello_model_kwargs["model_revision"] = LATEST_PODSAI_MODEL_REVISION
         model = (
             inference_model
             if inference_model is not None
-            else get_model_inference(
-                model_type="orcahello",
-                model_path=model_path,
-                model_revision=model_revision,
-            )
+            else get_model_inference(**orcahello_model_kwargs)
         )
 
         start_time = time.perf_counter()
