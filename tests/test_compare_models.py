@@ -251,6 +251,8 @@ def test_main_forwards_orcahello_model_revision(tmp_path):
     ("model_name", "path_option", "display_name"),
     [
         ("custom", "--custom-model-path", "custom"),
+        ("wav2vec2", "--podsai-model-path", "wav2vec2"),
+        ("oldpodsai", "--podsai-model-path", "oldpodsai"),
         ("podsai", "--podsai-model-path", "podsai"),
         ("orcahello", "--orcahello-model-path", "orcahello"),
     ],
@@ -281,15 +283,11 @@ def test_main_loads_onnx_from_model_path_options(tmp_path, model_name, path_opti
         model_type="podsai",
         model_path=str(onnx_model),
         feature_extractor="example/extractor",
-        model_revision=(
-            LATEST_PODSAI_MODEL_REVISION if model_name == "podsai" else None
-        ),
+        model_revision=LATEST_PODSAI_MODEL_REVISION,
     )
     assert evaluate.call_args.kwargs["model_type"] == "podsai"
     assert evaluate.call_args.kwargs["result_model_type"] == display_name
-    assert evaluate.call_args.kwargs["model_revision"] == (
-        LATEST_PODSAI_MODEL_REVISION if model_name == "podsai" else None
-    )
+    assert evaluate.call_args.kwargs["model_revision"] == LATEST_PODSAI_MODEL_REVISION
 
 
 def test_main_rejects_missing_explicit_onnx_model(tmp_path, capsys):

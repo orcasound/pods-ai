@@ -22,8 +22,8 @@ def main():
     parser.add_argument("--out", default="podsai.onnx", help="Output ONNX path")
     parser.add_argument("--device", default="cpu", choices=("cpu", "cuda"), help="Export device")
     parser.add_argument("--batch-size", type=int, default=1)
-    parser.add_argument("--frames", type=int, default=300, help="Representative number of frames (time axis) for export")
-    parser.add_argument("--mel-bins", type=int, default=128, help="Representative mel bins for export")
+    parser.add_argument("--frames", type=int, default=300, help="Runtime-compatible number of frames (time axis) for export")
+    parser.add_argument("--mel-bins", type=int, default=128, help="Runtime-compatible number of mel bins for export")
     args = parser.parse_args()
 
     print(f"Loading model {args.model}...")
@@ -42,7 +42,24 @@ def main():
             "raw-audio models such as Wav2Vec2 are not supported."
         )
 
-    # Build a dummy input with the dimensions requested on the command line.
+    feature_extractor = inf.feature_extractor
+    num_mel_bins = int(getattr(feature_extractor, "num_mel_bins", 128))
+    max_length = int(getattr(feature_extractor, "max_length", 1024))
+    frame_shift_ms = float(getattr(feature_extractor, "hop_length", 10))
+    if frame_shift_ms <= 0:
+        raise ValueError("Feature extractor hop_length must be positive")
+    frames_per_second = 1000.0 / frame_shift_ms
+    segment_samples = int(3 * 16000)
+    segment_frames = round(segment_samples / 16000 * frames_per_second)
+    expected_frames = max(1, min(max_length, segment_frames))
+    if args.frames != expected_frames or args.mel_bins != num_mel_bins:
+        raise ValueError(
+            "ONNX dimensions must match runtime preprocessing for 3-second segments: "
+            f"expected --frames {expected_frames} and --mel-bins {num_mel_bins}, "
+            f"got --frames {args.frames} and --mel-bins {args.mel_bins}"
+        )
+
+    # Build a dummy input with the runtime-compatible dimensions.
     try:
         try:
             resized = inf._ensure_ast_position_embeddings(

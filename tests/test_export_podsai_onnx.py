@@ -38,9 +38,9 @@ def test_export_uses_cli_model_revision_and_batch_size(monkeypatch):
     model = Mock()
     model.audio_spectrogram_transformer = None
     feature_extractor = SimpleNamespace(
-        max_length=2,
-        num_mel_bins=4,
-        hop_length=2,
+        max_length=17,
+        num_mel_bins=7,
+        hop_length=150,
     )
     inference = SimpleNamespace(
         model=model,
@@ -125,4 +125,33 @@ def test_export_rejects_raw_audio_model(monkeypatch):
     )
 
     with pytest.raises(ValueError, match="only spectrogram-based models"):
+        export_podsai_onnx.main()
+
+
+def test_export_rejects_dimensions_incompatible_with_runtime(monkeypatch):
+    inference = SimpleNamespace(
+        model=Mock(),
+        feature_extractor=SimpleNamespace(
+            max_length=1024,
+            num_mel_bins=128,
+            hop_length=10,
+        ),
+        _use_spectrogram_input=True,
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "podsai_inference",
+        SimpleNamespace(PodsAIInference=Mock(return_value=inference)),
+    )
+    monkeypatch.setattr(
+        "sys.argv",
+        ["export_podsai_onnx.py", "--frames", "301"],
+    )
+    monkeypatch.setattr(
+        export_podsai_onnx,
+        "torch",
+        SimpleNamespace(device=lambda value: value),
+    )
+
+    with pytest.raises(ValueError, match="must match runtime preprocessing"):
         export_podsai_onnx.main()

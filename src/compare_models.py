@@ -826,12 +826,12 @@ def main() -> int:
         if is_onnx_model and not Path(effective_model_path).is_file():
             print(f"ONNX model file not found: {effective_model_path}", file=sys.stderr)
             return 1
-        if is_custom_model:
+        if is_onnx_model:
+            effective_revision = args.podsai_model_revision
+        elif is_custom_model:
             effective_revision = (
                 None if custom_path_is_local else args.custom_model_revision
             )
-        elif is_onnx_model:
-            effective_revision = model_revisions.get(model_type)
         else:
             effective_revision = model_revisions.get(model_type)
         if is_onnx_model:
