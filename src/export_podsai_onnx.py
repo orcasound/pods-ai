@@ -52,25 +52,24 @@ def main():
     segment_samples = int(3 * 16000)
     segment_frames = round(segment_samples / 16000 * frames_per_second)
     expected_frames = max(1, min(max_length, segment_frames))
-    if args.frames != expected_frames or args.mel_bins != num_mel_bins:
+    try:
+        resized = inf._ensure_ast_position_embeddings(expected_frames, num_mel_bins)
+        print(f"_ensure_ast_position_embeddings returned: {resized}")
+    except Exception as e:
+        print(f"Warning: _ensure_ast_position_embeddings failed: {e}")
+        resized = False
+    runtime_frames = expected_frames if resized else max_length
+    if args.frames != runtime_frames or args.mel_bins != num_mel_bins:
         raise ValueError(
             "ONNX dimensions must match runtime preprocessing for 3-second segments: "
-            f"expected --frames {expected_frames} and --mel-bins {num_mel_bins}, "
+            f"expected --frames {runtime_frames} and --mel-bins {num_mel_bins}, "
             f"got --frames {args.frames} and --mel-bins {args.mel_bins}"
         )
 
     # Build a dummy input with the runtime-compatible dimensions.
     try:
-        try:
-            resized = inf._ensure_ast_position_embeddings(
-                args.frames, args.mel_bins
-            )
-            print(f"_ensure_ast_position_embeddings returned: {resized}")
-        except Exception as e:
-            print(f"Warning: _ensure_ast_position_embeddings failed: {e}")
-
         dummy = torch.randn(
-            args.batch_size, args.frames, args.mel_bins,
+            args.batch_size, runtime_frames, args.mel_bins,
             dtype=torch.float32, device=device,
         )
         print(f"Prepared dummy with shape {tuple(dummy.shape)}")

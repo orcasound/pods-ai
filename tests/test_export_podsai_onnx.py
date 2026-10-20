@@ -38,14 +38,14 @@ def test_export_uses_cli_model_revision_and_batch_size(monkeypatch):
     model = Mock()
     model.audio_spectrogram_transformer = None
     feature_extractor = SimpleNamespace(
-        max_length=17,
+        max_length=1024,
         num_mel_bins=7,
         hop_length=150,
     )
     inference = SimpleNamespace(
         model=model,
         feature_extractor=feature_extractor,
-        _ensure_ast_position_embeddings=Mock(return_value=False),
+        _ensure_ast_position_embeddings=Mock(return_value=True),
         _use_spectrogram_input=True,
     )
     inference_factory = Mock(return_value=inference)
@@ -84,7 +84,7 @@ def test_export_uses_cli_model_revision_and_batch_size(monkeypatch):
             "--batch-size",
             "3",
             "--frames",
-            "17",
+            "20",
             "--mel-bins",
             "7",
         ],
@@ -95,8 +95,8 @@ def test_export_uses_cli_model_revision_and_batch_size(monkeypatch):
     inference_factory.assert_called_once_with(
         "example/model", device="cpu", model_revision="0123456789abcdef"
     )
-    inference._ensure_ast_position_embeddings.assert_called_once_with(17, 7)
-    assert export.call_args.args[1][0].array.shape == (3, 17, 7)
+    inference._ensure_ast_position_embeddings.assert_called_once_with(20, 7)
+    assert export.call_args.args[1][0].array.shape == (3, 20, 7)
     assert export.call_args.args[2] == "model.onnx"
     assert export.call_args.kwargs["dynamic_axes"] == {
         "input_values": {0: "batch"},
@@ -136,6 +136,7 @@ def test_export_rejects_dimensions_incompatible_with_runtime(monkeypatch):
             num_mel_bins=128,
             hop_length=10,
         ),
+        _ensure_ast_position_embeddings=Mock(return_value=True),
         _use_spectrogram_input=True,
     )
     monkeypatch.setitem(
@@ -153,5 +154,60 @@ def test_export_rejects_dimensions_incompatible_with_runtime(monkeypatch):
         SimpleNamespace(device=lambda value: value),
     )
 
-    with pytest.raises(ValueError, match="must match runtime preprocessing"):
+    with pytest.raises(ValueError, match="expected --frames 300"):
         export_podsai_onnx.main()
+
+
+def test_export_uses_max_length_when_position_embeddings_cannot_resize(monkeypatch):
+    inference = SimpleNamespace(
+        model=Mock(),
+        feature_extractor=SimpleNamespace(
+            max_length=1024,
+            num_mel_bins=128,
+            hop_length=10,
+        ),
+        _ensure_ast_position_embeddings=Mock(return_value=False),
+        _use_spectrogram_input=True,
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "podsai_inference",
+        SimpleNamespace(PodsAIInference=Mock(return_value=inference)),
+    )
+
+    class FakeModule:
+        def to(self, _device):
+            return self
+
+    export = Mock()
+    monkeypatch.setattr(
+        export_podsai_onnx,
+        "torch",
+        SimpleNamespace(
+            device=lambda value: value,
+            float32=np.float32,
+            nn=SimpleNamespace(Module=FakeModule),
+            randn=lambda *shape, **_kwargs: FakeTensor(
+                np.zeros(shape, dtype=np.float32)
+            ),
+            onnx=SimpleNamespace(export=export),
+        ),
+    )
+    monkeypatch.setattr(
+        "sys.argv",
+        ["export_podsai_onnx.py", "--frames", "300", "--mel-bins", "128"],
+    )
+
+    with pytest.raises(ValueError, match="expected --frames 1024"):
+        export_podsai_onnx.main()
+
+    inference._ensure_ast_position_embeddings.assert_called_once_with(300, 128)
+    monkeypatch.setattr(
+        "sys.argv",
+        ["export_podsai_onnx.py", "--frames", "1024", "--mel-bins", "128"],
+    )
+
+    export_podsai_onnx.main()
+
+    assert inference._ensure_ast_position_embeddings.call_count == 2
+    assert export.call_args.args[1][0].shape == (1, 1024, 128)
