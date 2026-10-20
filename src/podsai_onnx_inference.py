@@ -169,6 +169,11 @@ class PodsAIOnnxInference(ModelInference):
         do_normalize: bool = getattr(self.feature_extractor, 'do_normalize', True)
         frame_shift_ms: float = getattr(self.feature_extractor, 'hop_length', 10)
 
+        frames_per_second = 1000.0 / frame_shift_ms
+        hop_frames = round(hop_samples / sr * frames_per_second)
+        seg_frames = round(segment_samples / sr * frames_per_second)
+        target_frames = self._get_target_frames(seg_frames, max_length)
+
         waveform = torch.from_numpy(audio).float().unsqueeze(0)
         full_fbank = torchaudio.compliance.kaldi.fbank(
             waveform,
@@ -180,12 +185,6 @@ class PodsAIOnnxInference(ModelInference):
             dither=0.0,
             frame_shift=frame_shift_ms,
         )
-
-        frames_per_second = 1000.0 / frame_shift_ms
-        hop_frames = round(hop_samples / sr * frames_per_second)
-        seg_frames = round(segment_samples / sr * frames_per_second)
-
-        target_frames = self._get_target_frames(seg_frames, max_length)
 
         windows = []
         for pos_idx in range(num_positions):
@@ -213,7 +212,13 @@ class PodsAIOnnxInference(ModelInference):
             and len(input_shape) > 1
             and isinstance(input_shape[1], (int, np.integer))
         ):
-            return int(input_shape[1])
+            target_frames = int(input_shape[1])
+            if seg_frames > target_frames:
+                raise ValueError(
+                    "Segment spectrogram exceeds the fixed ONNX frame dimension: "
+                    f"segment has {seg_frames} frames, model expects {target_frames}"
+                )
+            return target_frames
         return max(1, min(max_length, seg_frames))
 
     def predict(self, wav_path: str, segment_duration: int = 3, hop_duration: int = 2, threshold: Optional[float] = None, min_num_positive_calls_threshold: Optional[int] = None) -> dict:

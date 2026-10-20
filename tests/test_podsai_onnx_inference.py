@@ -85,6 +85,21 @@ def test_preprocessing_uses_fixed_onnx_frame_dimension():
     assert inference._get_target_frames(seg_frames=300, max_length=1024) == 1024
 
 
+def test_preprocessing_rejects_segments_larger_than_fixed_onnx_frame_dimension():
+    inference = PodsAIOnnxInference.__new__(PodsAIOnnxInference)
+    inference._input_shape = [None, 300, 128]
+
+    with pytest.raises(ValueError, match="segment has 301 frames, model expects 300"):
+        inference._get_target_frames(seg_frames=301, max_length=1024)
+
+
+def test_preprocessing_uses_feature_extractor_length_for_dynamic_onnx_dimension():
+    inference = PodsAIOnnxInference.__new__(PodsAIOnnxInference)
+    inference._input_shape = [None, "frames", 128]
+
+    assert inference._get_target_frames(seg_frames=300, max_length=1024) == 300
+
+
 def test_global_prediction_labels_exclude_positive_classes_below_threshold(monkeypatch):
     logits = np.log([[0.35, 0.4, 0.25]] * 2)
     inference = _inference_for_logits(monkeypatch, logits)
