@@ -766,31 +766,6 @@ class TestRunInferenceOrcaHello:
         finally:
             Path(wav_path).unlink(missing_ok=True)
 
-    def test_forwards_onnx_options_for_orcahello_model_path(self):
-        """ONNX model paths under orcahello forward PODS-AI extractor options."""
-        wav_path = _make_wav()
-        feature_extractor = "example/extractor"
-        revision = "0123456789abcdef"
-        try:
-            mock_model = _make_orcahello_model_mock()
-            with patch(
-                "run_inference.get_model_inference", return_value=mock_model
-            ) as factory:
-                from run_inference import run_inference
-
-                run_inference(
-                    wav_path,
-                    model_type="orcahello",
-                    model_path="model.onnx",
-                    feature_extractor=feature_extractor,
-                    model_revision=revision,
-                )
-
-            assert factory.call_args.kwargs["feature_extractor"] == feature_extractor
-            assert factory.call_args.kwargs["model_revision"] == revision
-        finally:
-            Path(wav_path).unlink(missing_ok=True)
-
 
 
 class TestRunInferenceErrors:

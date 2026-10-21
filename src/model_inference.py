@@ -668,16 +668,6 @@ def get_model_inference(model_path: Optional[str] = None, model_type: str = "fas
 
         return get_podsai_inference(model_path, **kwargs)
     elif model_type == "orcahello":
-        if isinstance(model_path, str) and model_path.lower().endswith(".onnx"):
-            from podsai_onnx_inference import get_podsai_onnx_inference
-
-            feature_extractor = kwargs.pop("feature_extractor", None)
-            return get_podsai_onnx_inference(
-                model_path,
-                feature_extractor=feature_extractor,
-                **kwargs,
-            )
-
         # OrcaHello SRKW detector using new inference pipeline.
         # Defaults to orcasound/orcahello-srkw-detector-v1 on HuggingFace Hub.
         from orcahello_inference import get_orcahello_srkw_inference

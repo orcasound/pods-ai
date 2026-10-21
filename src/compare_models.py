@@ -708,7 +708,7 @@ def main() -> int:
         "--feature-extractor",
         default=None,
         metavar="PATH_OR_HF_ID",
-        help="Feature extractor/config to use with an ONNX model (defaults to the PODS-AI model).",
+        help="Feature extractor/config to use with an ONNX file (defaults to the PODS-AI model).",
     )
     parser.add_argument(
         "--max-samples",
@@ -819,14 +819,14 @@ def main() -> int:
         print(f"Evaluating model: {model_type}")
         effective_model_path = custom_path or model_paths.get(model_type)
         is_custom_model = model_type == "custom"
-        is_onnx_model = (
+        is_onnx_format = (
             isinstance(effective_model_path, str)
             and effective_model_path.lower().endswith(".onnx")
         )
-        if is_onnx_model and not Path(effective_model_path).is_file():
-            print(f"ONNX model file not found: {effective_model_path}", file=sys.stderr)
+        if is_onnx_format and not Path(effective_model_path).is_file():
+            print(f"ONNX file not found: {effective_model_path}", file=sys.stderr)
             return 1
-        if is_onnx_model:
+        if is_onnx_format:
             effective_revision = args.podsai_model_revision
         elif is_custom_model:
             effective_revision = (
@@ -834,13 +834,13 @@ def main() -> int:
             )
         else:
             effective_revision = model_revisions.get(model_type)
-        if is_onnx_model:
+        if is_onnx_format:
             inference_model_type = "podsai"
         try:
             # ONNX inference uses the PODS-AI feature extractor/configuration.
             kwargs = {}
             kwargs["model_revision"] = effective_revision
-            if is_onnx_model:
+            if is_onnx_format:
                 # Prefer an explicit extractor, then the configured PODS-AI model,
                 # unless that path is itself an ONNX file.
                 fe = args.feature_extractor or model_paths.get("podsai")
