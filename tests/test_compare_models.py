@@ -309,7 +309,7 @@ def test_main_rejects_missing_explicit_onnx_model(tmp_path, capsys):
         assert main() == 1
 
     load_model.assert_not_called()
-    assert "ONNX model file not found" in capsys.readouterr().err
+    assert "ONNX file not found" in capsys.readouterr().err
 
 
 def test_custom_model_uses_category_membership_for_abiotic():
