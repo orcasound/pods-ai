@@ -128,17 +128,14 @@ def _training_window(row: CSVRow) -> tuple[datetime, datetime]:
 
 
 def _testing_window(row: CSVRow) -> tuple[datetime, datetime]:
-    sample_start = parse_timestamp_pst(row.timestamp_pst)
-    min_end_time = sample_start + timedelta(seconds=TESTING_WINDOW_SECONDS)
-
-    # Mirror audio_utils.download_60s_audio() behavior: snap end time to the next 10-second boundary.
-    snapped_sec = ((min_end_time.second + 9) // 10) * 10
-    if snapped_sec == 60:
-        min_end_time = min_end_time + timedelta(minutes=1)
-        snapped_sec = 0
-    end_time = min_end_time.replace(second=snapped_sec, microsecond=0)
-
-    return end_time - timedelta(seconds=TESTING_WINDOW_SECONDS), end_time
+    """
+    Return the full-recording interval represented by a testing row.
+    The row is assumed to already be aligned with the OrcaHello
+    detection timestamp, so the interval is simply the 60-second
+    window starting at the row's timestamp.
+    """
+    start = parse_timestamp_pst(row.timestamp_pst)
+    return start, start + timedelta(seconds=TESTING_WINDOW_SECONDS)
 
 
 def _dclde_window(row: CSVRow) -> tuple[datetime, datetime]:
@@ -1226,8 +1223,14 @@ def run_download_wavs(
         if missing_uri:
             raise ValueError(f"DCLDE manifest contains {missing_uri} row(s) without a URI")
 
-    validate_no_overlaps(training_rows, testing_rows, dclde_rows)
+    # First verify that all testing rows are aligned with OrcaHello timestamps.
     validate_aligned_entries(testing_rows)
+
+    # Now we know the testing row timestamps are directly comparable to training row timestamps,
+    # so we can check for overlaps between them.
+    # TODO(issue #550): Verify whether dclde_rows have the correct timestamp or need correction first.
+    validate_no_overlaps(training_rows, testing_rows, dclde_rows)
+
     validate_uri_timestamps(training_rows + testing_rows)
 
     validate_node_slug_in_uri(testing_rows + dclde_rows)
