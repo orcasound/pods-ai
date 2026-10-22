@@ -1031,20 +1031,17 @@ def download_testing_file(expected_path: Path, output_root: Path, cache_root: Pa
 
     node_name, timestamp_pst = parse_node_and_timestamp_from_filename(expected_path)
 
-    min_end_timestamp_pst_str = add_seconds_to_timestamp_pst(
-        timestamp_pst,
-        TESTING_WINDOW_SECONDS,
-    )
-
-    print(f"  Downloading audio ending shortly after {min_end_timestamp_pst_str}...")
+    start_time_utc = parse_timestamp_pst(timestamp_pst).astimezone(dt_timezone.utc)
+    print(f"  Downloading {TESTING_WINDOW_SECONDS}-second audio from {timestamp_pst}...")
 
     with TemporaryDirectory() as tmp_dir:
-        from audio_utils import download_60s_audio
+        from audio_utils import download_audio_from_start_utc
 
-        wav_path = download_60s_audio(
+        wav_path = download_audio_from_start_utc(
             node_name=node_name,
-            min_end_timestamp_pst_str=min_end_timestamp_pst_str,
+            start_time_utc=start_time_utc,
             tmp_dir=tmp_dir,
+            duration_seconds=TESTING_WINDOW_SECONDS,
         )
         if wav_path is None:
             raise AssertionError(f"Error: Failed to download 60-second clip for {node_name} at {timestamp_pst}")
