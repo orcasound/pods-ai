@@ -9,6 +9,7 @@ import os
 import sys
 import time
 import uuid
+from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
@@ -234,16 +235,67 @@ def setup_logger(connection_string: Optional[str], log_level: str = "DEBUG") -> 
 
     return logger
 
+def apply_model_config_overrides(
+    model_config: Any,
+    overrides: Optional[dict[str, Any]] = None,
+    logger: Optional[logging.Logger] = None,
+) -> Any:
+    """Apply nested config overrides onto a dict-like model config.
+
+    Supports both plain dicts and model config objects exposing as_dict().
+    Nested dicts are merged recursively so a ConfigMap override can update a
+    specific subsection without replacing the entire config tree.
+    """
+    if not overrides:
+        return model_config
+
+    if hasattr(model_config, "as_dict"):
+        config_dict = model_config.as_dict()
+    elif isinstance(model_config, dict):
+        config_dict = deepcopy(model_config)
+    else:
+        if logger is not None:
+            logger.warning(
+                "model_config_overrides: unsupported model config type %s; skipping",
+                type(model_config).__name__,
+            )
+        return model_config
+
+    for key, value in overrides.items():
+        if isinstance(value, dict) and isinstance(config_dict.get(key), dict):
+            config_dict[key] = apply_model_config_overrides(
+                config_dict[key],
+                value,
+                logger,
+            )
+        else:
+            config_dict[key] = value
+
+    return config_dict
+
 
 def load_model(orch_config: dict[str, Any], logger: logging.Logger) -> Any:
     """Load PODS-AI model using the model_inference factory."""
-    model_path = orch_config.get("model_hf_repo_id", PODSAI_MODEL_ID)
-    model_revision = orch_config.get("model_hf_repo_revision", LATEST_PODSAI_MODEL_REVISION)
-    threshold = float(orch_config.get("threshold", 0.5))
-    min_num_positive_calls_threshold = int(
-        orch_config.get("min_num_positive_calls_threshold", 2)
+    effective_config = deepcopy(orch_config)
+    overrides = effective_config.get("model_config_overrides")
+    if overrides:
+        logger.info("Applying model_config_overrides: %s", overrides)
+        effective_config = apply_model_config_overrides(
+            effective_config,
+            overrides,
+            logger,
+        )
+
+    model_path = effective_config.get("model_hf_repo_id", PODSAI_MODEL_ID)
+    model_revision = effective_config.get(
+        "model_hf_repo_revision", LATEST_PODSAI_MODEL_REVISION
     )
-    device = orch_config.get("device")
+    threshold = float(effective_config.get("threshold", 0.5))
+    min_num_positive_calls_threshold = int(
+        effective_config.get("min_num_positive_calls_threshold", 2)
+    )
+    device = effective_config.get("device")
+    inference_overrides = (overrides or {}).get("inference", {}) or {}
 
     kwargs: dict[str, Any] = {
         "threshold": threshold,
@@ -252,6 +304,9 @@ def load_model(orch_config: dict[str, Any], logger: logging.Logger) -> Any:
     }
     if device:
         kwargs["device"] = device
+
+    if "max_batch_size" in inference_overrides:
+        kwargs["inference_batch_size"] = int(inference_overrides["max_batch_size"])
 
     logger.debug(f"Loading PODS-AI model from {model_path}")
     return get_model_inference(
@@ -407,10 +462,17 @@ def _process_segment(
         return
 
     start_timestamp = segment.start_iso
+    inference_overrides = (
+        (orch_config.get("model_config_overrides") or {}).get("inference", {}) or {}
+    )
     result = model.predict(
         clip_path,
         segment_duration=int(orch_config.get("segment_duration", 3)),
-        hop_duration=int(orch_config.get("hop_duration", 2)),
+        hop_duration=float(
+            inference_overrides.get(
+                "window_hop_s", orch_config.get("hop_duration", 2)
+            )
+        ),
     )
 
     id2label = getattr(model, "id2label", None)
@@ -420,7 +482,15 @@ def _process_segment(
     )
     global_confidence = float(result.get("global_confidence", 0.0))
     positive_segments = count_positive_segments(result, id2label=id2label)
-    detected = is_positive_label(global_prediction_label)
+    global_prediction_threshold = (
+        (orch_config.get("model_config_overrides") or {})
+        .get("global_prediction", {})
+        .get("pred_global_threshold")
+    )
+    detected = is_positive_label(global_prediction_label) and (
+        global_prediction_threshold is None
+        or global_confidence >= float(global_prediction_threshold)
+    )
 
     logger.info(
         f"Inference: prediction={global_prediction_label}, "

@@ -72,6 +72,66 @@ def test_build_prediction_list_filters_negative_labels() -> None:
     assert predictions[1]["startTime"] == 4.0
 
 
+def test_apply_model_config_overrides_deep_merges_nested_values() -> None:
+    """Nested model config overrides should override only the targeted keys."""
+    base = {
+        "threshold": 0.5,
+        "inference": {"max_batch_size": 16, "window_hop_s": 2.0},
+        "global_prediction": {"pred_global_threshold": 0.5},
+    }
+    overrides = {
+        "inference": {"max_batch_size": 8},
+        "global_prediction": {"pred_global_threshold": 0.8},
+    }
+
+    result = orchestrator.apply_model_config_overrides(base, overrides)
+
+    assert result["threshold"] == 0.5
+    assert result["inference"]["max_batch_size"] == 8
+    assert result["inference"]["window_hop_s"] == 2.0
+    assert result["global_prediction"]["pred_global_threshold"] == 0.8
+
+
+def test_process_segment_applies_inference_overrides() -> None:
+    segment = Mock(
+        folder_epoch=1,
+        start_index=0,
+        end_index=1,
+        start_iso="2026-01-01T00:00:00Z",
+        duration_s=60.0,
+    )
+    segment.download_as_wav.return_value = "clip.wav"
+    model = Mock()
+    model.predict.return_value = {
+        "global_prediction_label": "resident",
+        "global_confidence": 0.7,
+        "local_predictions": [1],
+    }
+    config = {
+        "hls_hydrophone_id": "test",
+        "delete_local_wavs": True,
+        "upload_to_azure": False,
+        "model_config_overrides": {
+            "inference": {"window_hop_s": 1.5},
+            "global_prediction": {"pred_global_threshold": 0.8},
+        },
+    }
+    logger = Mock()
+
+    with patch("LiveInferenceOrchestrator.os.remove"):
+        orchestrator._process_segment(
+            segment, model, config, None, None, logger, "model", "."
+        )
+
+    model.predict.assert_called_once_with(
+        "clip.wav", segment_duration=3, hop_duration=1.5
+    )
+    assert not any(
+        call.args[0].startswith("Whale call detected")
+        for call in logger.info.call_args_list
+    )
+
+
 def test_build_cosmosdb_metadata_includes_multiclass_fields() -> None:
     """Metadata should include global prediction label, positive segment list, and tags."""
     result = {

@@ -88,6 +88,15 @@ Similar to [aifororcas-livesystem config files](https://github.com/orcasound/aif
 model_hf_repo_id: "davethaler/whale-call-detector"
 threshold: 0.5
 min_num_positive_calls_threshold: 2
+
+# Optional nested runtime overrides for quick experiments without editing
+# the model YAML stored in the model repo.
+model_config_overrides:
+  inference:
+    max_batch_size: 8
+    window_hop_s: 1.5
+  global_prediction:
+    pred_global_threshold: 0.8
 ```
 
 ## GitHub CI configuration

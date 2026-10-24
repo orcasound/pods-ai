@@ -21,11 +21,84 @@ Usage:
     print(result["global_prediction_label"])  # "whale" or "other"
 """
 
+import dataclasses
 import sys
 from pathlib import Path
-from typing import Dict, Optional, Tuple, Type
+from typing import Any, Dict, Optional, Tuple, Type
 
 from model_inference import ModelInference
+
+
+def _patch_detector_inference_config(detector_config_cls: Type) -> None:
+    """Patch the vendored DetectorInferenceConfig to support stable round-trips.
+
+    We intentionally do this in the wrapper layer instead of editing the external
+    submodule so the patch remains local to this repo while keeping the upstream
+    file unchanged.
+    """
+    if getattr(detector_config_cls, "_podsai_roundtrip_patched", False):
+        return
+
+    module = sys.modules.get(detector_config_cls.__module__)
+    nested_types = {
+        field.name: getattr(module, field.type.__name__, None)
+        for field in dataclasses.fields(detector_config_cls)
+        if hasattr(field, "type") and isinstance(field.type, type)
+    }
+
+    def _coerce(value: Any, target_type: Type) -> Any:
+        if value is None:
+            return target_type()
+        if isinstance(value, target_type):
+            return value
+        if dataclasses.is_dataclass(value):
+            return value
+        if isinstance(value, dict):
+            field_names = {f.name for f in dataclasses.fields(target_type)}
+            return target_type(**{k: v for k, v in value.items() if k in field_names})
+        raise TypeError(
+            f"Expected {target_type.__name__} or dict, got {type(value).__name__}"
+        )
+
+    def _patched_post_init(self):
+        for field in dataclasses.fields(self):
+            value = getattr(self, field.name)
+            target_type = nested_types.get(field.name)
+            if target_type is not None:
+                setattr(self, field.name, _coerce(value, target_type))
+
+    def _patched_from_dict(cls, d: Optional[Dict[str, Any]]):
+        if d is None:
+            return cls()
+        if isinstance(d, cls):
+            return d
+        if not isinstance(d, dict):
+            raise TypeError(f"Expected dict or {cls.__name__}, got {type(d).__name__}")
+
+        resolved = {}
+        for field in dataclasses.fields(cls):
+            value = d.get(field.name, {})
+            target_type = nested_types.get(field.name)
+            if target_type is not None:
+                resolved[field.name] = _coerce(value, target_type)
+            else:
+                resolved[field.name] = value
+        return cls(**resolved)
+
+    def _patched_from_yaml(cls, yaml_path: str):
+        import yaml
+
+        try:
+            with open(yaml_path, "r", encoding="utf-8") as handle:
+                data = yaml.safe_load(handle) or {}
+        except FileNotFoundError:
+            return cls()
+        return cls.from_dict(data)
+
+    detector_config_cls.__post_init__ = _patched_post_init
+    detector_config_cls.from_dict = classmethod(_patched_from_dict)
+    detector_config_cls.from_yaml = classmethod(_patched_from_yaml)
+    detector_config_cls._podsai_roundtrip_patched = True
 
 
 # Path to the orcahello submodule's model package.
@@ -73,6 +146,7 @@ def _get_orcahello_classes() -> Tuple[Type, Type]:
             f"Original error: {e}"
         ) from e
 
+    _patch_detector_inference_config(DetectorInferenceConfig)
     _ORCAHELLO_IMPORTS = (OrcaHelloSRKWDetectorV1, DetectorInferenceConfig)
     return _ORCAHELLO_IMPORTS
 
