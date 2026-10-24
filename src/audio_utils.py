@@ -50,6 +50,7 @@ COSMOS_CONTAINER = os.environ.get("COSMOS_CONTAINER", "metadata")
 class OrcaHelloDetection:
     id: str
     feed: OrcasiteFeed
+    modelId: Optional[str] = None
     timestamp: Optional[datetime]
     status: str
     confidence: Optional[float] = None
@@ -256,6 +257,7 @@ def get_orcahello_detections(feed: OrcasiteFeed) -> List[OrcaHelloDetection]:
 
     results = []
     for item in items:
+        modelId = item.get("modelId", "").lower()
         found = item.get("SRKWFound", "").lower()
         reviewed = item.get("reviewed", False)
         if reviewed and found == "yes":
@@ -282,6 +284,7 @@ def get_orcahello_detections(feed: OrcasiteFeed) -> List[OrcaHelloDetection]:
             OrcaHelloDetection(
                 id=item.get("id"),
                 feed=feed,
+                modelId=modelId,
                 timestamp=ts,
                 status=status,
                 confidence=confidence,
