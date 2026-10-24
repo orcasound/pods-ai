@@ -105,7 +105,6 @@ def process_false_negatives(
             timestamp_str = format_timestamp_pst(detection.timestamp)
 
             print(f"Checking confirmed OrcaHello detection at {timestamp_str}, modelId {detection.modelId}")
-            continue
 
             with TemporaryDirectory() as temp_dir:
                 wav_path = download_60s_audio(feed.node_name, timestamp_str, temp_dir)
