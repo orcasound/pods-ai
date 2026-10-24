@@ -50,11 +50,11 @@ COSMOS_CONTAINER = os.environ.get("COSMOS_CONTAINER", "metadata")
 class OrcaHelloDetection:
     id: str
     feed: OrcasiteFeed
-    modelId: Optional[str] = None
     timestamp: Optional[datetime]
     status: str
     confidence: Optional[float] = None
     comments: str = ""
+    modelId: Optional[str] = None
 
 
 # Terms in a detection description that indicate the label cannot be determined with confidence.
@@ -257,7 +257,6 @@ def get_orcahello_detections(feed: OrcasiteFeed) -> List[OrcaHelloDetection]:
 
     results = []
     for item in items:
-        modelId = item.get("modelId", "").lower()
         found = item.get("SRKWFound", "").lower()
         reviewed = item.get("reviewed", False)
         if reviewed and found == "yes":
@@ -266,6 +265,9 @@ def get_orcahello_detections(feed: OrcasiteFeed) -> List[OrcaHelloDetection]:
             status = "rejected"
         else:
             status = "unreviewed"
+
+        modelId = item.get("modelId")
+        modelId = modelId.lower() if isinstance(modelId, str) else ""
 
         ts_raw = item.get("timestamp")
         try:
@@ -284,11 +286,11 @@ def get_orcahello_detections(feed: OrcasiteFeed) -> List[OrcaHelloDetection]:
             OrcaHelloDetection(
                 id=item.get("id"),
                 feed=feed,
-                modelId=modelId,
                 timestamp=ts,
                 status=status,
                 confidence=confidence,
                 comments=(item.get("comments") or "").strip(),
+                modelId=modelId,
             )
         )
 
