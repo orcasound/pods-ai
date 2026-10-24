@@ -17,7 +17,7 @@ from make_csv import (
     PACIFIC_TZ,
     UTC_TZ,
     get_orcasite_detections,
-    get_orcahello_detections,
+    get_machine_detections,
     get_orcasite_feeds,
     parse_timestamp_pst,
     process_all_feeds,
@@ -126,7 +126,7 @@ class TestProcessAllFeedsTimestampFilter:
 
         with patch("make_csv.get_orcasite_feeds") as mock_feeds, \
              patch("make_csv.get_orcasite_detections") as mock_dets, \
-             patch("make_csv.get_orcahello_detections") as mock_oh:
+             patch("make_csv.get_machine_detections") as mock_oh:
 
             from make_csv import OrcasiteFeed
             feed = OrcasiteFeed(
@@ -397,7 +397,7 @@ class TestGetOrcasiteDetectionsWithRetry:
 
 
 class TestGetOrcahelloDetections:
-    """Tests for get_orcahello_detections."""
+    """Tests for get_machine_detections."""
 
     def test_includes_comments_from_cosmos_items(self):
         """The returned detection should preserve the moderation comments field."""
@@ -428,14 +428,14 @@ class TestGetOrcahelloDetections:
         mock_client.get_database_client.return_value = mock_database
 
         with patch("make_csv.CosmosClient", return_value=mock_client):
-            detections = get_orcahello_detections(feed)
+            detections = get_machine_detections(feed)
 
         assert len(detections) == 1
         assert detections[0].status == "rejected"
         assert detections[0].comments == "Boat noise."
 
     def test_sets_timestamp_to_none_when_parsing_fails(self):
-        """An unparseable OrcaHello timestamp should produce a detection with timestamp=None."""
+        """An unparseable timestamp should produce a detection with timestamp=None."""
         feed = OrcasiteFeed(
             id="feed_1",
             name="Test Feed",
@@ -461,7 +461,7 @@ class TestGetOrcahelloDetections:
         mock_client.get_database_client.return_value = mock_database
 
         with patch("make_csv.CosmosClient", return_value=mock_client):
-            detections = get_orcahello_detections(feed)
+            detections = get_machine_detections(feed)
 
         assert len(detections) == 1
         assert detections[0].status == "confirmed"
