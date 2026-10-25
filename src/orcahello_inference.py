@@ -114,7 +114,15 @@ def _patch_detector_inference_config(detector_config_cls: Type) -> None:
 
         resolved = {}
         for field in dataclasses.fields(cls):
-            value = d.get(field.name, {})
+            if field.name in d:
+                value = d[field.name]
+            elif field.default is not dataclasses.MISSING:
+                value = field.default
+            elif field.default_factory is not dataclasses.MISSING:
+                value = field.default_factory()
+            else:
+                value = getattr(cls, field.name, None)
+
             target_type = nested_types.get(field.name)
             if target_type is not None:
                 resolved[field.name] = _coerce(value, target_type)
