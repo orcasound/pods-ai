@@ -92,7 +92,7 @@ def _patch_detector_inference_config(detector_config_cls: Type) -> None:
             with open(yaml_path, "r", encoding="utf-8") as handle:
                 data = yaml.safe_load(handle) or {}
         except FileNotFoundError:
-            return cls()
+            data = {}
         return cls.from_dict(data)
 
     detector_config_cls.__post_init__ = _patched_post_init

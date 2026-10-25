@@ -241,7 +241,6 @@ def apply_model_config_overrides(
     logger: Optional[logging.Logger] = None,
 ) -> Any:
     """Apply nested config overrides onto a dict-like model config.
-
     Supports both plain dicts and model config objects exposing as_dict().
     Nested dicts are merged recursively so a ConfigMap override can update a
     specific subsection without replacing the entire config tree.
@@ -274,17 +273,26 @@ def apply_model_config_overrides(
     return config_dict
 
 
-def load_model(orch_config: dict[str, Any], logger: logging.Logger) -> Any:
-    """Load PODS-AI model using the model_inference factory."""
+def get_effective_model_config(
+    orch_config: dict[str, Any], logger: Optional[logging.Logger] = None
+) -> dict[str, Any]:
+    """Return a deep-copied orchestrator config with nested overrides applied."""
     effective_config = deepcopy(orch_config)
     overrides = effective_config.get("model_config_overrides")
     if overrides:
-        logger.info("Applying model_config_overrides: %s", overrides)
+        if logger is not None:
+            logger.info("Applying model_config_overrides: %s", overrides)
         effective_config = apply_model_config_overrides(
             effective_config,
             overrides,
             logger,
         )
+    return effective_config
+
+
+def load_model(orch_config: dict[str, Any], logger: logging.Logger) -> Any:
+    """Load PODS-AI model using the model_inference factory."""
+    effective_config = get_effective_model_config(orch_config, logger)
 
     model_path = effective_config.get("model_hf_repo_id", PODSAI_MODEL_ID)
     model_revision = effective_config.get(
@@ -307,6 +315,12 @@ def load_model(orch_config: dict[str, Any], logger: logging.Logger) -> Any:
 
     if "max_batch_size" in inference_overrides:
         kwargs["inference_batch_size"] = int(inference_overrides["max_batch_size"])
+    if "window_hop_s" in inference_overrides:
+        kwargs["inference_hop_duration"] = float(inference_overrides["window_hop_s"])
+    if "window_s" in inference_overrides:
+        kwargs["inference_segment_duration"] = float(inference_overrides["window_s"])
+    if "strict_segments" in inference_overrides:
+        kwargs["inference_strict_segments"] = bool(inference_overrides["strict_segments"])
 
     logger.debug(f"Loading PODS-AI model from {model_path}")
     return get_model_inference(
@@ -669,7 +683,11 @@ def main() -> int:
     )
     logger = setup_logger(app_insights_connection_string, log_level=args.log_level)
 
-    model_id = orch_config.get("model_id", orch_config.get("model_hf_repo_id", PODSAI_MODEL_ID))
+    effective_config = get_effective_model_config(orch_config, logger)
+    model_id = effective_config.get(
+        "model_id",
+        effective_config.get("model_hf_repo_id", PODSAI_MODEL_ID),
+    )
     model = load_model(orch_config, logger)
 
     blob_service_client, cosmos_client = setup_azure_clients(orch_config)

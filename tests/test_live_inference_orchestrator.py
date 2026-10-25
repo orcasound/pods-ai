@@ -92,6 +92,34 @@ def test_apply_model_config_overrides_deep_merges_nested_values() -> None:
     assert result["global_prediction"]["pred_global_threshold"] == 0.8
 
 
+def test_get_effective_model_config_resolves_model_id_from_effective_config() -> None:
+    """Metadata model IDs should follow the resolved config, while explicit model_id wins."""
+    config_with_override = {
+        "model_hf_repo_id": "custom/model",
+        "model_config_overrides": {"inference": {"max_batch_size": 8}},
+    }
+    effective = orchestrator.get_effective_model_config(config_with_override, Mock())
+    assert effective["model_hf_repo_id"] == "custom/model"
+    assert effective["inference"]["max_batch_size"] == 8
+    assert (
+        effective.get(
+            "model_id",
+            effective.get("model_hf_repo_id", orchestrator.PODSAI_MODEL_ID),
+        )
+        == "custom/model"
+    )
+
+    explicit_config = {
+        "model_id": "explicit/model",
+        "model_hf_repo_id": "custom/model",
+    }
+    explicit_effective = orchestrator.get_effective_model_config(explicit_config, Mock())
+    assert explicit_effective.get(
+        "model_id",
+        explicit_effective.get("model_hf_repo_id", orchestrator.PODSAI_MODEL_ID),
+    ) == "explicit/model"
+
+
 def test_process_segment_applies_inference_overrides() -> None:
     segment = Mock(
         folder_epoch=1,
