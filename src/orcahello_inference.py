@@ -23,10 +23,25 @@ Usage:
 
 import dataclasses
 import sys
+import types
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple, Type
+from typing import Any, Dict, Optional, Tuple, Type, Union, get_args, get_origin
 
 from model_inference import ModelInference
+
+
+def _resolve_nested_dataclass_type(field_type: Any) -> Optional[Type]:
+    """Resolve the dataclass type for a field, including Optional[T]."""
+    if isinstance(field_type, type):
+        return field_type if dataclasses.is_dataclass(field_type) else None
+
+    origin = get_origin(field_type)
+    union_types = {getattr(types, "UnionType", None), Union}
+    if origin in union_types:
+        args = [arg for arg in get_args(field_type) if arg is not type(None)]
+        if len(args) == 1:
+            return _resolve_nested_dataclass_type(args[0])
+    return None
 
 
 def _patch_detector_inference_config(detector_config_cls: Type) -> None:
@@ -41,21 +56,43 @@ def _patch_detector_inference_config(detector_config_cls: Type) -> None:
 
     module = sys.modules.get(detector_config_cls.__module__)
     nested_types = {
-        field.name: getattr(module, field.type.__name__, None)
+        field.name: (
+            getattr(module, field_type.__name__, field_type)
+            if module is not None and hasattr(field_type, "__name__")
+            else field_type
+        )
         for field in dataclasses.fields(detector_config_cls)
-        if hasattr(field, "type") and isinstance(field.type, type)
+        for field_type in [
+            _resolve_nested_dataclass_type(field.type)
+        ]
+        if field_type is not None
     }
 
-    def _coerce(value: Any, target_type: Type) -> Any:
+    def _coerce(value: Any, target_type: Optional[Type]) -> Any:
+        if target_type is None:
+            return value
         if value is None:
-            return target_type()
+            return target_type() if dataclasses.is_dataclass(target_type) else value
         if isinstance(value, target_type):
             return value
         if dataclasses.is_dataclass(value):
             return value
         if isinstance(value, dict):
-            field_names = {f.name for f in dataclasses.fields(target_type)}
-            return target_type(**{k: v for k, v in value.items() if k in field_names})
+            if not dataclasses.is_dataclass(target_type):
+                raise TypeError(
+                    f"Expected dataclass type, got {target_type!r} for {type(value).__name__}"
+                )
+            nested_target_types = {
+                nested_field.name: _resolve_nested_dataclass_type(nested_field.type)
+                for nested_field in dataclasses.fields(target_type)
+            }
+            resolved = {}
+            for field in dataclasses.fields(target_type):
+                if field.name not in value:
+                    continue
+                nested_target_type = nested_target_types.get(field.name)
+                resolved[field.name] = _coerce(value[field.name], nested_target_type)
+            return target_type(**resolved)
         raise TypeError(
             f"Expected {target_type.__name__} or dict, got {type(value).__name__}"
         )
