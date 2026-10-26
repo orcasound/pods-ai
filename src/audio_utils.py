@@ -299,7 +299,8 @@ def get_machine_detections(
                 status=status,
                 confidence=confidence,
                 tags=(item.get("tags") or "").strip(),
-                comments=(item.get("comments") or "").strip()
+                comments=(item.get("comments") or "").strip(),
+                modelId=modelId,
             )
         )
 

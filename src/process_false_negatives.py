@@ -132,7 +132,7 @@ def process_false_negatives(
             timestamp_str = format_timestamp_pst(
                 detection.timestamp - timedelta(seconds=AUDIO_OFFSET_SECONDS)
             )
-            print(f"Checking confirmed detection at {timestamp_str}")
+            print(f"Checking confirmed SRKW detection at {timestamp_str} by model {detection.modelId}")
 
             with TemporaryDirectory() as temp_dir:
                 min_end_timestamp_pst_str = format_timestamp_pst(detection.timestamp + timedelta(seconds=60))
