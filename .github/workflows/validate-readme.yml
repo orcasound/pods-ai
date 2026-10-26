@@ -5,6 +5,9 @@ name: Validate README
 
 on:
   pull_request:
+    paths:
+      - README.md.template
+      - model-comparison.txt
 
 permissions:
   contents: read
@@ -18,7 +21,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
       - name: Generate README
-        run: python build-readme.py
+        run: python src/build-readme.py
 
       - name: Verify README is up to date
         run: git diff --exit-code -- README.md

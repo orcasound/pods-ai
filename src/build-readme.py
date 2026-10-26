@@ -43,7 +43,7 @@ def render_readme(template_text: str, comparison_text: str) -> str:
 
 def main() -> None:
     """Build README.md in the repository root."""
-    repository_root = Path(__file__).resolve().parent
+    repository_root = Path(__file__).resolve().parents[1]
     template_path = repository_root / "README.md.template"
     comparison_path = repository_root / "model-comparison.txt"
     readme_path = repository_root / "README.md"

@@ -101,7 +101,7 @@ jobs:
         run: |
           set -o pipefail
           python src/compare_models.py --models orcahello,oldpodsai,podsai | tee model-comparison.txt
-          python build-readme.py
+          python src/build-readme.py
 
       - name: Commit and push model comparison updates
         env:

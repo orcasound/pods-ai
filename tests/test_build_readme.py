@@ -1,3 +1,5 @@
+# Copyright (c) PODS-AI contributors
+# SPDX-License-Identifier: MIT
 """Tests for the README generator."""
 
 import runpy
@@ -5,7 +7,9 @@ from pathlib import Path
 
 import pytest
 
-BUILD_README = runpy.run_path(Path(__file__).resolve().parents[1] / "build-readme.py")
+BUILD_README = runpy.run_path(
+    Path(__file__).resolve().parents[1] / "src" / "build-readme.py"
+)
 extract_model_comparison = BUILD_README["extract_model_comparison"]
 render_readme = BUILD_README["render_readme"]
 

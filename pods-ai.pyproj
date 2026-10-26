@@ -33,9 +33,9 @@ MODEL_URL=https://trainedproductionmodels.blob.core.windows.net/dnnmodel/11-15-2
     <EnableUnmanagedDebugging>false</EnableUnmanagedDebugging>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="build-readme.py" />
     <Compile Include="src\add_samples.py" />
     <Compile Include="src\audio_utils.py" />
+    <Compile Include="src\build-readme.py" />
     <Compile Include="src\compare_models.py" />
     <Compile Include="src\concatenate_wavs.py" />
     <Compile Include="src\download_wavs.py" />

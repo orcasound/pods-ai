@@ -35,7 +35,6 @@ pods-ai/
 ├── output/                       # Generated CSV, WAV, PNG, and model artifacts
 ├── tests/                        # Pytest test suite
 ├── LICENSE
-├── build-readme.py               # Generate README.md from its template and model comparison
 ├── README.md                     # User and contributor documentation
 ├── README.md.template            # README source with a model comparison placeholder
 ├── patch_fastai_audio.bat        # Windows helper for fastai_audio compatibility
@@ -46,6 +45,7 @@ pods-ai/
 └── src/
     ├── add_samples.py              # Segment and label new samples
     ├── audio_utils.py              # Shared audio helpers
+    ├── build-readme.py             # Generate README.md from its template and model comparison
     ├── compare_models.py           # Compare model performance on testing data
     ├── download_wavs.py            # Step 4: download wav files
     ├── extract_training_samples.py # Step 3: detections.csv → initial training/testing samples
@@ -109,7 +109,7 @@ Classification kinds: `tp_human_only`, `tp_machine_only`, `fp_machine_only`, `tp
 - **LiveInferenceSystem-deploy.yaml** – Triggered by a `LiveInferenceSystem.v#.#.#` tag push; builds and pushes the container image to `orcaconservancycr.azurecr.io/pods-ai-live-inference-system`.
 - **LiveInferenceSystem-deploy-configmaps.yaml** – Triggered when `LiveInferenceSystem/deploy/*-configmap.yaml` files change on `main`; applies updated configmaps and restarts the affected deployments via `kubectl`.
 - **generate_model_comparison.yml** – Runs model comparison and regenerates `README.md` from `README.md.template` and `model-comparison.txt`.
-- **validate-readme.yml** – Runs on every PR and verifies that `README.md` matches `python build-readme.py`.
+- **validate-readme.yml** – Runs on PRs changing `README.md.template` or `model-comparison.txt` and verifies that `README.md` matches `python src/build-readme.py`.
 - **validate-yaml.yml** – Runs `yamllint` against all YAML files using the rules in `.yamllint.yml` (line-length disabled, truthy check-keys disabled).
 - **dependabot.yml** – Weekly updates for GitHub Actions dependencies.
 - **renovate.json** – Tracks additional dependency updates, including the pinned PODS-AI test model revision.
