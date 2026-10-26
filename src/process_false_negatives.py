@@ -75,7 +75,7 @@ def process_false_negatives(
     destination_samples_path: Optional[Path] = None,
     for_training: bool = True,
 ) -> dict[str, int]:
-    """Process confirmed OrcaHello SRKW detections in the selected timeframe."""
+    """Process confirmed machine SRKW detections in the selected timeframe."""
     summary = {
         "confirmed": 0,
         "download_failed": 0,
