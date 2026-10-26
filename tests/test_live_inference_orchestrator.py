@@ -19,10 +19,8 @@ def test_orcasound_attributes_pulled_from_feed(mock_get) -> None:
                 "attributes": {
                     "name": "Andrews Bay",
                     "node_name": "rpi_andrews_bay",
-                    "location_point": {
-                        "coordinates": [-123.166408, 48.546653]
-                    }
-                }
+                    "location_point": {"coordinates": [-123.166408, 48.546653]},
+                },
             }
         ]
     }
@@ -76,10 +74,7 @@ def test_build_prediction_list_filters_negative_labels() -> None:
 def test_apply_model_config_overrides_deep_merges_nested_values() -> None:
     """Nested model config overrides should override only the targeted keys."""
     base = DetectorInferenceConfig.from_dict(
-        {
-            "inference": {"max_batch_size": 16, "window_hop_s": 2.0},
-            "global_prediction": {"pred_global_threshold": 0.5},
-        }
+        {"inference": {"max_batch_size": 16, "window_hop_s": 2.0}, "global_prediction": {"pred_global_threshold": 0.5}}
     )
     overrides = {
         "inference": {"max_batch_size": 8},
@@ -98,10 +93,7 @@ def test_apply_model_config_overrides_skips_unknown_custom_sections() -> None:
     base = DetectorInferenceConfig.from_dict(
         {"inference": {"max_batch_size": 16}, "global_prediction": {"pred_global_threshold": 0.5}}
     )
-    overrides = {
-        "custom": {"foo": "bar"},
-        "inference": {"max_batch_size": 8},
-    }
+    overrides = {"custom": {"foo": "bar"}, "inference": {"max_batch_size": 8}}
     logger = Mock()
 
     result = orchestrator.apply_model_config_overrides(base, overrides, logger)
@@ -156,6 +148,7 @@ def test_load_model_applies_known_overrides_before_from_pretrained(tmp_path) -> 
 
 
 def test_process_segment_applies_inference_overrides() -> None:
+    """Process segment should honor nested inference overrides before calling model.predict."""
     segment = Mock(
         folder_epoch=1,
         start_index=0,
@@ -182,17 +175,10 @@ def test_process_segment_applies_inference_overrides() -> None:
     logger = Mock()
 
     with patch("LiveInferenceOrchestrator.os.remove"):
-        orchestrator._process_segment(
-            segment, model, config, None, None, logger, "model", "."
-        )
+        orchestrator._process_segment(segment, model, config, None, None, logger, "model", ".")
 
-    model.predict.assert_called_once_with(
-        "clip.wav", segment_duration=3, hop_duration=1.5
-    )
-    assert not any(
-        call.args[0].startswith("Whale call detected")
-        for call in logger.info.call_args_list
-    )
+    model.predict.assert_called_once_with("clip.wav", segment_duration=3, hop_duration=1.5)
+    assert not any(call.args[0].startswith("Whale call detected") for call in logger.info.call_args_list)
 
 
 def test_build_cosmosdb_metadata_includes_multiclass_fields() -> None:
@@ -246,7 +232,6 @@ def test_build_cosmosdb_metadata_comments_appends_dominant_extra_class() -> None
         model_id="podsai-model",
     )
 
-    # Tags should only include srkw (positive label) and negative local (vessel)
     assert metadata["tags"] == "srkw;vessel"
 
 
@@ -295,10 +280,7 @@ def test_upload_detection_to_azure_skips_existing_blobs(tmp_path) -> None:
     spectrogram_blob_client = Mock()
     spectrogram_blob_client.upload_blob.side_effect = BlobAlreadyExistsError()
     blob_service_client = Mock()
-    blob_service_client.get_blob_client.side_effect = [
-        audio_blob_client,
-        spectrogram_blob_client,
-    ]
+    blob_service_client.get_blob_client.side_effect = [audio_blob_client, spectrogram_blob_client]
 
     container = Mock()
     database = Mock()
