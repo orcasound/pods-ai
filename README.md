@@ -171,7 +171,8 @@ To have GitHub train a new model from the latest `main` branch:
    The Docker image reads this same revision from that file.
 8. Push the changes to a separate branch in the main repository.
 9. Generate a model comparison as follows. Go to https://github.com/orcasound/pods-ai/actions/workflows/generate_model_comparison.yml in a browser, click the "Run workflow" dropdown, select the branch to use in "Use workflow from" and click "Run workflow". Results are committed to the selected branch, except that selecting `main` commits them to `update-model-comparison`. This may take several hours to run. You could instead run it locally using `python src/compare_models.py --models podsai` to verify that the F1 does not regress from the latest model as shown at the top of this README. Don't proceed further unless the F1 improves.
-10. Update README.md with the latest model comparison results.
+10. Update `README.md.template` with any documentation changes, then run
+    `python build-readme.py` to regenerate `README.md`.
 11. Generate a pull request with the changes
 12. Once the pull request is merged, add another tag to the main branch such as
    `LiveInferenceSystem.v1.4.0` (bumping the version from the most recent such tag).
