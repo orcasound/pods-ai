@@ -5,6 +5,7 @@
 from unittest.mock import Mock, patch
 
 import LiveInferenceOrchestrator as orchestrator
+from external.orcahello.InferenceSystem.src.model.types import DetectorInferenceConfig
 
 
 @patch("LiveInferenceOrchestrator.requests.get")
@@ -74,11 +75,12 @@ def test_build_prediction_list_filters_negative_labels() -> None:
 
 def test_apply_model_config_overrides_deep_merges_nested_values() -> None:
     """Nested model config overrides should override only the targeted keys."""
-    base = {
-        "threshold": 0.5,
-        "inference": {"max_batch_size": 16, "window_hop_s": 2.0},
-        "global_prediction": {"pred_global_threshold": 0.5},
-    }
+    base = DetectorInferenceConfig.from_dict(
+        {
+            "inference": {"max_batch_size": 16, "window_hop_s": 2.0},
+            "global_prediction": {"pred_global_threshold": 0.5},
+        }
+    )
     overrides = {
         "inference": {"max_batch_size": 8},
         "global_prediction": {"pred_global_threshold": 0.8},
@@ -86,38 +88,71 @@ def test_apply_model_config_overrides_deep_merges_nested_values() -> None:
 
     result = orchestrator.apply_model_config_overrides(base, overrides)
 
-    assert result["threshold"] == 0.5
-    assert result["inference"]["max_batch_size"] == 8
-    assert result["inference"]["window_hop_s"] == 2.0
-    assert result["global_prediction"]["pred_global_threshold"] == 0.8
+    assert result.inference.max_batch_size == 8
+    assert result.inference.window_hop_s == 2.0
+    assert result.global_prediction.pred_global_threshold == 0.8
 
 
-def test_get_effective_model_config_resolves_model_id_from_effective_config() -> None:
-    """Metadata model IDs should follow the resolved config, while explicit model_id wins."""
-    config_with_override = {
-        "model_hf_repo_id": "custom/model",
-        "model_config_overrides": {"inference": {"max_batch_size": 8}},
-    }
-    effective = orchestrator.get_effective_model_config(config_with_override, Mock())
-    assert effective["model_hf_repo_id"] == "custom/model"
-    assert effective["inference"]["max_batch_size"] == 8
-    assert (
-        effective.get(
-            "model_id",
-            effective.get("model_hf_repo_id", orchestrator.PODSAI_MODEL_ID),
-        )
-        == "custom/model"
+def test_apply_model_config_overrides_skips_unknown_custom_sections() -> None:
+    """Only supported DetectorInferenceConfig sections should be accepted."""
+    base = DetectorInferenceConfig.from_dict(
+        {"inference": {"max_batch_size": 16}, "global_prediction": {"pred_global_threshold": 0.5}}
     )
-
-    explicit_config = {
-        "model_id": "explicit/model",
-        "model_hf_repo_id": "custom/model",
+    overrides = {
+        "custom": {"foo": "bar"},
+        "inference": {"max_batch_size": 8},
     }
-    explicit_effective = orchestrator.get_effective_model_config(explicit_config, Mock())
-    assert explicit_effective.get(
-        "model_id",
-        explicit_effective.get("model_hf_repo_id", orchestrator.PODSAI_MODEL_ID),
-    ) == "explicit/model"
+    logger = Mock()
+
+    result = orchestrator.apply_model_config_overrides(base, overrides, logger)
+
+    assert result.inference.max_batch_size == 8
+    logger.warning.assert_any_call("model_config_overrides: unknown section 'custom', skipping")
+
+
+def test_load_model_applies_known_overrides_before_from_pretrained(tmp_path) -> None:
+    """Supported overrides should be merged and forwarded to the model factory."""
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        """
+        inference:
+          window_s: 3.0
+          window_hop_s: 2.0
+          max_batch_size: 8
+          strict_segments: true
+        global_prediction:
+          pred_global_threshold: 0.6
+        """.strip()
+    )
+    orch_config = {
+        "model_config_path": str(config_path),
+        "model_hf_repo_id": "custom/model",
+        "model_config_overrides": {
+            "inference": {"max_batch_size": 4},
+            "global_prediction": {"pred_global_threshold": 0.8},
+        },
+    }
+    logger = Mock()
+
+    class DummyModel:
+        _device = "cpu"
+        _dtype = "float32"
+
+    with patch(
+        "external.orcahello.InferenceSystem.src.model.inference.OrcaHelloSRKWDetectorV1.from_pretrained",
+        return_value=DummyModel(),
+    ) as mock_from_pretrained:
+        model, model_config = orchestrator.load_model(orch_config, logger)
+
+    assert model._device == "cpu"
+    assert model_config.inference.max_batch_size == 4
+    assert model_config.global_prediction.pred_global_threshold == 0.8
+    assert mock_from_pretrained.call_args.kwargs["config"]["inference"]["max_batch_size"] == 4
+    assert (
+        mock_from_pretrained.call_args.kwargs["config"]["global_prediction"]["pred_global_threshold"]
+        == 0.8
+    )
+    assert mock_from_pretrained.call_args.args[0] == "custom/model"
 
 
 def test_process_segment_applies_inference_overrides() -> None:
