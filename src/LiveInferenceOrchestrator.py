@@ -303,7 +303,10 @@ def load_model(orch_config: dict[str, Any], logger: logging.Logger) -> Any:
         effective_config.get("min_num_positive_calls_threshold", 2)
     )
     device = effective_config.get("device")
-    inference_overrides = effective_config.get("model_config_overrides", {}).get("inference", {}) or {}
+    inference_overrides = (
+        (effective_config.get("model_config_overrides") or {}).get("inference", {})
+        or {}
+    )
 
     kwargs: dict[str, Any] = {
         "threshold": threshold,
