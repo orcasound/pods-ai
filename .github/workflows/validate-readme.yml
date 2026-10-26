@@ -6,9 +6,11 @@ name: Validate README
 on:
   pull_request:
     paths:
+      - README.md
       - README.md.template
       - model-comparison.txt
-      - ‎.github/workflows/validate-readme.yml
+      - src/build-readme.py
+      - .github/workflows/validate-readme.yml
 
 permissions:
   contents: read
