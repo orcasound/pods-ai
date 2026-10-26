@@ -1,4 +1,4 @@
-<!-- This note is hidden. README.md is generated from README.md.template; do not edit it directly. -->
+<!-- README.md is generated from README.md.template; do not edit it directly. -->
 # Programmatic Orca Detection System using Artificial Intelligence (PODS-AI)
 
 This repository contains scripts for training, evaluating, and using the
