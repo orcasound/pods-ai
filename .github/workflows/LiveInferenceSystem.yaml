@@ -60,10 +60,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
-          submodules: 'false'
+          submodules: recursive
 
       - name: Initialize orcahello submodule
-        run: git submodule update --init external/orcahello
+        run: |
+          git submodule sync --recursive
+          git submodule update --init --recursive
 
       - name: Free up disk space
         run: |
