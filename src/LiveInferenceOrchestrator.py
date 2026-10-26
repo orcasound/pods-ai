@@ -9,11 +9,11 @@ import os
 import sys
 import time
 import uuid
-from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 import requests
+from external.orcahello.InferenceSystem.src.model.types import DetectorInferenceConfig
 
 from model_inference import get_model_inference
 from pytz import timezone as pytz_tz
@@ -245,92 +245,54 @@ def apply_model_config_overrides(
     Nested dicts are merged recursively so a ConfigMap override can update a
     specific subsection without replacing the entire config tree.
     """
-    if not overrides:
-        return model_config
-
-    if hasattr(model_config, "as_dict"):
-        config_dict = model_config.as_dict()
-    elif isinstance(model_config, dict):
-        config_dict = deepcopy(model_config)
-    else:
-        if logger is not None:
+    config_dict = model_config.as_dict()
+    for section, values in overrides.items():
+        if section not in config_dict:
             logger.warning(
-                "model_config_overrides: unsupported model config type %s; skipping",
-                type(model_config).__name__,
+                f"model_config_overrides: unknown section '{section}', skipping"
             )
-        return model_config
-
-    for key, value in overrides.items():
-        if isinstance(value, dict) and isinstance(config_dict.get(key), dict):
-            config_dict[key] = apply_model_config_overrides(
-                config_dict[key],
-                value,
-                logger,
+            continue
+        if not isinstance(values, dict):
+            logger.warning(
+                f"model_config_overrides: section '{section}' must be a dict, skipping"
             )
-        else:
-            config_dict[key] = value
-
-    return config_dict
-
-
-def get_effective_model_config(
-    orch_config: dict[str, Any], logger: Optional[logging.Logger] = None
-) -> dict[str, Any]:
-    """Return a deep-copied orchestrator config with nested overrides applied."""
-    effective_config = deepcopy(orch_config)
-    overrides = effective_config.get("model_config_overrides")
-    if overrides:
-        if logger is not None:
-            logger.info("Applying model_config_overrides: %s", overrides)
-        effective_config = apply_model_config_overrides(
-            effective_config,
-            overrides,
-            logger,
-        )
-    return effective_config
+            continue
+        for key, val in values.items():
+            if key not in config_dict[section]:
+                logger.warning(
+                    f"model_config_overrides: unknown key '{section}.{key}', skipping"
+                )
+                continue
+            config_dict[section][key] = val
+    return DetectorInferenceConfig.from_dict(config_dict)
 
 
 def load_model(orch_config: dict[str, Any], logger: logging.Logger) -> Any:
+    from external.orcahello.InferenceSystem.src.model.inference import OrcaHelloSRKWDetectorV1
+
     """Load PODS-AI model using the model_inference factory."""
-    effective_config = get_effective_model_config(orch_config, logger)
+    model_config = DetectorInferenceConfig.from_yaml(orch_config["model_config_path"])
 
-    model_path = effective_config.get("model_hf_repo_id", PODSAI_MODEL_ID)
-    model_revision = effective_config.get(
-        "model_hf_repo_revision", LATEST_PODSAI_MODEL_REVISION
-    )
-    threshold = float(effective_config.get("threshold", 0.5))
-    min_num_positive_calls_threshold = int(
-        effective_config.get("min_num_positive_calls_threshold", 2)
-    )
-    device = effective_config.get("device")
-    inference_overrides = (
-        (effective_config.get("model_config_overrides") or {}).get("inference", {})
-        or {}
-    )
+    overrides = orch_config.get("model_config_overrides")
+    if overrides:
+        logger.info(f"Applying model config overrides: {overrides}")
+        model_config = apply_model_config_overrides(model_config, overrides, logger)
 
-    kwargs: dict[str, Any] = {
-        "threshold": threshold,
-        "min_num_positive_calls_threshold": min_num_positive_calls_threshold,
-        "model_revision": model_revision,
-    }
-    if device:
-        kwargs["device"] = device
-
-    if "max_batch_size" in inference_overrides:
-        kwargs["inference_batch_size"] = int(inference_overrides["max_batch_size"])
-    if "window_hop_s" in inference_overrides:
-        kwargs["inference_hop_duration"] = float(inference_overrides["window_hop_s"])
-    if "window_s" in inference_overrides:
-        kwargs["inference_segment_duration"] = float(inference_overrides["window_s"])
-    if "strict_segments" in inference_overrides:
-        kwargs["inference_strict_segments"] = bool(inference_overrides["strict_segments"])
-
-    logger.debug(f"Loading PODS-AI model from {model_path}")
-    return get_model_inference(
-        model_type="podsai",
-        model_path=model_path,
-        **kwargs,
+    repo_id = orch_config.get(
+        "model_hf_repo_id", "orcasound/orcahello-srkw-detector-v1"
     )
+    if os.getenv("HF_HUB_OFFLINE", "0") == "1":
+        logger.debug(
+            f"Loading model from local HuggingFace cache (HF_HUB_OFFLINE=1): {repo_id}"
+        )
+    else:
+        logger.debug(f"Loading model from HuggingFace Hub: {repo_id}")
+
+    model = OrcaHelloSRKWDetectorV1.from_pretrained(
+        repo_id, config=model_config.as_dict()
+    )
+    logger.debug(f"Model device: {model._device}  |  Dtype: {model._dtype}")
+    return model, model_config
 
 
 def setup_azure_clients(orch_config: dict[str, Any]) -> tuple[Any, Any]:
@@ -686,12 +648,10 @@ def main() -> int:
     )
     logger = setup_logger(app_insights_connection_string, log_level=args.log_level)
 
-    effective_config = get_effective_model_config(orch_config, logger)
-    model_id = effective_config.get(
-        "model_id",
-        effective_config.get("model_hf_repo_id", PODSAI_MODEL_ID),
-    )
-    model = load_model(orch_config, logger)
+    model_id = orch_config.get("model_id", "orcasound/orcahello-srkw-detector-v1")
+    logger.info(f"Model ID: {model_id}")
+    model, model_config = load_model(orch_config, logger)
+    logger.info("Model loaded")
 
     blob_service_client, cosmos_client = setup_azure_clients(orch_config)
     orcasound_client = build_orcasound_client(orch_config)
