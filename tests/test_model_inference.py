@@ -7,6 +7,111 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 import wave
 
+import numpy as np
+import soundfile as sf
+
+
+def test_orcahello_factory_forwards_model_revision():
+    """The generic model factory forwards revisions to the OrcaHello loader."""
+    from model_inference import get_model_inference
+
+    revision = "0123456789abcdef0123456789abcdef01234567"
+    with patch("orcahello_inference.get_orcahello_srkw_inference") as factory:
+        get_model_inference(
+            model_path="orcasound/orcahello-srkw-detector-v1",
+            model_type="orcahello",
+            model_revision=revision,
+        )
+
+    factory.assert_called_once_with(
+        "orcasound/orcahello-srkw-detector-v1", model_revision=revision
+    )
+
+
+def test_onnx_factory_forwards_extractor_and_revision():
+    """The ONNX backend receives the extractor and HF revision options."""
+    from model_inference import get_model_inference
+
+    factory = MagicMock()
+    with patch.dict(
+        "sys.modules",
+        {"podsai_onnx_inference": SimpleNamespace(
+            get_podsai_onnx_inference=factory
+        )},
+    ):
+        get_model_inference(
+            model_path="model.onnx",
+            model_type="podsai",
+            feature_extractor="example/model",
+            model_revision="0123456789abcdef",
+        )
+
+    factory.assert_called_once_with(
+        "model.onnx",
+        feature_extractor="example/model",
+        model_revision="0123456789abcdef",
+    )
+
+
+def test_orcahello_loader_passes_revision_only_for_hub_models(tmp_path):
+    """Only Hub model loads receive a requested revision."""
+    from orcahello_inference import OrcaHelloSRKWInference
+
+    calls = []
+
+    class FakeDetector:
+        """Minimal detector stub for testing model loading arguments."""
+
+        _device = "cpu"
+        _dtype = "float32"
+
+        @classmethod
+        def from_pretrained(cls, model_path, **kwargs):
+            calls.append((model_path, kwargs))
+            return cls()
+
+        def eval(self):
+            return self
+
+    class FakeConfig:
+        """Minimal inference configuration stub."""
+
+        @classmethod
+        def from_dict(cls, values):
+            return SimpleNamespace(as_dict=lambda: values)
+
+    revision = "0123456789abcdef0123456789abcdef01234567"
+    with patch(
+        "orcahello_inference._get_orcahello_classes",
+        return_value=(FakeDetector, FakeConfig),
+    ):
+        OrcaHelloSRKWInference("orcasound/model", model_revision=revision)
+
+        local_model = tmp_path / "local-model"
+        local_model.mkdir()
+        OrcaHelloSRKWInference(str(local_model), model_revision=revision)
+        OrcaHelloSRKWInference("orcasound/model")
+
+    assert calls[0] == ("orcasound/model", {"config": {}, "revision": revision})
+    assert calls[1] == (str(local_model), {"config": {}})
+    assert calls[2] == ("orcasound/model", {"config": {}})
+
+
+def test_export_wave_file_closes_output_before_decoding(tmp_path):
+    """An exported segment is fully readable before the next pipeline stage."""
+    from model_inference import export_wave_file
+    from pydub import AudioSegment
+
+    source = tmp_path / "source.wav"
+    destination = tmp_path / "segment.wav"
+    sf.write(source, np.zeros(16000, dtype=np.float32), 16000)
+
+    export_wave_file(AudioSegment.from_wav(source), 0, 1, destination)
+    samples, sample_rate = sf.read(destination)
+
+    assert sample_rate == 16000
+    assert len(samples) == 16000
+
 
 def test_fastai_predict_with_empty_valid_loader(tmp_path):
     """FastAI model prediction works when split_none() is used."""

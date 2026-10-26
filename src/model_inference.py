@@ -21,6 +21,7 @@ a "model" directory.
 import gc
 import os
 import tempfile
+import wave
 import torch
 import pandas as pd
 from pydub import AudioSegment
@@ -110,7 +111,28 @@ def export_wave_file(audio, begin, end, dest):
     Function to extract a smaller wav file based start and end duration information
     '''
     sub_audio = audio[begin * 1000:end * 1000]
-    sub_audio.export(dest, format="wav")
+    dest_path = Path(dest)
+    dest_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Write PCM directly with the standard library, then publish atomically.
+    # This avoids pydub's Python 3.14 WAV path-export incompatibility and keeps
+    # downstream readers from observing a partial file.
+    temp_fd, temp_name = tempfile.mkstemp(
+        prefix=f".{dest_path.name}.", suffix=".tmp", dir=dest_path.parent
+    )
+    os.close(temp_fd)
+    try:
+        with wave.open(temp_name, "wb") as output_file:
+            output_file.setnchannels(sub_audio.channels)
+            output_file.setsampwidth(sub_audio.sample_width)
+            output_file.setframerate(sub_audio.frame_rate)
+            output_file.writeframes(sub_audio.raw_data)
+        os.replace(temp_name, dest_path)
+    finally:
+        try:
+            os.unlink(temp_name)
+        except FileNotFoundError:
+            pass
 
 
 def extract_segments(audioPath, sampleDict, destnPath, suffix):
@@ -190,6 +212,10 @@ class ModelInference:
                                     For multi-class models: class ID
                 - global_prediction_label: (Optional) Human-readable label for global prediction.
                                           Only provided by multi-class models.
+                - global_prediction_labels: (Optional) Ordered labels for all
+                                           classes that independently meet the global
+                                           evidence threshold. Older callers can use
+                                           global_prediction_label as the primary label.
                 - global_confidence: Overall confidence score (0.0-1.0) for the entire audio.
                                     Typically mean of positive local confidences (0.0-1.0).
                 - hop_duration: Actual hop duration in seconds used by the model.
@@ -312,7 +338,10 @@ class FastAIModel(ModelInference):
             config.pad_mode = "zeros-after"  # Make deterministic: zeros at end only
 
             # Get sorted file list.
-            path_list = sorted([str(p) for p in local_dir.ls()], key=lambda x: Path(x).name)
+            path_list = sorted(
+                [str(path) for path in local_dir.iterdir()],
+                key=lambda path: Path(path).name,
+            )
 
             # Create AudioList from sorted paths.
             tfms = None
@@ -333,6 +362,12 @@ class FastAIModel(ModelInference):
         # Temp directory and segment files are automatically cleaned up here.
 
         # Aggregate predictions.
+
+        if not path_list:
+            raise RuntimeError(
+                f"No audio segments could be extracted from '{wav_path}'. "
+                "The file may be corrupt, too short, or pydub/ffmpeg failed to process it."
+            )
 
         # Create a DataFrame.
         prediction = pd.DataFrame({'FilePath': path_list, 'confidence': predictions})
@@ -619,6 +654,16 @@ def get_model_inference(model_path: Optional[str] = None, model_type: str = "fas
             )
 
         # Lazy import to avoid circular dependency.
+        # If the provided model_path is an ONNX file, use the ONNX Runtime wrapper.
+        if isinstance(model_path, str) and model_path.lower().endswith('.onnx'):
+            from podsai_onnx_inference import get_podsai_onnx_inference
+            feature_extractor = kwargs.pop('feature_extractor', None)
+            return get_podsai_onnx_inference(
+                model_path,
+                feature_extractor=feature_extractor,
+                **kwargs,
+            )
+
         from podsai_inference import get_podsai_inference
 
         return get_podsai_inference(model_path, **kwargs)
@@ -632,7 +677,9 @@ def get_model_inference(model_path: Optional[str] = None, model_type: str = "fas
             model_path = OrcaHelloSRKWInference.DEFAULT_MODEL_PATH
 
         # Filter kwargs to only include parameters supported by OrcaHelloSRKWInference.
-        orcahello_kwargs = {k: v for k, v in kwargs.items() if k in ("config",)}
+        orcahello_kwargs = {
+            k: v for k, v in kwargs.items() if k in ("config", "model_revision")
+        }
 
         return get_orcahello_srkw_inference(model_path, **orcahello_kwargs)
     elif model_type == "fastai":

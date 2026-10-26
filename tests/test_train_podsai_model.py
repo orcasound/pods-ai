@@ -493,11 +493,12 @@ def test_whale_f1_computed_from_whale_classes_only(monkeypatch):
         4: "vessel",
         5: "jingle",
         6: "human",
+        7: "bird",
     }
 
-    labels = np.array([1, 2, 3, 0, 4, 5, 6])
-    predictions = np.array([1, 2, 3, 4, 5, 6, 0])
-    logits = np.eye(7)[predictions]
+    labels = np.array([1, 2, 3, 0, 4, 5, 6, 7])
+    predictions = np.array([1, 2, 3, 4, 5, 6, 0, 7])
+    logits = np.eye(8)[predictions]
 
     eval_pred = module.EvalPrediction(predictions=logits, label_ids=labels)
     metrics = module.compute_metrics(eval_pred)
@@ -506,6 +507,7 @@ def test_whale_f1_computed_from_whale_classes_only(monkeypatch):
     assert metrics["f1_resident"] == 1.0
     assert metrics["f1_transient"] == 1.0
     assert metrics["f1_humpback"] == 1.0
+    assert metrics["f1_bird"] == 1.0
     assert metrics["f1_water"] == 0.0
     assert metrics["f1_vessel"] == 0.0
 
@@ -522,11 +524,12 @@ def test_compute_metrics_prints_dataset_context(monkeypatch, capsys):
         4: "vessel",
         5: "jingle",
         6: "human",
+        7: "bird",
     }
 
-    labels = np.array([1, 2, 3, 0, 4, 5, 6])
-    predictions = np.array([1, 2, 3, 0, 4, 5, 6])
-    logits = np.eye(7)[predictions]
+    labels = np.array([1, 2, 3, 0, 4, 5, 6, 7])
+    predictions = np.array([1, 2, 3, 0, 4, 5, 6, 7])
+    logits = np.eye(8)[predictions]
 
     eval_pred = module.EvalPrediction(predictions=logits, label_ids=labels)
     module.compute_metrics(eval_pred)
@@ -547,11 +550,12 @@ def test_whale_f1_reflects_mixed_whale_predictions(monkeypatch):
         4: "vessel",
         5: "jingle",
         6: "human",
+        7: "bird",
     }
 
-    labels = np.array([1, 2, 3, 0, 4, 5, 6])
-    predictions = np.array([1, 1, 2, 4, 5, 6, 0])
-    logits = np.eye(7)[predictions]
+    labels = np.array([1, 2, 3, 0, 4, 5, 6, 7])
+    predictions = np.array([1, 1, 2, 4, 5, 6, 0, 7])
+    logits = np.eye(8)[predictions]
 
     eval_pred = module.EvalPrediction(predictions=logits, label_ids=labels)
     metrics = module.compute_metrics(eval_pred)
@@ -582,17 +586,118 @@ def test_f1_fallback_supports_multiclass_non_whale_labels(monkeypatch):
     """Fallback weighted F1 should work with non-whale multiclass mappings."""
     module = _import_stubbed_train_module(monkeypatch)
     _patch_metrics(module)
-    module.ID2LABEL = {0: "water", 1: "vessel", 2: "human", 3: "jingle"}
+    module.ID2LABEL = {0: "water", 1: "vessel", 2: "human", 3: "jingle", 4: "bird"}
 
-    labels = np.array([0, 0, 1, 1, 2, 2, 3, 3])
-    predictions = np.array([0, 1, 1, 2, 2, 3, 3, 0])
-    logits = np.eye(4)[predictions]
+    labels = np.array([0, 0, 1, 1, 2, 2, 3, 3, 4, 4])
+    predictions = np.array([0, 1, 1, 2, 2, 3, 3, 4, 4, 0])
+    logits = np.eye(5)[predictions]
 
     eval_pred = module.EvalPrediction(predictions=logits, label_ids=labels)
     metrics = module.compute_metrics(eval_pred)
 
     # Symmetric confusion gives per-class F1=0.5 for all classes => weighted F1=0.5.
     assert metrics["f1"] == pytest.approx(0.5)
+
+
+def test_warmup_steps_not_warmup_ratio_passed_to_training_arguments(monkeypatch, tmp_path):
+    """TrainingArguments must receive warmup_steps, not warmup_ratio (removed in transformers 5.15.0).
+
+    The computed value should equal ~10% of total training steps, where total
+    steps = math.ceil(train_size / batch_size) * epochs.
+    """
+    import math
+
+    module = _import_stubbed_train_module(monkeypatch)
+
+    captured_training_args = {}
+
+    class _FakeFeatureExtractor:
+        @classmethod
+        def from_pretrained(cls, _model_name):
+            return cls()
+
+        def save_pretrained(self, _output_dir):
+            return None
+
+        def push_to_hub(self, _hub_model_id):
+            return None
+
+        def __call__(self, processed_audio, **_kwargs):
+            return {"input_values": processed_audio}
+
+    class _FakeModel:
+        @classmethod
+        def from_pretrained(cls, *_args, **_kwargs):
+            return cls()
+
+    class _FakeTrainingArgumentsStrict:
+        """Mimics transformers>=5.15.0: raises TypeError on warmup_ratio."""
+
+        def __init__(self, **kwargs):
+            if "warmup_ratio" in kwargs:
+                raise TypeError(
+                    "TrainingArguments.__init__() got an unexpected keyword argument 'warmup_ratio'"
+                )
+            captured_training_args.update(kwargs)
+
+    class _FakeTrainer:
+        def __init__(self, model, args, train_dataset, eval_dataset, compute_metrics):
+            self.args = args
+
+        def train(self, resume_from_checkpoint=None):
+            return None
+
+        def evaluate(self):
+            return {"f1": 1.0}
+
+        def save_model(self, _output_dir):
+            return None
+
+    # Use a dataset size and batch size that exercises the math.ceil path.
+    train_size = 25
+    batch_size = 8
+    epochs = 5
+
+    class _FakeDatasetDict(dict):
+        def map(self, _func, batched, remove_columns):
+            return self
+
+    fake_dataset = _FakeDatasetDict(
+        train=[{"label": 0}] * train_size,
+        test=[{"label": 0}],
+    )
+
+    monkeypatch.setattr(module, "setup_label_mappings", lambda _num_classes: None)
+    monkeypatch.setattr(module, "load_audio_dataset", lambda _data_dir, _num_classes: fake_dataset)
+    monkeypatch.setattr(module, "analyze_dataset", lambda _dataset: None)
+    monkeypatch.setattr(module, "AutoFeatureExtractor", _FakeFeatureExtractor)
+    monkeypatch.setattr(module, "AutoModelForAudioClassification", _FakeModel)
+    monkeypatch.setattr(module, "TrainingArguments", _FakeTrainingArgumentsStrict)
+    monkeypatch.setattr(module, "Trainer", _FakeTrainer)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "train_podsai_model.py",
+            "--output_dir",
+            str(tmp_path / "model"),
+            "--epochs",
+            str(epochs),
+            "--batch_size",
+            str(batch_size),
+        ],
+    )
+
+    # This call must not raise TypeError about warmup_ratio.
+    module.main()
+
+    assert "warmup_ratio" not in captured_training_args, (
+        "warmup_ratio was passed to TrainingArguments; it was removed in transformers 5.15.0"
+    )
+    assert "warmup_steps" in captured_training_args
+
+    expected_steps = int(math.ceil(train_size / batch_size) * epochs * 0.1)
+    assert captured_training_args["warmup_steps"] == expected_steps
 
 
 def test_metric_loader_falls_back_to_sklearn_when_evaluate_metric_missing(monkeypatch):

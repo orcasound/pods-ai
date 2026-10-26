@@ -12,10 +12,11 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
+import requests
 
 from model_inference import get_model_inference
 from pytz import timezone as pytz_tz
-from run_inference import build_proposed_description
+from run_inference import build_tags_list
 
 
 AZURE_STORAGE_ACCOUNT_NAME = "livemlaudiospecstorage"
@@ -28,65 +29,39 @@ COSMOSDB_CONTAINER_NAME = "metadata"
 
 ORCASOUND_S3_BUCKET = "audio-orcasound-net"
 
-NEGATIVE_LABELS = {"other", "water", "vessel", "jingle", "human"}
+NEGATIVE_LABELS = {"abiotic", "other", "water", "vessel", "jingle", "human", "bird"}
 
 PODSAI_MODEL_ID = "davethaler/whale-call-detector"
-# renovate: datasource=git-refs depName=https://huggingface.co/davethaler/whale-call-detector versioning=git.
-PODSAI_MODEL_REVISION = "db51f75da131de0e53e8080a1f2c5f4b534810aa"
+from model_revisions import LATEST_PODSAI_MODEL_REVISION
 
+def get_hydro_attributes_from_feed() -> dict:
+    hydrophone_location_data = {}
+    """Get the API data from the Orcasound feed."""
+    try:
+        response = requests.get("https://live.orcasound.net/api/json/feeds")
+        response.raise_for_status()
+        data = response.json().get("data")
+        for location in data:
+            attributes = location.get("attributes", {})
+            node_name = attributes.get("node_name")
+            name = attributes.get("name")
+            coordinates = attributes.get("location_point", {}).get("coordinates", [])
+            if len(coordinates) == 2:
+                longitude, latitude = coordinates
+            hydrophone_location_data[node_name] = {
+                "id": node_name,
+                "name": name,
+                "longitude": float(longitude),
+                "latitude": float(latitude)
+            }
+    except requests.exceptions.HTTPError as err:
+        print(f"HTTP Error occurred: {err}")
+        # Print the raw text/JSON from the server which often contains the real error logs
+        print("Server Response context:")
+        print(response.text)
+    return hydrophone_location_data
 
-# TODO: get this data from https://live.orcasound.net/api/json/feeds.
-source_guid_to_location = {
-    "rpi_andrews_bay": {
-        "id": "rpi_andrews_bay",
-        "name": "Andrews Bay",
-        "longitude": -123.1666492,
-        "latitude": 48.5500299,
-    },
-    "rpi_bush_point": {
-        "id": "rpi_bush_point",
-        "name": "Bush Point",
-        "longitude": -122.6040035,
-        "latitude": 48.0336664,
-    },
-    "rpi_mast_center": {
-        "id": "rpi_mast_center",
-        "name": "Mast Center",
-        "longitude": -122.32512,
-        "latitude": 47.34922,
-    },
-    "rpi_north_sjc": {
-        "id": "rpi_north_sjc",
-        "name": "North San Juan Channel",
-        "longitude": -123.058779,
-        "latitude": 48.591294,
-    },
-    "rpi_orcasound_lab": {
-        "id": "rpi_orcasound_lab",
-        "name": "Orcasound Lab",
-        "longitude": -123.1735774,
-        "latitude": 48.5583362,
-    },
-    "rpi_point_robinson": {
-        "id": "rpi_point_robinson",
-        "name": "Point Robinson",
-        "longitude": -122.37267,
-        "latitude": 47.388383,
-    },
-    "rpi_port_townsend": {
-        "id": "rpi_port_townsend",
-        "name": "Port Townsend",
-        "longitude": -122.760614,
-        "latitude": 48.135743,
-    },
-    "rpi_sunset_bay": {
-        "id": "rpi_sunset_bay",
-        "name": "Sunset Bay",
-        "longitude": -122.33393605795372,
-        "latitude": 47.86497296593844,
-    },
-}
-
+source_guid_to_location = get_hydro_attributes_from_feed()
 
 def assemble_blob_uri(container_name: str, item_name: str) -> str:
     """Assemble a blob URI from account/container/item."""
@@ -173,7 +148,8 @@ def build_cosmosdb_metadata(
         prediction_to_label(p, id2label)
         for p in result.get("local_predictions", [])
     ]
-    proposed_description = build_proposed_description(global_label, local_labels)
+
+    tags = build_tags_list(result, id2label=id2label, negative_labels=negative_labels)
 
     return {
         "id": str(uuid.uuid4()),
@@ -187,7 +163,7 @@ def build_cosmosdb_metadata(
         "location": location,
         "source_guid": source_guid,
         "predictions": prediction_list,
-        "comments": proposed_description,
+        "tags": ";".join(tags),
     }
 
 
@@ -262,10 +238,10 @@ def setup_logger(connection_string: Optional[str], log_level: str = "DEBUG") -> 
 def load_model(orch_config: dict[str, Any], logger: logging.Logger) -> Any:
     """Load PODS-AI model using the model_inference factory."""
     model_path = orch_config.get("model_hf_repo_id", PODSAI_MODEL_ID)
-    model_revision = orch_config.get("model_hf_repo_revision", PODSAI_MODEL_REVISION)
+    model_revision = orch_config.get("model_hf_repo_revision", LATEST_PODSAI_MODEL_REVISION)
     threshold = float(orch_config.get("threshold", 0.5))
     min_num_positive_calls_threshold = int(
-        orch_config.get("min_num_positive_calls_threshold", 3)
+        orch_config.get("min_num_positive_calls_threshold", 2)
     )
     device = orch_config.get("device")
 
@@ -385,7 +361,7 @@ def upload_detection_to_azure(
     logger.info(
         f"Uploaded detection to Azure: audio={audio_clip_name}, "
         f"spectrogram={spectrogram_name}, cosmos_id={metadata['id']}, "
-        f"timestamp={start_timestamp}"
+        f"timestamp={start_timestamp}, tags={metadata.get('tags', [])}"
     )
     return audio_clip_name, spectrogram_name, metadata["id"]
 

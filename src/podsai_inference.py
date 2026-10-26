@@ -15,7 +15,7 @@ import torch
 import librosa
 import numpy as np
 from collections import Counter
-from typing import Optional
+from typing import Optional, Sequence
 from transformers import AutoFeatureExtractor, AutoModelForAudioClassification
 from pathlib import Path
 from datetime import datetime
@@ -26,6 +26,64 @@ from model_inference import ModelInference
 # Segment grouping size for scaling the positive calls threshold.
 # For every SEGMENT_GROUP_SIZE segments, require at least 1 positive prediction.
 SEGMENT_GROUP_SIZE = 10
+
+
+def count_non_adjacent_positive_events(positive_mask: Sequence[bool | int]) -> int:
+    """Count distinct acoustic events by collapsing adjacent positive segments.
+
+    At most two adjacent segments are collapsed into one event. Therefore a
+    contiguous positive run of length ``L`` contributes ``(L + 1) // 2`` events.
+
+    Sliding windows hop by 1-2 seconds, so one call often lights up two
+    neighboring segments. Those neighbors are one event. A gap of one or more
+    non-positive segments starts a new event.
+
+    Examples:
+        [1, 1, 1, 0] → 2 events
+        [1, 0, 1, 0] → 2 events
+        [1, 1, 0, 1, 1] → 2 events
+        [1, 1, 1, 1] → 2 events
+        [1, 1, 1, 1, 1] → 3 events
+    """
+    events = 0
+    run_length = 0
+    for value in positive_mask:
+        if bool(value):
+            run_length += 1
+        elif run_length:
+            events += (run_length + 1) // 2
+            run_length = 0
+    if run_length:
+        events += (run_length + 1) // 2
+    return events
+
+
+def meets_min_positive_event_threshold(
+    positive_mask: Sequence[bool | int],
+    min_num_positive_calls_threshold: int,
+) -> bool:
+    """Return True when collapsed event count meets the configured threshold."""
+    return (
+        count_non_adjacent_positive_events(positive_mask)
+        >= min_num_positive_calls_threshold
+    )
+
+
+def _positive_event_ids(positive_mask: Sequence[bool | int]) -> list[Optional[int]]:
+    """Assign segments to global positive events, capped at two segments each."""
+    event_ids: list[Optional[int]] = []
+    event_id = -1
+    run_length = 0
+    for value in positive_mask:
+        if not bool(value):
+            run_length = 0
+            event_ids.append(None)
+            continue
+        if run_length % 2 == 0:
+            event_id += 1
+        event_ids.append(event_id)
+        run_length += 1
+    return event_ids
 
 # HuggingFace model_type value for the Audio Spectrogram Transformer architecture.
 # AST models expect a pre-computed mel spectrogram; raw-audio models (e.g. Wav2Vec2)
@@ -48,7 +106,7 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
     """
 
     def __init__(self, model_path: str, device: Optional[str] = None,
-                 threshold: float = 0.5, min_num_positive_calls_threshold: int = 3,
+                 threshold: float = 0.5, min_num_positive_calls_threshold: int = 2,
                  model_revision: Optional[str] = None,
                  inference_batch_size: int = 8) -> None:
         """
@@ -58,12 +116,14 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
             model_path: Path to model directory or HuggingFace Hub model ID
             device: Device to run inference on ('cuda', 'cpu', or None for auto)
             threshold: Confidence threshold for positive predictions (default: 0.5)
-            min_num_positive_calls_threshold: Minimum positive predictions for global positive classification.
-                                             The effective threshold scales with audio length: it requires
-                                             at least 1 positive per SEGMENT_GROUP_SIZE (10) segments, but
-                                             is capped at min_num_positive_calls_threshold. Formula:
+            min_num_positive_calls_threshold: Minimum distinct (non-adjacent) positive
+                                             events for a global positive classification.
+                                             Adjacent overlapping positives collapse to one
+                                             event. The effective threshold scales with audio
+                                             length: at least 1 event per SEGMENT_GROUP_SIZE
+                                             (10) segments, capped at this value. Formula:
                                              min(ceil(segments/10), min_num_positive_calls_threshold).
-                                             Default: use instance value (typically 3).
+                                             Default: use instance value (typically 2).
             model_revision: Git commit hash or tag to pin the HuggingFace Hub model revision.
                            Ignored when model_path is a local directory. (default: None)
             inference_batch_size: Number of spectrogram windows processed per model forward pass
@@ -145,7 +205,9 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
 
         # Validate that model has at least one negative/background class.
         # Accept either explicit "other" or treat specific classes as negative.
-        negative_classes = {"other", "water", "vessel", "jingle", "human"}
+        negative_classes = {
+            "abiotic", "bird", "human", "jingle", "other", "vessel", "water"
+        }
         positive_classes = {"resident", "transient", "humpback"}
 
         found_negative = negative_classes & set(self.label2id.keys())
@@ -153,7 +215,8 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
 
         if not found_negative:
             raise ValueError(
-                f"Model must include at least one negative/background class (other, water, vessel, jingle, or human). "
+                "Model must include at least one negative/background class "
+                "(other, abiotic, water, vessel, jingle, human, or bird). "
                 f"Found labels: {list(self.label2id.keys())}. "
                 f"Please train the model with at least one negative class to distinguish from whale calls."
             )
@@ -421,12 +484,14 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
                          With hop_duration=2, a 60s audio produces ~29 confidence values.
                          With hop_duration=1, a 60s audio produces ~58 confidence values (matching FastAI).
             threshold: Confidence threshold for positive (non-other) predictions (default: use instance value)
-            min_num_positive_calls_threshold: Minimum positive predictions for global positive classification.
-                                             The effective threshold scales with audio length: it requires
-                                             at least 1 positive per SEGMENT_GROUP_SIZE (10) segments, but
-                                             is capped at min_num_positive_calls_threshold. Formula:
+            min_num_positive_calls_threshold: Minimum distinct (non-adjacent) positive
+                                             events for a global positive classification.
+                                             Adjacent overlapping positives collapse to one
+                                             event. The effective threshold scales with audio
+                                             length: at least 1 event per SEGMENT_GROUP_SIZE
+                                             (10) segments, capped at this value. Formula:
                                              min(ceil(segments/10), min_num_positive_calls_threshold).
-                                             Default: use instance value (typically 3).
+                                             Default: use instance value (typically 2).
 
         Returns:
             Dictionary with keys:
@@ -438,7 +503,8 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
                                     local_confidences[i] represents the score at time offset
                                     i * hop_duration seconds from the start.
                 - global_prediction: Overall class ID for the entire audio
-                - global_prediction_label: Human-readable label for the global prediction
+                - global_prediction_label: Legacy primary label for the global prediction
+                - global_prediction_labels: Ordered labels, or [] when none qualify
                 - global_confidence: Overall confidence score (0.0-1.0) for the global prediction
             Returns dict with empty lists and error values if audio loading fails.
         """
@@ -456,6 +522,9 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
             primary_negative_id = self.label2id["other"]
         else:
             primary_negative_id = min(self.negative_class_ids)
+        empty_per_class_probabilities = {
+            label: 0.0 for label in self.id2label.values()
+        }
 
         # Load audio. Resample to 16kHz and convert to mono. Handle exceptions gracefully.
         try:
@@ -469,6 +538,8 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
                 "local_probs": [],
                 "global_prediction": primary_negative_id,
                 "global_prediction_label": self.id2label[primary_negative_id],
+                "global_prediction_labels": [],
+                "per_class_probabilities": empty_per_class_probabilities,
                 "global_confidence": 0.0,
                 "hop_duration": float(hop_duration),
                 "segment_duration": float(segment_duration),
@@ -483,6 +554,8 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
                 "local_probs": [],
                 "global_prediction": primary_negative_id,
                 "global_prediction_label": self.id2label[primary_negative_id],
+                "global_prediction_labels": [],
+                "per_class_probabilities": empty_per_class_probabilities,
                 "global_confidence": 0.0,
                 "hop_duration": float(hop_duration),
                 "segment_duration": float(segment_duration),
@@ -529,7 +602,7 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
                     all_probs_list.append(batch_probs.cpu())
             all_probs = torch.cat(all_probs_list, dim=0)
         else:
-            # Raw-audio path (e.g. Wav2Vec2): collect segments, run feature extractor,
+            # Raw-audio path (e.g., Wav2Vec2): collect segments, run feature extractor,
             # then do a single batched forward pass.
             segments = []
             for pos_idx in range(num_positions):
@@ -552,6 +625,16 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
         segment_class_ids = [int(c) for c in predicted_classes]
         segment_probs = [all_probs[i].numpy() for i in range(num_positions)]
 
+        # Add any missing classes, with probability 0.
+        num_model_classes = len(segment_probs[0])
+        num_label_classes = max(self.id2label.keys()) + 1
+        if num_label_classes > num_model_classes:
+            pad_width = num_label_classes - num_model_classes
+            segment_probs = [
+                np.pad(probs, (0, pad_width), mode="constant", constant_values=0.0)
+                for probs in segment_probs
+            ]
+
         # Guard against empty predictions list.
         # This can happen if the audio is too short or if there was an error during processing.
         if not segment_class_ids:
@@ -562,27 +645,12 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
                 "local_probs": [],
                 "global_prediction": primary_negative_id,
                 "global_prediction_label": self.id2label[primary_negative_id],
+                "global_prediction_labels": [],
+                "per_class_probabilities": empty_per_class_probabilities,
                 "global_confidence": 0.0,
                 "hop_duration": float(hop_duration),
                 "segment_duration": float(segment_duration),
             }
-
-        # Apply rolling average to smooth predictions (matching FastAI behavior).
-        # For multi-class, we average the probability distributions.
-        n = len(segment_probs)
-        smoothed_probs: list[np.ndarray] = []
-
-        for i in range(n):
-            if i == 0:
-                # First position: use first segment probabilities directly.
-                smoothed_probs.append(segment_probs[0])
-            elif i == n - 1:
-                # Last position: use last segment probabilities directly.
-                smoothed_probs.append(segment_probs[-1])
-            else:
-                # Middle positions: average previous and current segment.
-                avg_probs = (segment_probs[i - 1] + segment_probs[i]) / 2.0
-                smoothed_probs.append(avg_probs)
 
         # Get local predictions (class IDs) and call-likelihood confidences.
         # For timestamp correction, we need the likelihood of a whale call being present,
@@ -590,7 +658,7 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
         local_predictions: list[int] = []
         local_confidences: list[float] = []
 
-        for probs in smoothed_probs:
+        for probs in segment_probs:
             predicted_class = int(np.argmax(probs))
 
             # Compute call-likelihood as 1 - P(negative classes).
@@ -606,82 +674,213 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
         # For negative (background) classes, we use the most common prediction.
 
         # Filter for positive (whale) predictions with confidence above threshold.
-        positive_predictions = [
-            (class_id, conf)
+        positive_mask = [
+            class_id not in self.negative_class_ids and conf >= threshold
             for class_id, conf in zip(local_predictions, local_confidences)
-            if class_id not in self.negative_class_ids and conf >= threshold
         ]
 
-        # Scale the positive calls threshold based on the number of segments.
-        # For every SEGMENT_GROUP_SIZE segments, require at least 1 positive prediction.
+        # Scale the positive-event threshold based on the number of segments.
+        # For every SEGMENT_GROUP_SIZE segments, require at least 1 distinct event.
         # Cap at min_num_positive_calls_threshold to avoid requiring too many for very long clips.
         total_segments = len(local_predictions)
         scaled_threshold = max(1, (total_segments + SEGMENT_GROUP_SIZE - 1) // SEGMENT_GROUP_SIZE)
         effective_threshold = min(scaled_threshold, min_num_positive_calls_threshold)
 
-        # If we have enough positive predictions, use majority vote among them.
-        if len(positive_predictions) >= effective_threshold:
-            # Count votes for each positive class.
-            class_votes: dict[int, list[float]] = {}
-            for class_id, conf in positive_predictions:
-                if class_id not in class_votes:
-                    class_votes[class_id] = []
-                class_votes[class_id].append(conf)
+        # Build class support from the global event boundaries. This prevents
+        # class jitter (for example resident/transient alternation) from
+        # turning one acoustic event into multiple per-class events.
+        event_ids = _positive_event_ids(positive_mask)
+        class_event_confidences: dict[int, dict[int, list[float]]] = {}
+        for class_id, conf, event_id in zip(
+            local_predictions, local_confidences, event_ids
+        ):
+            if event_id is None or class_id in self.negative_class_ids or conf < threshold:
+                continue
+            class_event_confidences.setdefault(class_id, {}).setdefault(
+                event_id, []
+            ).append(conf)
 
-            # Winner is the class with most votes (ties broken by average confidence).
-            global_prediction_id = max(
-                class_votes.keys(),
-                key=lambda cid: (len(class_votes[cid]), np.mean(class_votes[cid]))
+        # Each class contributes at most one vote per globally collapsed event.
+        class_votes = {
+            class_id: [float(np.mean(values)) for values in events.values()]
+            for class_id, events in class_event_confidences.items()
+        }
+        qualifying_classes = {
+            class_id: confidences
+            for class_id, confidences in class_votes.items()
+            if len(confidences) >= effective_threshold
+        }
+        if qualifying_classes:
+            # Deterministic order: vote count, mean confidence, then label name
+            # lexicographically (descending metrics, ascending label name).
+            ordered_classes = sorted(
+                qualifying_classes,
+                key=lambda cid: (
+                    -len(qualifying_classes[cid]),
+                    -float(np.mean(qualifying_classes[cid])),
+                    self.id2label[cid],
+                ),
             )
-            global_confidence = float(np.mean(class_votes[global_prediction_id]))
+            global_prediction_id = ordered_classes[0]
+            global_confidence = float(np.mean(qualifying_classes[global_prediction_id]))
         else:
-            # Not enough whale predictions - determine which background class is most likely.
-            # Filter to only background/negative classes to ensure whale classes can't bypass
-            # the effective_threshold requirement.
-            from collections import Counter
-            background_predictions = [c for c in local_predictions if c in self.negative_class_ids]
-
-            if background_predictions:
-                # Get the most common background class.
-                class_counts = Counter(background_predictions)
-                global_prediction_id = class_counts.most_common(1)[0][0]
-
-                # Compute confidence as the mean probability of the predicted class across all segments.
-                global_confidence = float(np.mean([
-                    probs[global_prediction_id] for probs in smoothed_probs
-                ]))
+            # Preserve the legacy majority-vote result when aggregate evidence
+            # reaches the threshold but no individual class does.
+            if (
+                meets_min_positive_event_threshold(positive_mask, effective_threshold)
+                and class_votes
+            ):
+                # Tie-breaker order is count -> mean confidence -> label name
+                # lexicographically, matching the multi-label ordering above.
+                global_prediction_id = sorted(
+                    class_votes,
+                    key=lambda cid: (
+                        -len(class_votes[cid]),
+                        -float(np.mean(class_votes[cid])),
+                        self.id2label[cid],
+                    ),
+                )[0]
+                global_confidence = float(np.mean(class_votes[global_prediction_id]))
+                ordered_classes = [global_prediction_id]
             else:
-                # No background predictions found (all predictions were positive but below threshold).
-                # Fall back to a safe background default.
-                if "other" in self.label2id:
-                    global_prediction_id = self.label2id["other"]
+                ordered_classes = []
+            if not ordered_classes:
+                # Filter to background classes when no whale class has enough evidence.
+                from collections import Counter
+                background_predictions = [
+                    c for c in local_predictions if c in self.negative_class_ids
+                ]
+
+                if background_predictions:
+                    class_counts = Counter(background_predictions)
+                    global_prediction_id = class_counts.most_common(1)[0][0]
+                    global_confidence = float(np.mean([
+                        probs[global_prediction_id] for probs in segment_probs
+                    ]))
                 else:
-                    # Use the first negative class (water is typically class 0).
-                    global_prediction_id = min(self.negative_class_ids)
-                global_confidence = 0.0
+                    if "other" in self.label2id:
+                        global_prediction_id = self.label2id["other"]
+                    else:
+                        global_prediction_id = min(self.negative_class_ids)
+                    global_confidence = 0.0
 
         # Convert global prediction ID to label name.
         global_prediction_label = self.id2label[global_prediction_id]
 
-        # Calculate per-class probabilities for display purposes.
-        # These represent the mean probability for each class across all windows.
-        per_class_probabilities = {}
+        # Calculate per-class global probabilities.
+        # For each class, only include segments whose local prediction
+        # matches that class.
+        #
+        # class_means[class_id] is therefore:
+        #   mean(whale-call likelihood for segments locally predicted as class_id)
+        class_means: dict[int, float] = {}
+        per_class_probabilities: dict[str, float] = {}
+
         for class_id, label in self.id2label.items():
-            class_probs = [float(probs[class_id]) for probs in smoothed_probs]
-            per_class_probabilities[label] = float(np.mean(class_probs))
+            matching_confidences = [
+                confidence
+                for confidence, predicted_id in zip(
+                    local_confidences,
+                    local_predictions,
+                )
+                if predicted_id == class_id
+            ]
+
+            class_mean = (
+                float(np.mean(matching_confidences))
+                if matching_confidences
+                else 0.0
+            )
+
+            class_means[class_id] = class_mean
+            per_class_probabilities[label] = class_mean
+
+        # Build the set of unique classes seen in local_predictions in first-seen order.
+        seen_local = dict.fromkeys(local_predictions)
+        unique_local_ids = list(seen_local.keys())
+
+        # Define label groups by name and map to ids when available.
+        NEGATIVE_LABEL_NAMES = {"jingle", "bird"}
+        BACKGROUND_LABEL_NAMES = {"abiotic", "other", "water", "vessel", "human"}
+
+        negative_ids_set = {self.label2id[l] for l in NEGATIVE_LABEL_NAMES if l in self.label2id}
+        background_ids_set = {self.label2id[l] for l in BACKGROUND_LABEL_NAMES if l in self.label2id}
+        # Positive ids are any seen ids not classified as negative or background.
+        seen_ids_set = set(unique_local_ids)
+        positive_ids_set = seen_ids_set - negative_ids_set - background_ids_set
+
+        qualifying_ids: list[int] = list(qualifying_classes)
+        for cid in unique_local_ids:
+            if cid in qualifying_classes:
+                continue
+            if cid not in negative_ids_set and cid not in background_ids_set:
+                continue
+            mask = [1 if p == cid else 0 for p in local_predictions]
+            non_adj_count = count_non_adjacent_positive_events(mask)
+            if non_adj_count >= effective_threshold:
+                qualifying_ids.append(cid)
+
+        # Keep positive, negative, and background groups in priority order;
+        # order each group by event count, mean confidence, then label name.
+        positives = [cid for cid in qualifying_ids if cid in positive_ids_set]
+        negatives = [cid for cid in qualifying_ids if cid in negative_ids_set]
+        backgrounds = [cid for cid in qualifying_ids if cid in background_ids_set or (cid not in positive_ids_set and cid not in negative_ids_set)]
+        class_event_counts = {}
+        for cid in unique_local_ids:
+            mask = [1 if p == cid else 0 for p in local_predictions]
+            class_event_counts[cid] = count_non_adjacent_positive_events(mask)
+
+        positives.sort(
+            key=lambda cid: (
+                -class_event_counts.get(cid, 0),
+                -class_means.get(cid, 0.0),
+                self.id2label[cid],
+            )
+        )
+        negatives.sort(
+            key=lambda cid: (
+                -class_event_counts.get(cid, 0),
+                -class_means.get(cid, 0.0),
+                self.id2label[cid],
+            )
+        )
+        backgrounds.sort(
+            key=lambda cid: (
+                -class_event_counts.get(cid, 0),
+                -class_means.get(cid, 0.0),
+                self.id2label[cid],
+            )
+        )
+
+        ordered_ids = positives + negatives + backgrounds
+        # Build `global_prediction_labels` from ordered_ids (unchanged).
+        global_prediction_labels = [self.id2label.get(cid, str(cid)) for cid in ordered_ids]
+
+        # Set the singular global prediction to the first label in the ordered list,
+        # without modifying ordered_ids itself.
+        if ordered_ids:
+            global_prediction_id = ordered_ids[0]
+            global_prediction_label = self.id2label.get(global_prediction_id, str(global_prediction_id))
+            if global_prediction_id in self.negative_class_ids:
+                global_confidence = float(np.mean([
+                    probs[global_prediction_id] for probs in segment_probs
+                ]))
+            else:
+                global_confidence = class_means.get(global_prediction_id, 0.0)
+        # else keep previously computed global_prediction_id/global_prediction_label.
 
         return {
             "local_predictions": local_predictions,
             "local_confidences": local_confidences,
-            "local_probs": smoothed_probs,
+            "local_probs": segment_probs,
             "global_prediction": global_prediction_id,
             "global_prediction_label": global_prediction_label,
+            "global_prediction_labels": global_prediction_labels,
             "global_confidence": global_confidence,
             "per_class_probabilities": per_class_probabilities,
             "hop_duration": float(hop_duration),
             "segment_duration": float(segment_duration),
         }
-
 
 def get_podsai_inference(model_path: str, **kwargs) -> PodsAIInference:
     """

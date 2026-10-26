@@ -1,0 +1,121 @@
+# Copyright (c) PODS-AI contributors
+# SPDX-License-Identifier: MIT
+---
+name: Generate Model Comparison
+
+on:
+  push:
+    tags:
+      - model-*
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  generate_model_comparison:
+    if: github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2  # v2.22.2
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            *.archive.ubuntu.com:80
+            security.ubuntu.com:443
+            api.github.com:443
+            archive.ubuntu.com:443
+            audio-orcasound-net.s3.amazonaws.com:443
+            dl.google.com:443
+            esm.ubuntu.com:443
+            files.pythonhosted.org:443
+            github.com:443
+            uploads.github.com:443
+            *.githubusercontent.com:443
+            huggingface.co:443
+            cdn-lfs.huggingface.co:443
+            pypi.org:443
+            s3-us-west-2.amazonaws.com:443
+            live.orcasound.net:443
+            aifororcasdetections.azurewebsites.net:443
+
+      - id: branch
+        name: Determine checkout ref and push branch
+        env:
+          REF_NAME: ${{ github.ref_name }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_SHA: ${{ github.sha }}
+        run: |
+          if [ "$REF_TYPE" = "branch" ]; then
+            checkout_ref="$REF_NAME"
+            push_branch="$REF_NAME"
+          else
+            checkout_ref="$REF_SHA"
+            push_branch=""
+          fi
+
+          if [ "$checkout_ref" = "main" ] && [ -n "$push_branch" ]; then
+            push_branch="update-model-comparison"
+          fi
+
+          echo "checkout_ref=$checkout_ref" >> "$GITHUB_OUTPUT"
+          echo "push_branch=$push_branch" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0
+          ref: ${{ steps.branch.outputs.checkout_ref }}
+          submodules: 'recursive'
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
+        with:
+          python-version: '3.12'
+
+      - name: Install FFmpeg
+        run: |
+          # TODO: Re-evaluate setup-ffmpeg on Ubuntu when https://github.com/FedericoCarboni/setup-ffmpeg/issues/35 is resolved and revalidated; OrcaHello #642 currently validates native apt.
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Verify pkg_resources is available
+        run: python -c "import pkg_resources; print('pkg_resources available')"
+
+      - name: Patch fastai_audio for Python 3.11+ compatibility
+        run: bash patch_fastai_audio.sh
+
+      - name: Download testing WAV files
+        run: |
+          cat > /tmp/empty_training_3s_samples.csv <<'CSV'
+          WAV,Category,Node,StartTimestamp,Duration,Location,Latitude,Longitude,Model,Site,Notes,Tags
+          CSV
+          python src/download_wavs.py \
+            --training-csv-path /tmp/empty_training_3s_samples.csv \
+            --testing-csv-path output/csv/testing_60s_samples.csv
+
+      - name: Generate model comparison results
+        run: set -o pipefail; python src/compare_models.py --models orcahello,oldpodsai,podsai | tee model-comparison.txt
+
+      - name: Commit and push model comparison updates
+        env:
+          PUSH_BRANCH: ${{ steps.branch.outputs.push_branch }}
+        run: |
+          if [ -z "$PUSH_BRANCH" ]; then
+            echo "No branch available for push (likely tag trigger); skipping commit."
+            exit 0
+          fi
+
+          if [ -z "$(git status --porcelain model-comparison.txt)" ]; then
+            echo "model-comparison.txt is unchanged."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add model-comparison.txt
+          git commit -m "Update model-comparison.txt"
+          git push origin "HEAD:${PUSH_BRANCH}"

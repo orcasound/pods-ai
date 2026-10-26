@@ -32,7 +32,7 @@ from merge_training_samples import merge_manual_samples
 TP_HUMAN_ONLY_INPUT = {
     'Category': 'humpback',
     'NodeName': 'rpi_andrews_bay',
-    'Timestamp': '2025_12_12_01_14_55_PST',
+    'StartTimestamp': '2025_12_12_01_14_55_PST',
     'URI': 'https://live.orcasound.net/bouts/new/andrews-bay?time=2025-12-12T09%3A14%3A55.000Z',
     'Description': 'Humpback!',
     'Notes': 'tp_human_only',
@@ -42,7 +42,7 @@ TP_HUMAN_ONLY_INPUT = {
 TP_HUMAN_ONLY_EXPECTED = {
     'Category': 'humpback',
     'NodeName': 'rpi_andrews_bay',
-    'Timestamp': '2025_12_12_01_14_17_PST',
+    'StartTimestamp': '2025_12_12_01_14_17_PST',
     'URI': 'https://live.orcasound.net/bouts/new/andrews-bay?time=2025-12-12T09%3A14%3A17.000Z',
     'Description': 'Humpback!',
     'Notes': 'tp_human_only',
@@ -52,7 +52,7 @@ TP_HUMAN_ONLY_EXPECTED = {
 TP_MACHINE_ONLY_INPUT = {
     'Category': 'humpback',
     'NodeName': 'rpi_orcasound_lab',
-    'Timestamp': '2025_12_17_22_33_50_PST',
+    'StartTimestamp': '2025_12_17_22_33_50_PST',
     'URI': 'https://live.orcasound.net/bouts/new/orcasound-lab?time=2025-12-18T06%3A33%3A50.000Z',
     'Description': 'Humpback whale song',
     'Notes': 'tp_machine_only',
@@ -62,7 +62,7 @@ TP_MACHINE_ONLY_INPUT = {
 TP_MACHINE_ONLY_EXPECTED = {
     'Category': 'humpback',
     'NodeName': 'rpi_orcasound_lab',
-    'Timestamp': '2025_12_17_22_33_47_PST',
+    'StartTimestamp': '2025_12_17_22_33_47_PST',
     'URI': 'https://live.orcasound.net/bouts/new/orcasound-lab?time=2025-12-18T06%3A33%3A47.000Z',
     'Description': 'Humpback whale song',
     'Notes': 'tp_machine_only',
@@ -73,7 +73,7 @@ TP_MACHINE_ONLY_EXPECTED = {
 MANUAL_TIMESTAMP_INPUT = {
     'Category': 'humpback',
     'NodeName': 'rpi_andrews_bay',
-    'Timestamp': '2025_11_24_20_13_43_PST',
+    'StartTimestamp': '2025_11_24_20_13_43_PST',
     'URI': 'https://live.orcasound.net/bouts/new/andrews-bay?time=2025-11-25T04%3A13%3A43.000Z',
     'Description': 'Distant humpback calls at 20:14.',
     'Notes': 'tp_human_only',
@@ -83,7 +83,7 @@ MANUAL_TIMESTAMP_INPUT = {
 MANUAL_TIMESTAMP_EXPECTED = {
     'Category': 'humpback',
     'NodeName': 'rpi_andrews_bay',
-    'Timestamp': '2025_11_24_20_14_00_PST',
+    'StartTimestamp': '2025_11_24_20_14_00_PST',
     'URI': 'https://live.orcasound.net/bouts/new/andrews-bay?time=2025-11-25T04%3A14%3A00.000Z',
     'Description': 'Distant humpback calls at 20:14.',
     'Notes': 'tp_human_only',
@@ -94,7 +94,7 @@ MANUAL_TIMESTAMP_EXPECTED = {
 RESIDENT_TP_HUMAN_ONLY_INPUT = {
     'Category': 'resident',
     'NodeName': 'rpi_bush_point',
-    'Timestamp': '2023_11_28_14_12_51_PST',
+    'StartTimestamp': '2023_11_28_14_12_51_PST',
     'URI': 'https://live.orcasound.net/bouts/new/bush-point?time=2023-11-28T22%3A12%3A51.000Z',
     'Description': 'J pod, getting louder now',
     'Notes': 'tp_human_only',
@@ -104,7 +104,7 @@ RESIDENT_TP_HUMAN_ONLY_INPUT = {
 RESIDENT_TP_HUMAN_ONLY_EXPECTED = {
     'Category': 'resident',
     'NodeName': 'rpi_bush_point',
-    'Timestamp': '2023_11_28_14_12_43_PST',
+    'StartTimestamp': '2023_11_28_14_12_43_PST',
     'URI': 'https://live.orcasound.net/bouts/new/bush-point?time=2023-11-28T22%3A12%3A43.000Z',
     'Description': 'J pod, getting louder now',
     'Notes': 'tp_human_only',
@@ -115,7 +115,7 @@ RESIDENT_TP_HUMAN_ONLY_EXPECTED = {
 ZERO_CONFIDENCE_INPUT = {
     'Category': 'humpback',
     'NodeName': 'rpi_andrews_bay',
-    'Timestamp': '2025_12_13_18_33_00_PST',
+    'StartTimestamp': '2025_12_13_18_33_00_PST',
     'URI': 'https://live.orcasound.net/bouts/new/andrews-bay?time=2025-12-14T02%3A33%3A00.000Z',
     'Description': 'Humpback',
     'Notes': 'tp_human_only',
@@ -130,9 +130,9 @@ class TestProcessSampleTpMachineOnly:
     """Tests for tp_machine_only samples (fixed-offset timestamp correction)."""
 
     def test_timestamp_subtracted_by_segment_duration(self):
-        """Timestamp should be moved back by the default segment duration (3 s)."""
+        """StartTimestamp should be moved back by the default segment duration (3 s)."""
         result = process_sample(TP_MACHINE_ONLY_INPUT, {}, {})
-        assert result['Timestamp'] == TP_MACHINE_ONLY_EXPECTED['Timestamp']
+        assert result['StartTimestamp'] == TP_MACHINE_ONLY_EXPECTED['StartTimestamp']
 
     def test_uri_updated_to_match_new_timestamp(self):
         """URI time parameter should reflect the corrected timestamp."""
@@ -165,9 +165,9 @@ class TestProcessSampleTpHumanOnly:
             )
 
     def test_timestamp_from_model_inference(self):
-        """Timestamp should come from the model-based correction."""
+        """StartTimestamp should come from the model-based correction."""
         result = self._make_result()
-        assert result['Timestamp'] == TP_HUMAN_ONLY_EXPECTED['Timestamp']
+        assert result['StartTimestamp'] == TP_HUMAN_ONLY_EXPECTED['StartTimestamp']
 
     def test_uri_updated_to_match_new_timestamp(self):
         """URI time parameter should reflect the model-corrected timestamp."""
@@ -200,7 +200,7 @@ class TestProcessSampleTpHumanOnly:
         """Without model_inference, tp_human_only should use the fixed offset instead."""
         result = process_sample(TP_HUMAN_ONLY_INPUT, {}, {}, model_inference=None)
         # 2025_12_12_01_14_55 - 3 seconds = 2025_12_12_01_14_52
-        assert result['Timestamp'] == '2025_12_12_01_14_52_PST'
+        assert result['StartTimestamp'] == '2025_12_12_01_14_52_PST'
 
     def test_resident_bush_point_full_output_row_matches_expected(self):
         """resident tp_human_only from rpi_bush_point should produce the correct output row (ubuntu/windows discrepancy)."""
@@ -246,7 +246,7 @@ def _make_det(uri: str, notes: str = 'tp_human_only', timestamp: str = '2025_01_
     return {
         'Category': 'humpback',
         'NodeName': 'rpi_test',
-        'Timestamp': timestamp,
+        'StartTimestamp': timestamp,
         'URI': uri,
         'Description': description,
         'Notes': notes,
@@ -343,7 +343,7 @@ class TestMergeManualSamples:
         auto_selected = [{
             'Category': 'resident',
             'NodeName': 'rpi_test',
-            'Timestamp': '2025_01_01_00_00_05_PST',
+            'StartTimestamp': '2025_01_01_00_00_05_PST',
             'URI': 'https://example.org/auto',
             'Description': 'auto selection',
             'Notes': 'tp_machine_only',
@@ -352,7 +352,7 @@ class TestMergeManualSamples:
         manual_samples = [{
             'Category': 'resident',
             'NodeName': 'rpi_test',
-            'Timestamp': '2025_01_01_00_00_02_PST',
+            'StartTimestamp': '2025_01_01_00_00_02_PST',
             'URI': 'https://example.org/manual',
             'Description': 'manual replacement',
             'Notes': 'manual',
@@ -379,7 +379,7 @@ class TestTestingSamples:
             {
                 'Category': 'resident',
                 'NodeName': 'rpi_test',
-                'Timestamp': '2025_01_01_00_00_00_PST',
+                'StartTimestamp': '2025_01_01_00_00_00_PST',
                 'URI': 'https://example.org/resident-tp-human',
                 'Description': 'resident human detection',
                 'Notes': 'tp_human_only',
@@ -389,7 +389,7 @@ class TestTestingSamples:
             {
                 'Category': 'resident',
                 'NodeName': 'rpi_test',
-                'Timestamp': '2025_01_01_00_00_01_PST',
+                'StartTimestamp': '2025_01_01_00_00_01_PST',
                 'URI': 'https://example.org/resident-tp-machine',
                 'Description': 'resident machine detection',
                 'Notes': 'tp_machine_only',
@@ -399,7 +399,7 @@ class TestTestingSamples:
             {
                 'Category': 'water',
                 'NodeName': 'rpi_test',
-                'Timestamp': '2025_01_01_00_00_02_PST',
+                'StartTimestamp': '2025_01_01_00_00_02_PST',
                 'URI': 'https://example.org/water-tp-human',
                 'Description': 'water human detection',
                 'Notes': 'tp_human_only',
@@ -409,7 +409,7 @@ class TestTestingSamples:
             {
                 'Category': 'transient',
                 'NodeName': 'rpi_test',
-                'Timestamp': '2025_01_01_00_00_03_PST',
+                'StartTimestamp': '2025_01_01_00_00_03_PST',
                 'URI': 'https://example.org/transient-zero-confidence',
                 'Description': 'transient detection',
                 'Notes': 'tp_human_only',
@@ -419,7 +419,7 @@ class TestTestingSamples:
             {
                 'Category': 'humpback',
                 'NodeName': 'rpi_test',
-                'Timestamp': '2025_01_01_00_00_04_PST',
+                'StartTimestamp': '2025_01_01_00_00_04_PST',
                 'URI': 'https://example.org/training-selected',
                 'Description': 'humpback detection',
                 'Notes': 'tp_machine_only',
@@ -429,7 +429,7 @@ class TestTestingSamples:
             {
                 'Category': 'humpback',
                 'NodeName': 'rpi_test',
-                'Timestamp': '2025_01_01_00_00_05_PST',
+                'StartTimestamp': '2025_01_01_00_00_05_PST',
                 'URI': 'https://example.org/humpback-tp-machine',
                 'Description': 'humpback machine detection',
                 'Notes': 'tp_machine_only',
@@ -440,7 +440,7 @@ class TestTestingSamples:
             {
                 'Category': 'humpback',
                 'NodeName': 'rpi_test',
-                'Timestamp': '2025_01_01_00_00_04_PST',
+                'StartTimestamp': '2025_01_01_00_00_04_PST',
                 'URI': 'https://example.org/training-selected',
                 'Description': 'humpback detection',
                 'Notes': 'tp_machine_only',
@@ -468,7 +468,7 @@ class TestTestingSamples:
             detections.append({
                 'Category': 'humpback',
                 'NodeName': 'rpi_test',
-                'Timestamp': f'2025_01_01_00_{i:02d}_00_PST',
+                'StartTimestamp': f'2025_01_01_00_{i:02d}_00_PST',
                 'URI': f'https://example.org/humpback-{i}',
                 'Description': f'humpback {i}',
                 'Notes': 'tp_machine_only',
@@ -485,7 +485,7 @@ class TestTestingSamples:
             detections_negative.append({
                 'Category': 'human',
                 'NodeName': 'rpi_test',
-                'Timestamp': f'2025_01_01_01_{i:02d}_00_PST',
+                'StartTimestamp': f'2025_01_01_01_{i:02d}_00_PST',
                 'URI': f'https://example.org/human-{i}',
                 'Description': f'human {i}',
                 'Notes': 'fp_machine_only',
@@ -501,7 +501,7 @@ class TestTestingSamples:
         sample = {
             'Category': 'resident',
             'NodeName': 'rpi_test',
-            'Timestamp': '2025_01_01_00_00_00_PST',
+            'StartTimestamp': '2025_01_01_00_00_00_PST',
             'URI': 'https://example.org/sample',
             'Description': 'sample row',
             'Notes': 'tp_human_only',
@@ -517,7 +517,7 @@ class TestTestingSamples:
         assert rows[0] == {
             'Category': 'resident',
             'NodeName': 'rpi_test',
-            'Timestamp': '2025_01_01_00_00_00_PST',
+            'StartTimestamp': '2025_01_01_00_00_00_PST',
             'URI': 'https://example.org/sample',
             'Description': 'sample row',
             'Notes': 'tp_human_only',

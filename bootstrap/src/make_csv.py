@@ -13,8 +13,27 @@ import argparse
 import requests
 from azure.cosmos import CosmosClient
 import os
+import sys
 
-from src.orcasite_feeds import OrcasiteFeed, get_orcasite_feeds  # noqa: F401 – re-exported for callers
+REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from src.audio_utils import (
+    format_timestamp_pst,
+    parse_timestamp_pst,
+)
+
+import importlib.util
+
+module_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'src', 'orcasite_feeds.py'))
+spec = importlib.util.spec_from_file_location("orcasite_feeds", module_path)
+if spec is None or spec.loader is None:
+    raise ImportError(f"Unable to load orcasite_feeds from {module_path}")
+orcasite_feeds = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(orcasite_feeds)
+OrcasiteFeed = orcasite_feeds.OrcasiteFeed
+get_orcasite_feeds = orcasite_feeds.get_orcasite_feeds
 
 COSMOS_URL = os.environ.get("COSMOS_URL", "").strip() or "https://aifororcasmetadatastore.documents.azure.com:443/"
 COSMOS_KEY = os.environ.get("COSMOS_KEY", "<your-primary-key>")
@@ -39,6 +58,7 @@ class OrcaHelloDetection:
     status: str                  # e.g., "confirmed", "rejected", etc.
     confidence: Optional[float] = None  # Confidence score from model inference
     comments: str = ""
+    tags: str = ""
 
 # Terms in a detection description that indicate the label cannot be determined with confidence.
 SKIP_TERMS = {'?', 'not sure', 'unsure', 'possibl', 'sounds like', 'sounded like', 'ould be'}
@@ -55,7 +75,7 @@ def get_label(
         orcahello_det (Optional[OrcaHelloDetection]): An optional id-matched OrcaHello detection used to upgrade some whale labels.
 
     Returns:
-        str | None: `'resident'`, `'transient'`, `'humpback'`, `'water'`, `'vessel'`, `'jingle'`, or `'human'` when a label can be determined; `None` when the label is unknown.
+        str | None: `'resident'`, `'transient'`, `'humpback'`, `'water'`, `'vessel'`, `'jingle'`, `'human'`, or `'bird'` when a label can be determined; `None` when the label is unknown.
     """
     desc = (orcasite_det.description or "").lower()
     cat = (orcasite_det.category or "").lower()
@@ -92,6 +112,8 @@ def get_label(
             return "vessel"
         if "jingl" in desc:
             return "jingle"
+        if "bird" in desc or "pigu" in desc or "keir" in desc:
+            return "bird"
         if "water" in desc:
             return "water"
 
@@ -182,8 +204,8 @@ def classify_detection(
     if label is None:
         return Classification(kind="skip", include=False)
 
-    # False positive, machine-only (label 'human', 'vessel', 'jingle', or 'water').
-    if (label == "human" or label == "vessel" or label == "jingle" or label == "water") and src == "machine":
+    # False positive, machine-only (label 'human', 'vessel', 'jingle', 'bird', or 'water').
+    if (label == "human" or label == "vessel" or label == "jingle" or label == "water" or label == "bird") and src == "machine":
         return Classification(kind="fp_machine_only", include=True)
 
     # True positive, human-only (include).
@@ -389,44 +411,13 @@ def get_orcahello_detections(feed: OrcasiteFeed) -> List[OrcaHelloDetection]:
             status=status,
             confidence=confidence,
             comments=(item.get("comments") or "").strip(),
+            tags=(item.get("tags") or "").strip()
         )
 
         results.append(det)
 
     return results
 
-def format_timestamp_pst(dt: datetime) -> str:
-    """
-    Format a datetime object as PST timestamp string in the format YYYY_MM_DD_HH_MM_SS_PST.
-
-    Parameters:
-        dt (datetime): The datetime to format (should be timezone-aware).
-
-    Returns:
-        str: Formatted timestamp string (e.g., "2025_12_24_17_51_23_PST").
-    """
-    dt_pst = dt.astimezone(PACIFIC_TZ)
-    return dt_pst.strftime("%Y_%m_%d_%H_%M_%S_PST")
-
-def parse_pst_timestamp(ts_str: str) -> datetime:
-    """
-    Parse a PST timestamp string in the format YYYY_MM_DD_HH_MM_SS_PST into a timezone-aware datetime.
-
-    Parameters:
-        ts_str (str): Timestamp string in the format ``YYYY_MM_DD_HH_MM_SS_PST``
-            (e.g., ``"2026_03_17_00_00_00_PST"``).
-
-    Returns:
-        datetime: A timezone-aware datetime object in the US/Pacific timezone.
-
-    Raises:
-        ValueError: If ``ts_str`` does not end with ``_PST`` or cannot be parsed.
-    """
-    if not ts_str.endswith("_PST"):
-        raise ValueError(f"Timestamp '{ts_str}' must end with '_PST'")
-    body = ts_str[:-4]  # strip trailing "_PST"
-    dt_naive = datetime.strptime(body, "%Y_%m_%d_%H_%M_%S")
-    return PACIFIC_TZ.localize(dt_naive)
 
 def generate_uri(node: str, dt: datetime) -> str:
     """
@@ -562,7 +553,7 @@ def process_all_feeds(
     with open(csv_path, 'w', newline='', encoding='utf-8') as csvfile:
         csv_writer = csv.writer(csvfile, lineterminator='\n')
         # Write header.
-        csv_writer.writerow(['Category', 'NodeName', 'Timestamp', 'URI', 'Description', 'Notes', 'Confidence'])
+        csv_writer.writerow(['Category', 'NodeName', 'StartTimestamp', 'URI', 'Description', 'Notes', 'Confidence'])
 
         # Write sorted unique rows (exclude the timestamp used for sorting).
         for row in unique_rows:
@@ -598,8 +589,8 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    start_time = parse_pst_timestamp(args.start) if args.start else None
-    end_time = None if (args.end or "").lower() == "now" else parse_pst_timestamp(args.end)
+    start_time = parse_timestamp_pst(args.start) if args.start else None
+    end_time = None if (args.end or "").lower() == "now" else parse_timestamp_pst(args.end)
 
     output_root = Path("bootstrap/csv")
     process_all_feeds(output_root, feed_filter=args.feed, start_time=start_time, end_time=end_time)

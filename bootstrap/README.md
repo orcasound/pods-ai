@@ -6,13 +6,12 @@ and `output/csv/testing_60s_samples.csv`.
 
 ## Bootstrap scripts
 
-Scripts are in `bootstrap/src/` and are meant for one-time or occasional regeneration:
+Archived scripts are in `bootstrap/src/` and are meant for one-time or occasional regeneration.
 
 1. `make_csv.py` → writes `bootstrap/csv/detections.csv`
-2. `process_humpback_wavs.py` → generates `output/wav/humpback/signals-humpback_*.wav`
-3. `extract_training_samples.py` → writes `bootstrap/csv/initial_training_samples.csv` and `bootstrap/csv/testing_samples.csv`
-4. `merge_training_samples.py` → merges bootstrap training inputs into `bootstrap/csv/training_samples.csv`
-5. `get_best_timestamp.py` → computes a corrected URI timestamp using bootstrap timestamp-correction logic
+2. `extract_training_samples.py` → writes `bootstrap/csv/initial_training_samples.csv` and `bootstrap/csv/testing_samples.csv`
+3. `merge_training_samples.py` → merges bootstrap training inputs into `bootstrap/csv/training_samples.csv`
+4. `get_best_timestamp.py` → computes a corrected URI timestamp using bootstrap timestamp-correction logic
 
 ## Archived CSV files
 

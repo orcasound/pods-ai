@@ -99,6 +99,7 @@ Classification kinds: `tp_human_only`, `tp_machine_only`, `fp_machine_only`, `tp
 
 ## CI / CD
 
+- FFmpeg setup is platform-specific until the Ubuntu action path in https://github.com/FedericoCarboni/setup-ffmpeg/issues/35 is resolved and revalidated (OrcaHello #642 currently validates native Ubuntu FFmpeg): use native `apt-get install -y ffmpeg` on Ubuntu, and the pinned `FedericoCarboni/setup-ffmpeg` v2 action with `github.token` on Windows.
 - **check_csv.yml** – Runs on every PR; re-executes `make_csv.py`, `extract_training_samples.py`, and, when relevant files changed, `merge_training_samples.py`, then asserts no diff in the committed CSV files (requires `COSMOS_KEY` secret for `make_csv.py`).
 - **LiveInferenceSystem.yaml** – Runs on every PR touching `LiveInferenceSystem/**` or the orchestrator source files; builds the Docker image from the repo root and runs a LiveHLS smoke test.
 - **LiveInferenceSystem-deploy.yaml** – Triggered by a `LiveInferenceSystem.v#.#.#` tag push; builds and pushes the container image to `orcaconservancycr.azurecr.io/pods-ai-live-inference-system`.

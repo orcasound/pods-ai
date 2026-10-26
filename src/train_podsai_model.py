@@ -13,13 +13,14 @@ Usage:
     # Binary classification (other vs any call)
     python train_podsai_model.py --num_classes 2 --output_dir ./model/binary
 
-    # Multi-class classification (water, resident, transient, humpback, vessel, jingle, human)
-    python train_podsai_model.py --num_classes 7 --output_dir ./model/multiclass
+    # Multi-class classification (water, resident, transient, humpback, vessel, jingle, human, bird)
+    python train_podsai_model.py --num_classes 8 --output_dir ./model/multiclass
 """
 
 import argparse
 from collections import Counter
 from functools import partial
+import math
 import os
 from pathlib import Path
 from typing import Protocol
@@ -140,7 +141,7 @@ def setup_label_mappings(num_classes: int) -> None:
     Set up label mappings based on number of classes.
 
     Args:
-        num_classes: 2 for binary (other vs call), 7 for multi-class
+        num_classes: 2 for binary (other vs call), 8 for multi-class
     """
     global LABEL2ID, ID2LABEL
 
@@ -149,13 +150,13 @@ def setup_label_mappings(num_classes: int) -> None:
         LABEL2ID = {"other": 0, "whale": 1}
         ID2LABEL = {0: "other", 1: "whale"}
         print("Using BINARY classification: other vs whale")
-    elif num_classes == 7:
-        # Multi-class: water, resident, transient, humpback, vessel, jingle, human.
-        LABEL2ID = {"water": 0, "resident": 1, "transient": 2, "humpback": 3, "vessel": 4, "jingle": 5, "human": 6}
-        ID2LABEL = {0: "water", 1: "resident", 2: "transient", 3: "humpback", 4: "vessel", 5: "jingle", 6: "human"}
-        print("Using MULTI-CLASS classification: water, resident, transient, humpback, vessel, jingle, human")
+    elif num_classes == 8:
+        # Multi-class: water, resident, transient, humpback, vessel, jingle, human, bird.
+        LABEL2ID = {"water": 0, "resident": 1, "transient": 2, "humpback": 3, "vessel": 4, "jingle": 5, "human": 6, "bird": 7}
+        ID2LABEL = {0: "water", 1: "resident", 2: "transient", 3: "humpback", 4: "vessel", 5: "jingle", 6: "human", 7: "bird"}
+        print("Using MULTI-CLASS classification: water, resident, transient, humpback, vessel, jingle, human, bird")
     else:
-        raise ValueError(f"num_classes must be 2 or 7, got {num_classes}")
+        raise ValueError(f"num_classes must be 2 or 8, got {num_classes}")
 
 
 def load_audio_dataset(data_dir: Path, num_classes: int) -> DatasetDict:
@@ -164,7 +165,7 @@ def load_audio_dataset(data_dir: Path, num_classes: int) -> DatasetDict:
 
     Args:
         data_dir: Path to output/wav directory
-        num_classes: 2 for binary, 7 for multi-class
+        num_classes: 2 for binary, 8 for multi-class
 
     Returns:
         DatasetDict with train and test splits
@@ -176,7 +177,7 @@ def load_audio_dataset(data_dir: Path, num_classes: int) -> DatasetDict:
     labels = []
 
     # Iterate through each category directory.
-    for category in ["water", "resident", "transient", "humpback", "vessel", "jingle", "human"]:
+    for category in ["water", "resident", "transient", "humpback", "vessel", "jingle", "human", "bird"]:
         category_dir = data_dir / category
         if not category_dir.exists():
             print(f"Warning: {category_dir} does not exist")
@@ -192,7 +193,7 @@ def load_audio_dataset(data_dir: Path, num_classes: int) -> DatasetDict:
             # Map labels based on num_classes.
             if num_classes == 2:
                 # Binary: map resident/transient/humpback to "whale" (1), everything else to "other" (0).
-                label = LABEL2ID["other"] if category == "water" or category == "vessel" or category == "jingle" or category == "human" else LABEL2ID["whale"]
+                label = LABEL2ID["other"] if category == "water" or category == "vessel" or category == "jingle" or category == "human" or category == "bird" else LABEL2ID["whale"]
             else:
                 # Multi-class: use original category.
                 label = LABEL2ID[category]
@@ -447,9 +448,9 @@ def main() -> None:
     parser.add_argument(
         "--num_classes",
         type=int,
-        choices=[2, 7],
-        default=7,
-        help="Number of classes: 2 for binary (other vs whale), 7 for multi-class (default: 7)",
+        choices=[2, 8],
+        default=8,
+        help="Number of classes: 2 for binary (other vs whale), 8 for multi-class (default: 8)",
     )
     parser.add_argument(
         "--data_dir",
@@ -475,8 +476,8 @@ def main() -> None:
     parser.add_argument(
         "--epochs",
         type=int,
-        default=10,
-        help="Number of training epochs (default: 10)",
+        default=5,
+        help="Number of training epochs (default: 5)",
     )
     parser.add_argument(
         "--batch_size",
@@ -569,6 +570,9 @@ def main() -> None:
     )
 
     # Training arguments.
+    # Compute warmup steps equivalent to warmup_ratio=0.1 (warmup_ratio was removed in transformers 5.15.0).
+    steps_per_epoch = math.ceil(len(dataset["train"]) / args.batch_size)
+    warmup_steps = int(steps_per_epoch * args.epochs * 0.1)
     training_args = TrainingArguments(
         output_dir=str(output_dir),
         eval_strategy="epoch",
@@ -578,7 +582,7 @@ def main() -> None:
         per_device_train_batch_size=args.batch_size,
         per_device_eval_batch_size=args.batch_size,
         num_train_epochs=args.epochs,
-        warmup_ratio=0.1,
+        warmup_steps=warmup_steps,
         logging_steps=10,
         fp16=torch.cuda.is_available(),
         load_best_model_at_end=True,

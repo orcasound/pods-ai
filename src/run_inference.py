@@ -13,7 +13,9 @@ Usage:
 
 import argparse
 import math
+import random
 import shutil
+import statistics
 import sys
 import time
 from collections import Counter
@@ -24,29 +26,28 @@ from tempfile import TemporaryDirectory
 from typing import Any, Optional
 
 import ffmpeg
-from pytz import timezone as pytz_tz
 
 from audio_utils import (
+    format_utc_iso_z,
+    download_audio_from_start_utc,
     download_from_url,
     get_cached_folders,
     get_difference_between_times_in_seconds,
     get_folders_between_timestamp,
     load_m3u8_with_retry,
+    PACIFIC_TZ,
 )
+UTC_TZ = timezone.utc
 from model_inference import get_model_inference
 
 PODSAI_MODEL_ID = "davethaler/whale-call-detector"
 # renovate: datasource=git-refs depName=https://huggingface.co/davethaler/whale-call-detector versioning=git.
-PODSAI_AST_MODEL_REVISION = "db51f75da131de0e53e8080a1f2c5f4b534810aa"
-PODSAI_WAV2VEC2_MODEL_REVISION = "cef82c6e9ee661646ea0c583aeb68f4f7ec6d9d8"
+from model_revisions import LATEST_PODSAI_MODEL_REVISION, PODSAI_WAV2VEC2_MODEL_REVISION
+
 # Preserve the existing exported constant name for compatibility.
-PODSAI_MODEL_REVISION = PODSAI_AST_MODEL_REVISION
-PROPOSED_DESCRIPTION_EXTRA_CLASSES = {"vessel", "human", "jingle"}
-NEGATIVE_LABELS = {"other", "water", "vessel", "jingle", "human"}
-PACIFIC_TZ = pytz_tz("US/Pacific")
-UTC_TZ = timezone.utc
-MIN_SEGMENT_DURATION = 0.001
-FLOAT_TOLERANCE = 1e-9
+PODSAI_MODEL_REVISION = LATEST_PODSAI_MODEL_REVISION
+PROPOSED_DESCRIPTION_EXTRA_CLASSES = {"vessel", "human", "jingle", "bird"}
+NEGATIVE_LABELS = {"abiotic", "other", "water", "vessel", "jingle", "human", "bird"}
 
 
 def parse_pst_end_timestamp(timestamp_str: str) -> datetime:
@@ -60,158 +61,78 @@ def parse_utc_start_timestamp(timestamp_str: str) -> datetime:
     return datetime.strptime(timestamp_str, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=UTC_TZ)
 
 
-def _format_utc_iso_z(dt: datetime) -> str:
-    return dt.astimezone(UTC_TZ).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-
-def _build_clip_id(start_time_utc: datetime) -> str:
-    return start_time_utc.astimezone(PACIFIC_TZ).strftime("%Y_%m_%d_%H_%M_%S_PST")
-
-
 def _format_pacific_timestamp(dt: datetime) -> str:
     return dt.astimezone(PACIFIC_TZ).strftime("%Y-%m-%d %H:%M:%S %Z")
 
 
-def download_60s_audio_from_start_utc(
-    node_name: str,
-    start_time_utc: datetime,
-    tmp_dir: str,
-) -> Optional[str]:
-    """Download a 60-second clip beginning at start_time_utc."""
-    duration_seconds = 60.0
-    end_time_utc = start_time_utc + timedelta(seconds=duration_seconds)
-    start_unix_time = int(start_time_utc.timestamp())
-    end_unix_time = int(end_time_utc.timestamp())
+# Get global positive tags plus the most common non-whale context tag.
+def build_tags_list(
+    result: dict[str, Any],
+    id2label: Optional[dict[int, str]] = None,
+    negative_labels: Optional[set[str]] = None,
+) -> list[str]:
+    """Build deduplicated event tags from global and local predictions.
 
-    hydrophone_stream_url = f"https://s3-us-west-2.amazonaws.com/audio-orcasound-net/{node_name}"
-    bucket_folder = hydrophone_stream_url.split("https://s3-us-west-2.amazonaws.com/")[1]
-    tokens = bucket_folder.split("/")
-    s3_bucket = tokens[0]
-    folder_name = tokens[1]
-    prefix = folder_name + "/hls/"
-
-    try:
-        all_hydrophone_folders = get_cached_folders(s3_bucket, prefix=prefix)
-        print(f"  Found {len(all_hydrophone_folders)} folders in total for {node_name}")
-        valid_folders = get_folders_between_timestamp(all_hydrophone_folders, start_unix_time, end_unix_time)
-        print(f"  Found {len(valid_folders)} folders in date range")
-        if not valid_folders:
-            print(f"  Warning: No folders found for timestamp {start_time_utc}")
-            return None
-        current_folder = int(valid_folders[0])
-    except Exception as e:
-        print(f"  ERROR: Failed to query S3 bucket: {e}")
-        return None
-
-    stream_url = f"{hydrophone_stream_url}/hls/{current_folder}/live.m3u8"
-    try:
-        stream_obj = load_m3u8_with_retry(stream_url)
-    except Exception as e:
-        print(f"  ERROR: Failed to load m3u8 file: {e}")
-        return None
-
-    num_total_segments = len(stream_obj.segments)
-    if num_total_segments == 0:
-        print("  ERROR: No segments found in m3u8 file")
-        return None
-
-    target_duration_exact = sum(item.duration for item in stream_obj.segments) / num_total_segments
-    target_duration = max(target_duration_exact, MIN_SEGMENT_DURATION)
-
-    time_since_folder_start_for_start = get_difference_between_times_in_seconds(start_unix_time, current_folder)
-    time_since_folder_start_for_end = get_difference_between_times_in_seconds(end_unix_time, current_folder)
-
-    segment_start_index = max(
-        0,
-        math.floor((time_since_folder_start_for_start + FLOAT_TOLERANCE) / target_duration),
-    )
-    segment_end_index = min(
-        num_total_segments,
-        math.ceil((time_since_folder_start_for_end - FLOAT_TOLERANCE) / target_duration),
-    )
-    if segment_end_index <= segment_start_index:
-        segment_end_index = min(num_total_segments, segment_start_index + 1)
-
-    print(
-        f"Segment: folder={current_folder}, indices=[{segment_start_index}:{segment_end_index}), "
-        f"start={_format_utc_iso_z(start_time_utc)}, duration={duration_seconds:.1f}s"
-    )
-
-    try:
-        file_names = []
-        for i in range(segment_start_index, segment_end_index):
-            audio_segment = stream_obj.segments[i]
-            base_path = audio_segment.base_uri
-            file_name = audio_segment.uri
-            audio_url = base_path + file_name
-            download_from_url(audio_url, tmp_dir)
-            file_names.append(file_name)
-
-        if not file_names:
-            print("  ERROR: No segments were successfully downloaded")
-            return None
-
-        clip_id = _build_clip_id(start_time_utc)
-        clipname = f"temp_60s_{node_name}_{clip_id}"
-        if len(file_names) > 1:
-            hls_file = str(Path(tmp_dir) / f"{clipname}.ts")
-            with open(hls_file, "wb") as wfd:
-                for f in file_names:
-                    with open(Path(tmp_dir) / f, "rb") as fd:
-                        shutil.copyfileobj(fd, wfd)
-        else:
-            hls_file = str(Path(tmp_dir) / file_names[0])
-
-        wav_file_path = str(Path(tmp_dir) / f"{clipname}.wav")
-        ss_offset = time_since_folder_start_for_start - (segment_start_index * target_duration)
-        if ss_offset < 0:
-            ss_offset = 0.0
-
-        stream = ffmpeg.input(hls_file, ss=ss_offset)
-        stream = ffmpeg.output(
-            stream,
-            wav_file_path,
-            t=duration_seconds,
-            acodec="pcm_s16le",
-            ar=44100,
-            ac=1,
-        )
-        ffmpeg.run(stream, overwrite_output=True, quiet=True)
-        print(f"  Downloaded 60s audio: {wav_file_path}")
-        return wav_file_path
-    except Exception as e:
-        print(f"  Warning: Unable to retrieve audio clip: {e}")
-        return None
-
-
-def build_proposed_description(
-    global_prediction_label: str,
-    local_prediction_labels: list[str],
-) -> str:
-    """Build a proposed description string from global and local predictions.
+    Multi-label model results contribute every supported global whale label,
+    followed by the most common non-whale local context label. Older single-label
+    results continue to use their primary label.
 
     Args:
-        global_prediction_label: Predicted class label for the whole file.
-        local_prediction_labels: Segment-level predicted class labels.
+        result: Inference result returned by ``run_inference`` or a model backend.
+        id2label: Optional mapping for integer local prediction IDs.
+        negative_labels: Optional labels treated as non-whale context labels.
 
     Returns:
-        Proposed description text beginning with "AI:" and optionally appending
-        a dominant non-whale context class from {"vessel", "human", "jingle"}.
+        Ordered, duplicate-free event tags.
     """
-    proposed_description = f"AI: {global_prediction_label}"
-    if not local_prediction_labels:
-        return proposed_description
+    from LiveInferenceOrchestrator import is_positive_label
 
-    most_common = Counter(local_prediction_labels).most_common(1)
-    if not most_common:
-        return proposed_description
-    most_common_label, _ = most_common[0]
-    if (
-        most_common_label in PROPOSED_DESCRIPTION_EXTRA_CLASSES
-        and most_common_label != global_prediction_label
-    ):
-        proposed_description = f"{proposed_description} and {most_common_label}"
-    return proposed_description
+    effective_negative_labels = (
+        negative_labels if negative_labels is not None else NEGATIVE_LABELS
+    )
+    local_prediction_labels = []
+
+    # Collect tags in output order.
+    tags = []
+
+    global_prediction_label = result.get("global_prediction_label", "")
+    global_prediction_labels = result.get("global_prediction_labels")
+    if global_prediction_labels is None:
+        global_prediction_labels = (
+            [global_prediction_label]
+            if global_prediction_label
+            and is_positive_label(
+                global_prediction_label,
+                negative_labels=effective_negative_labels,
+            )
+            else []
+        )
+    for label in global_prediction_labels:
+        if label and is_positive_label(label, negative_labels=effective_negative_labels):
+            if label not in tags:
+                tags.append(label)
+
+    # Add labels from local predictions regardless if positive or negative.
+    local_predictions = result.get("local_predictions", [])
+    for local_prediction in local_predictions:
+        label = prediction_to_label(local_prediction, id2label)
+        local_prediction_labels.append(label)
+
+    # If no local tags, return only global tag.
+    if not local_prediction_labels:
+        return tags
+
+    # Add the most common non-whale local context label.
+    most_common_counts = Counter(local_prediction_labels).most_common()
+    for label, _count in most_common_counts:
+        if not is_positive_label(label, negative_labels=effective_negative_labels):
+            if label not in tags:
+                tags.append(label)
+            break
+    # Map 'resident' to 'srkw' for AIForOrcas compatibility.
+    tags = ["srkw" if tag == "resident" else tag for tag in tags]
+
+    return tags
 
 
 def prediction_to_label(prediction: Any, id2label: Optional[dict[int, str]]) -> str:
@@ -258,7 +179,7 @@ def calculate_positive_segments(
         }
         if start_time_utc is not None:
             segment_start_time_utc = start_time_utc + timedelta(seconds=start_seconds)
-            segment_info["start_time_utc"] = _format_utc_iso_z(segment_start_time_utc)
+            segment_info["start_time_utc"] = format_utc_iso_z(segment_start_time_utc)
             segment_info["start_time_pacific"] = _format_pacific_timestamp(
                 segment_start_time_utc
             )
@@ -271,7 +192,9 @@ def run_inference(wav_path: str, model_type: str = "podsai",
                   model_path: Optional[str] = None,
                   model_revision: Optional[str] = None,
                   model_variant: str = "ast",
-                  start_time_utc: Optional[datetime] = None) -> dict:
+                  inference_model: Optional[Any] = None,
+                  start_time_utc: Optional[datetime] = None,
+                  feature_extractor: Optional[str] = None) -> dict:
     """
     Run inference on a wav file and return per-class probabilities.
 
@@ -284,13 +207,16 @@ def run_inference(wav_path: str, model_type: str = "podsai",
                     and PODSAI_MODEL_ID for podsai.
         model_revision: Git commit hash to pin the HuggingFace Hub model revision.
                         Only used when model_path is a Hub model ID (not a local path).
-                        Defaults to PODSAI_MODEL_REVISION when model_path is the default
+                        Defaults to LATEST_PODSAI_MODEL_REVISION when model_path is the default
                         PODS-AI Hub model.
+        feature_extractor: Feature extractor/config path or Hub ID when model_path is an ONNX file.
         model_variant: PODS-AI model variant to use when model_type is "podsai"
                        and the default PODS-AI Hub model/revision is being used
                        (model_path and model_revision are not explicitly set).
                        Supported values are "ast" (default) and "wav2vec2".
                        Ignored when model_path or model_revision is explicitly provided.
+        inference_model: Optional preloaded model inference instance to reuse.
+                         When provided, model loading via get_model_inference is skipped.
 
     Returns:
         Dictionary with:
@@ -298,8 +224,9 @@ def run_inference(wav_path: str, model_type: str = "podsai",
               Each value is the mean local_confidence for windows that predicted
               that class and whose confidence exceeds the model's threshold.
             - global_prediction_label: predicted class label for the whole file
+            - global_prediction_labels: ordered class labels supported
+              by the clip; older model results fall back to the single label
             - global_confidence: confidence score (0.0-1.0) for the global prediction
-            - proposed_description: text description suitable for manual sample notes
             - predict_time: time in seconds spent in the model's predict() method
             - positive_segments_count: number of positive PODS-AI segments above threshold
             - positive_segments: list of positive segment details (label/confidence/timestamps)
@@ -310,11 +237,16 @@ def run_inference(wav_path: str, model_type: str = "podsai",
     segment_duration = 3.0
     positive_segments_count = 0
     positive_segments: list[dict[str, Any]] = []
+    global_prediction_labels: list[str] = []
 
     if model_type == "fastai":
         if model_path is None:
             model_path = "./model"
-        model = get_model_inference(model_type="fastai", model_path=model_path)
+        model = (
+            inference_model
+            if inference_model is not None
+            else get_model_inference(model_type="fastai", model_path=model_path)
+        )
 
         start_time = time.perf_counter()
         result = model.predict(wav_path)
@@ -337,16 +269,29 @@ def run_inference(wav_path: str, model_type: str = "podsai",
         ]
         global_prediction = result.get("global_prediction", 0)
         global_prediction_label = "resident" if global_prediction else "other"
+        global_prediction_labels = [global_prediction_label] if global_prediction_label == "resident" else []
         global_confidence = resident_prob
 
     elif model_type == "orcahello":
         if model_path is None:
             model_path = "orcasound/orcahello-srkw-detector-v1"
-        model = get_model_inference(model_type="orcahello", model_path=model_path)
+        model = (
+            inference_model
+            if inference_model is not None
+            else get_model_inference(
+                model_type="orcahello",
+                model_path=model_path,
+                model_revision=model_revision,
+            )
+        )
 
         start_time = time.perf_counter()
         result = model.predict(wav_path)
         predict_time = time.perf_counter() - start_time
+        if result.get("error"):
+            raise RuntimeError(
+                f"OrcaHello inference failed for {wav_path}: {result['error']}"
+            )
         local_predictions = result.get("local_predictions", [])
         local_confidences = result.get("local_confidences", [])
         hop_duration = float(result.get("hop_duration", 1.0))
@@ -366,6 +311,7 @@ def run_inference(wav_path: str, model_type: str = "podsai",
         ]
         global_prediction = result.get("global_prediction", 0)
         global_prediction_label = "resident" if global_prediction else "other"
+        global_prediction_labels = [global_prediction_label] if global_prediction_label == "resident" else []
         global_confidence = resident_prob
 
     elif model_type == "podsai":
@@ -379,10 +325,27 @@ def run_inference(wav_path: str, model_type: str = "podsai",
                 if model_variant == "wav2vec2":
                     model_revision = PODSAI_WAV2VEC2_MODEL_REVISION
                 else:
-                    model_revision = PODSAI_AST_MODEL_REVISION
+                    model_revision = LATEST_PODSAI_MODEL_REVISION
 
-        model = get_model_inference(model_type="podsai", model_path=model_path,
-                                    model_revision=model_revision)
+        if inference_model is not None:
+            model = inference_model
+        elif isinstance(model_path, str) and model_path.lower().endswith(".onnx"):
+            effective_feature_extractor = feature_extractor or PODSAI_MODEL_ID
+            effective_revision = model_revision
+            if feature_extractor is None and effective_revision is None:
+                effective_revision = LATEST_PODSAI_MODEL_REVISION
+            model = get_model_inference(
+                model_type="podsai",
+                model_path=model_path,
+                feature_extractor=effective_feature_extractor,
+                model_revision=effective_revision,
+            )
+        else:
+            model = get_model_inference(
+                model_type="podsai",
+                model_path=model_path,
+                model_revision=model_revision,
+            )
 
         start_time = time.perf_counter()
         result = model.predict(wav_path)
@@ -400,6 +363,18 @@ def run_inference(wav_path: str, model_type: str = "podsai",
             if isinstance(label, str):
                 local_prediction_labels.append(label)
         global_prediction_label = result.get("global_prediction_label", "")
+        global_prediction_labels = result.get("global_prediction_labels")
+        if global_prediction_labels is None:
+            from LiveInferenceOrchestrator import is_positive_label
+
+            global_prediction_labels = (
+                [global_prediction_label]
+                if (
+                    global_prediction_label
+                    and is_positive_label(global_prediction_label)
+                )
+                else []
+            )
         global_confidence = float(result.get("global_confidence", 0.0))
         positive_segments_count, positive_segments = calculate_positive_segments(
             local_predictions=local_predictions,
@@ -416,16 +391,15 @@ def run_inference(wav_path: str, model_type: str = "podsai",
             f"Unknown model type: {model_type!r}. Use 'podsai', 'fastai', or 'orcahello'."
         )
 
-    proposed_description = build_proposed_description(global_prediction_label, local_prediction_labels)
-
     return {
         "probabilities": probabilities,
         "global_prediction_label": global_prediction_label,
+        "global_prediction_labels": global_prediction_labels,
         "global_confidence": global_confidence,
-        "proposed_description": proposed_description,
         "predict_time": predict_time,
         "local_predictions": local_predictions,
         "local_confidences": local_confidences,
+        "local_prediction_labels": local_prediction_labels,
         "hop_duration": hop_duration,
         "segment_duration": segment_duration,
         "positive_segments_count": positive_segments_count,
@@ -443,30 +417,43 @@ def print_results(results: dict, model_type: str) -> None:
     probabilities = results["probabilities"]
     label = results["global_prediction_label"]
     confidence = results["global_confidence"]
-    proposed_description = results["proposed_description"]
     predict_time = results.get("predict_time", 0.0)
 
     print(f"Model type: {model_type}")
     print(f"Global prediction: {label} (confidence: {confidence:.4f})")
-    print(f"Proposed description: {proposed_description}")
+    global_labels = results.get("global_prediction_labels", [])
+    if len(global_labels) > 1:
+        print(f"Global predictions: {', '.join(global_labels)}")
     print(f"Prediction time: {predict_time:.2f}s")
-    if model_type == "podsai":
-        local_predictions = results.get("local_predictions", [])
-        positive_segments = results.get("positive_segments", [])
-        positive_segments_count = results.get("positive_segments_count", 0)
-        print(f"Positive segments: {positive_segments_count}/{len(local_predictions)}")
-        if positive_segments:
-            print("Positive segment timestamps:")
-            for segment in positive_segments:
-                timestamp = segment.get("start_time_pacific")
-                if timestamp is None:
-                    timestamp = f"+{float(segment.get('start_time_seconds', 0.0)):.1f}s"
-                print(
-                    f"  {timestamp}: {segment.get('label', '')} "
-                    f"(confidence: {float(segment.get('confidence', 0.0)):.3f})"
-                )
+
+    local_predictions = results.get("local_predictions", [])
+    local_confidences = results.get("local_confidences", [])
+    local_prediction_labels = results.get("local_prediction_labels", [])
+    hop_duration = results.get("hop_duration", 2.0)
+
+    if local_predictions and local_confidences:
+        print(f"\nSegments: {len(local_predictions)} total")
+
+        if model_type == "podsai":
+            positive_segments_count = results.get("positive_segments_count", 0)
+            print(f"Positive segments: {positive_segments_count}/{len(local_predictions)}")
+
+        print("\nAll segment predictions:")
+
+        # Use local_prediction_labels if available, otherwise convert predictions.
+        if local_prediction_labels:
+            for idx, (pred_label, conf) in enumerate(zip(local_prediction_labels, local_confidences)):
+                start_seconds = idx * hop_duration
+                print(f"  +{start_seconds:.1f}s: {pred_label} (whale confidence: {conf:.3f})")
+        else:
+            # FastAI and OrcaHello use binary predictions (0=other, 1=resident).
+            for idx, (pred, conf) in enumerate(zip(local_predictions, local_confidences)):
+                start_seconds = idx * hop_duration
+                pred_label = "resident" if int(pred) == 1 else "other"
+                print(f"  +{start_seconds:.1f}s: {pred_label} (whale confidence: {conf:.3f})")
+
     print()
-    print("Per-class probabilities:")
+    print("Average whale likelihood by predicted class:")
     for class_name, prob in sorted(probabilities.items()):
         print(f"  {class_name}: {prob:.4f}")
 
@@ -511,11 +498,22 @@ def main() -> int:
         ),
     )
     parser.add_argument(
+        "--set",
+        default="testing",
+        type=str.lower,
+        choices=("training", "testing"),
+        help=(
+            "Sample set used when downloading audio with --node-name: "
+            "training downloads a 3-second clip, testing downloads a 60-second clip "
+            "(default: testing). Ignored when wav_file is provided."
+        ),
+    )
+    parser.add_argument(
         "--model",
         default="podsai",
         help=(
             "Model type to use (default: podsai). "
-            "podsai: 7-class model (water, resident, transient, humpback, vessel, jingle, human). "
+            "podsai: 8-class model (water, resident, transient, humpback, vessel, jingle, human, bird). "
             "fastai: 2-class model (other, resident). "
             "orcahello: 2-class SRKW detector (other, resident) using the OrcaHello ResNet50 model."
         ),
@@ -545,9 +543,15 @@ def main() -> int:
         help=(
             "Git commit hash to pin the HuggingFace Hub model revision. "
             "Only used when --model-path is a Hub model ID. "
-            f"Defaults to the pinned revision ({PODSAI_MODEL_REVISION}) when using "
+            f"Defaults to the pinned revision ({LATEST_PODSAI_MODEL_REVISION}) when using "
             f"the default PODS-AI model ({PODSAI_MODEL_ID!r})."
         ),
+    )
+    parser.add_argument(
+        "--feature-extractor",
+        default=None,
+        metavar="PATH_OR_HF_ID",
+        help="Feature extractor/config to use when --model-path is an ONNX file.",
     )
 
     args = parser.parse_args()
@@ -594,13 +598,16 @@ def main() -> int:
                 return 1
 
             temp_dir = stack.enter_context(TemporaryDirectory())
+            duration_seconds = 3.0 if args.set == "training" else 60.0
             try:
                 if args.start_timestamp_utc is not None:
                     start_time_utc = parse_utc_start_timestamp(args.start_timestamp_utc)
                 else:
                     end_time_pst = parse_pst_end_timestamp(end_timestamp_str)
-                    start_time_utc = end_time_pst.astimezone(UTC_TZ) - timedelta(seconds=60)
-                wav_path = download_60s_audio_from_start_utc(args.node_name, start_time_utc, temp_dir)
+                    start_time_utc = end_time_pst.astimezone(UTC_TZ) - timedelta(seconds=duration_seconds)
+                wav_path = download_audio_from_start_utc(
+                    args.node_name, start_time_utc, temp_dir, duration_seconds=duration_seconds
+                )
             except ValueError as e:
                 print(f"Failed to download wav: {e}", file=sys.stderr)
                 return 1
@@ -622,6 +629,7 @@ def main() -> int:
                 model_revision=args.model_revision,
                 model_variant=args.type,
                 start_time_utc=start_time_utc,
+                feature_extractor=args.feature_extractor,
             )
         except ValueError as e:
             print(f"Error: {e}", file=sys.stderr)

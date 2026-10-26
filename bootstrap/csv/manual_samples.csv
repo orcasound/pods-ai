@@ -1,4 +1,4 @@
-Category,NodeName,Timestamp,URI,Description,Notes,Confidence
+Category,NodeName,StartTimestamp,URI,Description,Notes,Confidence
 human,rpi_sunset_bay,2024_07_12_16_58_13_PST,https://live.orcasound.net/bouts/new/sunset-bay?time=2024-07-12T23%3A58%3A13.000Z,Human voices,fp_machine_only,75.3
 human,rpi_sunset_bay,2024_07_12_16_58_19_PST,https://live.orcasound.net/bouts/new/sunset-bay?time=2024-07-12T23%3A58%3A19.000Z,Human voices,fp_machine_only,75.5
 human,rpi_sunset_bay,2024_08_02_13_02_09_PST,https://live.orcasound.net/bouts/new/sunset-bay?time=2024-08-02T20%3A02%3A09.000Z,Radio,fp_machine_only,69.7

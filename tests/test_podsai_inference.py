@@ -18,12 +18,19 @@ from pathlib import Path
 from unittest.mock import Mock, patch, MagicMock
 import torch
 from podsai_inference import NUM_SPECIAL_TOKENS
+from model_revisions import LATEST_PODSAI_MODEL_REVISION
 
 
 # Pinned PODS-AI model revision for integration-test stability.
 PODSAI_TEST_MODEL_ID = "davethaler/whale-call-detector"
-# renovate: datasource=git-refs depName=https://huggingface.co/davethaler/whale-call-detector versioning=git.
-PODSAI_TEST_MODEL_REVISION = "db51f75da131de0e53e8080a1f2c5f4b534810aa"
+# The repository retains training checkpoints; integration tests need only the
+# root model artifacts and should not download every historical checkpoint.
+PODSAI_MODEL_ALLOW_PATTERNS = [
+    "config.json",
+    "preprocessor_config.json",
+    "model.safetensors",
+    "training_args.bin",
+]
 
 
 def _resolve_podsai_test_model_path() -> str:
@@ -38,20 +45,21 @@ def _resolve_podsai_test_model_path() -> str:
         if not hf_file_exists(
             PODSAI_TEST_MODEL_ID,
             "preprocessor_config.json",
-            revision=PODSAI_TEST_MODEL_REVISION,
+            revision=LATEST_PODSAI_MODEL_REVISION,
         ):
             pytest.skip(
                 f"Hub model '{PODSAI_TEST_MODEL_ID}' revision "
-                f"'{PODSAI_TEST_MODEL_REVISION}' is missing preprocessor_config.json."
+                f"'{LATEST_PODSAI_MODEL_REVISION}' is missing preprocessor_config.json."
             )
         return hf_snapshot_download(
             repo_id=PODSAI_TEST_MODEL_ID,
-            revision=PODSAI_TEST_MODEL_REVISION,
+            revision=LATEST_PODSAI_MODEL_REVISION,
+            allow_patterns=PODSAI_MODEL_ALLOW_PATTERNS,
         )
     except Exception:
         pytest.skip(
             f"HuggingFace Hub is not reachable; cannot load model "
-            f"'{PODSAI_TEST_MODEL_ID}' revision '{PODSAI_TEST_MODEL_REVISION}'"
+            f"'{PODSAI_TEST_MODEL_ID}' revision '{LATEST_PODSAI_MODEL_REVISION}'"
         )
 
 
@@ -63,7 +71,7 @@ def mock_podsai_model():
 
     # Define label mapping for multi-class model.
     # Current schema matches train_podsai_model.py:
-    # ["water", "resident", "transient", "humpback", "vessel", "jingle", "human"]
+    # ["water", "resident", "transient", "humpback", "vessel", "jingle", "human", "bird"]
     mock_config.id2label = {
         0: "water",
         1: "resident",
@@ -71,7 +79,8 @@ def mock_podsai_model():
         3: "humpback",
         4: "vessel",
         5: "jingle",
-        6: "human"
+        6: "human",
+        7: "bird",
     }
     mock_config.label2id = {
         "water": 0,
@@ -80,7 +89,8 @@ def mock_podsai_model():
         "humpback": 3,
         "vessel": 4,
         "jingle": 5,
-        "human": 6
+        "human": 6,
+        "bird": 7,
     }
 
     # Set metadata attributes that _print_model_metadata expects.
@@ -336,6 +346,7 @@ class TestPodsAIInferenceIndexing:
         assert "global_prediction" in result
         assert "global_confidence" in result
         assert "global_prediction_label" in result
+        assert "global_prediction_labels" in result
         assert "hop_duration" in result
         assert "segment_duration" in result
         
@@ -345,6 +356,7 @@ class TestPodsAIInferenceIndexing:
         assert isinstance(result["global_prediction"], int)
         assert isinstance(result["global_confidence"], float)
         assert isinstance(result["global_prediction_label"], str)
+        assert isinstance(result["global_prediction_labels"], list)
         assert isinstance(result["hop_duration"], float)
         assert isinstance(result["segment_duration"], float)
         
@@ -357,6 +369,239 @@ class TestPodsAIInferenceIndexing:
         assert all(isinstance(p, int) for p in result["local_predictions"])
         assert result["hop_duration"] == 2.0
         assert result["segment_duration"] == 3.0
+
+    @patch('podsai_inference.AutoModelForAudioClassification')
+    @patch('podsai_inference.AutoFeatureExtractor')
+    def test_global_prediction_preserves_multiple_qualifying_whale_classes(
+        self, mock_extractor_class, mock_model_class,
+        mock_feature_extractor
+    ):
+        """Positive labels remain ahead of negative labels, with event-count ordering."""
+        mock_model = Mock()
+        mock_config = Mock()
+        mock_config.id2label = {
+            0: "water", 1: "resident", 2: "transient", 3: "humpback",
+            4: "vessel", 5: "jingle", 6: "human", 7: "bird",
+        }
+        mock_config.label2id = {
+            label: class_id for class_id, label in mock_config.id2label.items()
+        }
+        mock_config._name_or_path = "test-model"
+        mock_config.architectures = ["Wav2Vec2ForSequenceClassification"]
+        mock_config.model_type = "wav2vec2"
+        mock_config._commit_hash = None
+        mock_model.config = mock_config
+        mock_model.to = Mock(return_value=mock_model)
+        mock_model.eval = Mock(return_value=mock_model)
+
+        predicted_ids = [
+            1, 1, 7, 2, 2, 7, 1, 1, 7, 2, 2, 7, 1, 1,
+        ]
+
+        def mock_forward(**kwargs):
+            batch_size = kwargs["input_values"].shape[0]
+            logits = []
+            for index in range(batch_size):
+                row = [-4.0] * 8
+                row[predicted_ids[index]] = 4.0
+                logits.append(row)
+            output = Mock()
+            output.logits = torch.tensor(logits)
+            return output
+
+        mock_model.side_effect = mock_forward
+        mock_extractor_class.from_pretrained = Mock(return_value=mock_feature_extractor)
+        mock_model_class.from_pretrained = Mock(return_value=mock_model)
+
+        from podsai_inference import PodsAIInference
+
+        model = PodsAIInference("test-model-path", min_num_positive_calls_threshold=2)
+        sr = 16000
+        audio = np.zeros(30 * sr, dtype=np.float32)
+        with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as audio_file:
+            sf.write(audio_file.name, audio, sr)
+            audio_path = audio_file.name
+        try:
+            result = model.predict(audio_path, segment_duration=3, hop_duration=2)
+        finally:
+            Path(audio_path).unlink(missing_ok=True)
+
+        assert result["global_prediction_label"] == "resident"
+        assert result["global_prediction_labels"] == ["resident", "transient", "bird"]
+        assert len(result["global_prediction_labels"]) == len(
+            set(result["global_prediction_labels"])
+        )
+
+    @patch('podsai_inference.AutoModelForAudioClassification')
+    @patch('podsai_inference.AutoFeatureExtractor')
+    def test_global_prediction_prioritizes_negative_labels_over_background_labels(
+        self, mock_extractor_class, mock_model_class,
+        mock_feature_extractor
+    ):
+        """Bird/jingle labels must be ordered before vessel/water when all qualify."""
+        mock_model = Mock()
+        mock_config = Mock()
+        mock_config.id2label = {
+            0: "water", 1: "resident", 2: "transient", 3: "humpback",
+            4: "vessel", 5: "jingle", 6: "human", 7: "bird",
+        }
+        mock_config.label2id = {
+            label: class_id for class_id, label in mock_config.id2label.items()
+        }
+        mock_config._name_or_path = "test-model"
+        mock_config.architectures = ["Wav2Vec2ForSequenceClassification"]
+        mock_config.model_type = "wav2vec2"
+        mock_config._commit_hash = None
+        mock_model.config = mock_config
+        mock_model.to = Mock(return_value=mock_model)
+        mock_model.eval = Mock(return_value=mock_model)
+
+        predicted_ids = [4, 5, 4, 7, 0, 5, 0, 7, 4, 7, 0, 4, 7, 4]
+
+        def mock_forward(**kwargs):
+            batch_size = kwargs["input_values"].shape[0]
+            logits = []
+            for index in range(batch_size):
+                row = [-4.0] * 8
+                row[predicted_ids[index]] = 4.0
+                logits.append(row)
+            output = Mock()
+            output.logits = torch.tensor(logits)
+            return output
+
+        mock_model.side_effect = mock_forward
+        mock_extractor_class.from_pretrained = Mock(return_value=mock_feature_extractor)
+        mock_model_class.from_pretrained = Mock(return_value=mock_model)
+
+        from podsai_inference import PodsAIInference
+
+        model = PodsAIInference("test-model-path", min_num_positive_calls_threshold=2)
+        sr = 16000
+        audio = np.zeros(30 * sr, dtype=np.float32)
+        with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as audio_file:
+            sf.write(audio_file.name, audio, sr)
+            audio_path = audio_file.name
+        try:
+            result = model.predict(audio_path, segment_duration=3, hop_duration=2)
+        finally:
+            Path(audio_path).unlink(missing_ok=True)
+
+        assert result["global_prediction_label"] == "bird"
+        assert result["global_prediction_labels"] == ["bird", "jingle", "vessel", "water"]
+
+    @patch('podsai_inference.AutoModelForAudioClassification')
+    @patch('podsai_inference.AutoFeatureExtractor')
+    def test_global_prediction_excludes_negative_labels_without_enough_non_adjacent_events(
+        self, mock_extractor_class, mock_model_class,
+        mock_feature_extractor
+    ):
+        """Bird/jingle need at least two non-adjacent events to be included."""
+        mock_model = Mock()
+        mock_config = Mock()
+        mock_config.id2label = {
+            0: "water", 1: "resident", 2: "transient", 3: "humpback",
+            4: "vessel", 5: "jingle", 6: "human", 7: "bird",
+        }
+        mock_config.label2id = {
+            label: class_id for class_id, label in mock_config.id2label.items()
+        }
+        mock_config._name_or_path = "test-model"
+        mock_config.architectures = ["Wav2Vec2ForSequenceClassification"]
+        mock_config.model_type = "wav2vec2"
+        mock_config._commit_hash = None
+        mock_model.config = mock_config
+        mock_model.to = Mock(return_value=mock_model)
+        mock_model.eval = Mock(return_value=mock_model)
+
+        predicted_ids = [7, 7, 4, 0, 4, 0, 4, 0, 4, 0, 5, 4, 0, 4]
+
+        def mock_forward(**kwargs):
+            batch_size = kwargs["input_values"].shape[0]
+            logits = []
+            for index in range(batch_size):
+                row = [-4.0] * 8
+                row[predicted_ids[index]] = 4.0
+                logits.append(row)
+            output = Mock()
+            output.logits = torch.tensor(logits)
+            return output
+
+        mock_model.side_effect = mock_forward
+        mock_extractor_class.from_pretrained = Mock(return_value=mock_feature_extractor)
+        mock_model_class.from_pretrained = Mock(return_value=mock_model)
+
+        from podsai_inference import PodsAIInference
+
+        model = PodsAIInference("test-model-path", min_num_positive_calls_threshold=2)
+        sr = 16000
+        audio = np.zeros(30 * sr, dtype=np.float32)
+        with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as audio_file:
+            sf.write(audio_file.name, audio, sr)
+            audio_path = audio_file.name
+        try:
+            result = model.predict(audio_path, segment_duration=3, hop_duration=2)
+        finally:
+            Path(audio_path).unlink(missing_ok=True)
+
+        assert result["global_prediction_labels"] == ["vessel", "water"]
+        assert "bird" not in result["global_prediction_labels"]
+        assert "jingle" not in result["global_prediction_labels"]
+
+    @patch('podsai_inference.AutoModelForAudioClassification')
+    @patch('podsai_inference.AutoFeatureExtractor')
+    def test_global_prediction_has_empty_labels_when_no_class_qualifies(
+        self, mock_extractor_class, mock_model_class,
+        mock_feature_extractor
+    ):
+        """No class should be emitted when all classes fail the non-adjacent threshold."""
+        mock_model = Mock()
+        mock_config = Mock()
+        mock_config.id2label = {
+            0: "water", 1: "resident", 2: "transient", 3: "humpback",
+            4: "vessel", 5: "jingle", 6: "human", 7: "bird",
+        }
+        mock_config.label2id = {
+            label: class_id for class_id, label in mock_config.id2label.items()
+        }
+        mock_config._name_or_path = "test-model"
+        mock_config.architectures = ["Wav2Vec2ForSequenceClassification"]
+        mock_config.model_type = "wav2vec2"
+        mock_config._commit_hash = None
+        mock_model.config = mock_config
+        mock_model.to = Mock(return_value=mock_model)
+        mock_model.eval = Mock(return_value=mock_model)
+
+        predicted_ids = [7, 7, 5, 5, 4, 4, 0, 0, 1, 1, 2, 2, 3, 3]
+
+        def mock_forward(**kwargs):
+            batch_size = kwargs["input_values"].shape[0]
+            logits = []
+            for index in range(batch_size):
+                row = [-4.0] * 8
+                row[predicted_ids[index]] = 4.0
+                logits.append(row)
+            output = Mock()
+            output.logits = torch.tensor(logits)
+            return output
+
+        mock_model.side_effect = mock_forward
+        mock_extractor_class.from_pretrained = Mock(return_value=mock_feature_extractor)
+        mock_model_class.from_pretrained = Mock(return_value=mock_model)
+
+        from podsai_inference import PodsAIInference
+
+        model = PodsAIInference("test-model-path", min_num_positive_calls_threshold=2)
+        sr = 16000
+        audio = np.zeros(30 * sr, dtype=np.float32)
+        with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as audio_file:
+            sf.write(audio_file.name, audio, sr)
+            audio_path = audio_file.name
+        try:
+            result = model.predict(audio_path, segment_duration=3, hop_duration=2)
+        finally:
+            Path(audio_path).unlink(missing_ok=True)
+
+        assert result["global_prediction_labels"] == []
     
     @patch('podsai_inference.AutoModelForAudioClassification')
     @patch('podsai_inference.AutoFeatureExtractor')
@@ -386,8 +631,19 @@ class TestPodsAIInferenceIndexing:
             assert result["local_predictions"] == []
             assert result["local_confidences"] == []
             assert result["local_probs"] == []
-            # global_prediction should be one of the negative classes (water=0, vessel=4, jingle=5, human=6).
-            assert result["global_prediction"] in [0, 4, 5, 6]
+            assert result["global_prediction_labels"] == []
+            assert result["per_class_probabilities"] == {
+                "water": 0.0,
+                "resident": 0.0,
+                "transient": 0.0,
+                "humpback": 0.0,
+                "vessel": 0.0,
+                "jingle": 0.0,
+                "human": 0.0,
+                "bird": 0.0,
+            }
+            # global_prediction should be one of the negative classes (water=0, vessel=4, jingle=5, human=6, bird=7).
+            assert result["global_prediction"] in [0, 4, 5, 6, 7]
             assert result["global_confidence"] == 0.0
             # Error returns must always include hop_duration and segment_duration (matching orcahello behavior).
             assert result["hop_duration"] == 2.0
@@ -405,14 +661,14 @@ class TestPodsAIInferenceIndexing:
         # Create mock model that returns known probabilities.
         mock_model = Mock()
         mock_config = Mock()
-        # Schema: water=0, resident=1, transient=2, humpback=3, vessel=4, jingle=5, human=6
+        # Schema: water=0, resident=1, transient=2, humpback=3, vessel=4, jingle=5, human=6, bird=7
         mock_config.id2label = {
             0: "water", 1: "resident", 2: "transient", 3: "humpback",
-            4: "vessel", 5: "jingle", 6: "human"
+            4: "vessel", 5: "jingle", 6: "human", 7: "bird",
         }
         mock_config.label2id = {
             "water": 0, "resident": 1, "transient": 2, "humpback": 3,
-            "vessel": 4, "jingle": 5, "human": 6
+            "vessel": 4, "jingle": 5, "human": 6, "bird": 7,
         }
         mock_model.config = mock_config
         mock_model.to = Mock(return_value=mock_model)
@@ -424,12 +680,12 @@ class TestPodsAIInferenceIndexing:
         mock_config._commit_hash = None  # Optional, can be None
         
         # Return known probabilities. Handles batched input.
-        # water=0.1, resident=0.4, transient=0.1, humpback=0.1, vessel=0.1, jingle=0.1, human=0.1
-        # Total negative (water+vessel+jingle+human) = 0.4, so call-likelihood should be 0.6.
+        # water=0.1, resident=0.4, transient=0.1, humpback=0.1, vessel=0.1, jingle=0.1, human=0.1, bird=0.1
+        # Total negative (water+vessel+jingle+human+bird) = 0.5, so call-likelihood should be 0.5.
         def mock_forward(**kwargs):
             # Logits that represent the desired distribution.
             batch_size = kwargs["input_values"].shape[0]
-            logits = torch.tensor([[0.1, 0.4, 0.1, 0.1, 0.1, 0.1, 0.1]]).repeat(batch_size, 1)
+            logits = torch.tensor([[0.1, 0.5, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]]).repeat(batch_size, 1)
             mock_output = Mock()
             mock_output.logits = logits
             return mock_output
@@ -452,6 +708,166 @@ class TestPodsAIInferenceIndexing:
 
     @patch('podsai_inference.AutoModelForAudioClassification')
     @patch('podsai_inference.AutoFeatureExtractor')
+    def test_deterministic_logits_per_class_probabilities_and_global_confidence(
+        self, mock_extractor_class, mock_model_class, mock_feature_extractor
+    ):
+        """Deterministic logits should produce expected per-class probabilities and global confidence.
+
+        This test creates three sliding-window segments and returns controlled logits
+        so that two segments predict a positive class (resident) and one predicts
+        a background class (vessel). We assert that per_class_probabilities for the
+        matching class equals the mean of the segment call-likelihoods for segments
+        locally predicted as that class, and that global_confidence equals the
+        resident class mean when resident qualifies.
+        """
+        mock_model = Mock()
+        mock_config = Mock()
+        mock_config.id2label = {
+            0: "water", 1: "resident", 2: "transient", 3: "humpback",
+            4: "vessel", 5: "jingle", 6: "human", 7: "bird",
+        }
+        mock_config.label2id = {label: cid for cid, label in mock_config.id2label.items()}
+        mock_config._name_or_path = "test-model"
+        mock_config.architectures = ["Wav2Vec2ForSequenceClassification"]
+        mock_config.model_type = "wav2vec2"
+        mock_config._commit_hash = None
+
+        mock_model.config = mock_config
+        mock_model.to = Mock(return_value=mock_model)
+        mock_model.eval = Mock(return_value=mock_model)
+
+        # Build three explicit probability vectors (they must be >0 and sum to 1).
+        probs0 = np.array([0.05, 0.7, 0.05, 0.05, 0.05, 0.05, 0.03, 0.02], dtype=np.float32)
+        probs1 = np.array([0.1, 0.5, 0.0, 0.0, 0.1, 0.05, 0.05, 0.2], dtype=np.float32)
+        probs2 = np.array([0.1, 0.05, 0.05, 0.05, 0.6, 0.02, 0.02, 0.11], dtype=np.float32)
+
+        def mock_forward(**kwargs):
+            batch_size = kwargs["input_values"].shape[0]
+            # Repeat the three-probability rows for the batch size (should equal 3)
+            logits = torch.log(torch.tensor([probs0, probs1, probs2], dtype=torch.float32))
+            # If the batch_size somehow differs, tile or slice appropriately.
+            if batch_size != logits.shape[0]:
+                logits = logits.repeat(int(np.ceil(batch_size / 3)), 1)[:batch_size]
+            output = Mock()
+            output.logits = logits
+            return output
+
+        mock_model.side_effect = mock_forward
+        mock_extractor_class.from_pretrained = Mock(return_value=mock_feature_extractor)
+        mock_model_class.from_pretrained = Mock(return_value=mock_model)
+
+        from podsai_inference import PodsAIInference
+
+        model = PodsAIInference("test-model-path")
+
+        # Create a short 6-second silent WAV that yields 3 positions with segment=2, hop=2
+        sr = 16000
+        audio = np.zeros(6 * sr, dtype=np.float32)
+        with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as audio_file:
+            sf.write(audio_file.name, audio, sr)
+            audio_path = audio_file.name
+        try:
+            result = model.predict(audio_path, segment_duration=2, hop_duration=2)
+        finally:
+            Path(audio_path).unlink(missing_ok=True)
+
+        # Compute expected call-likelihoods: 1 - sum(negative_class_probs)
+        neg_ids = {model.label2id[l] for l in ("water", "vessel", "jingle", "human", "bird") if l in model.label2id}
+        # helper to compute call-likelihood
+        def call_like(p):
+            return 1.0 - float(sum(p[list(neg_ids)]))
+
+        expected_cl0 = call_like(probs0)
+        expected_cl1 = call_like(probs1)
+        expected_cl2 = call_like(probs2)
+
+        # resident appears in segments 0 and 1; its per-class probability is the mean of those call-likelihoods
+        expected_resident_mean = (expected_cl0 + expected_cl1) / 2.0
+        # vessel appears only in segment 2; its per-class probability equals that segment's call-likelihood
+        expected_vessel_mean = expected_cl2
+
+        assert pytest.approx(result["per_class_probabilities"]["resident"], rel=1e-6) == expected_resident_mean
+        assert pytest.approx(result["per_class_probabilities"]["vessel"], rel=1e-6) == expected_vessel_mean
+        # resident should qualify and be chosen as global prediction with matching confidence
+        assert result["global_prediction_label"] == "resident"
+        assert pytest.approx(result["global_confidence"], rel=1e-6) == expected_resident_mean
+
+    @patch('podsai_inference.AutoModelForAudioClassification')
+    @patch('podsai_inference.AutoFeatureExtractor')
+    def test_deterministic_logits_background_global_confidence_matches_selected_class_probability(
+        self, mock_extractor_class, mock_model_class, mock_feature_extractor
+    ):
+        """When only background classes are present, global_confidence should
+        equal the mean probability of the selected background class while
+        per_class_probabilities remain whale-likelihood statistics.
+        """
+        mock_model = Mock()
+        mock_config = Mock()
+        mock_config.id2label = {
+            0: "water", 1: "resident", 2: "transient", 3: "humpback",
+            4: "vessel", 5: "jingle", 6: "human", 7: "bird",
+        }
+        mock_config.label2id = {label: cid for cid, label in mock_config.id2label.items()}
+        mock_config._name_or_path = "test-model"
+        mock_config.architectures = ["Wav2Vec2ForSequenceClassification"]
+        mock_config.model_type = "wav2vec2"
+        mock_config._commit_hash = None
+
+        mock_model.config = mock_config
+        mock_model.to = Mock(return_value=mock_model)
+        mock_model.eval = Mock(return_value=mock_model)
+
+        # All three segments predict water with high probability.
+        probs_w0 = np.array([0.9, 0.02, 0.02, 0.02, 0.02, 0.01, 0.01, 0.0], dtype=np.float32)
+        probs_w1 = probs_w0.copy()
+        probs_w2 = probs_w0.copy()
+
+        def mock_forward_background(**kwargs):
+            batch_size = kwargs["input_values"].shape[0]
+            logits = torch.log(torch.tensor([probs_w0, probs_w1, probs_w2], dtype=torch.float32))
+            if batch_size != logits.shape[0]:
+                logits = logits.repeat(int(np.ceil(batch_size / 3)), 1)[:batch_size]
+            output = Mock()
+            output.logits = logits
+            return output
+
+        mock_model.side_effect = mock_forward_background
+        mock_extractor_class.from_pretrained = Mock(return_value=mock_feature_extractor)
+        mock_model_class.from_pretrained = Mock(return_value=mock_model)
+
+        from podsai_inference import PodsAIInference
+
+        model = PodsAIInference("test-model-path")
+
+        sr = 16000
+        audio = np.zeros(6 * sr, dtype=np.float32)
+        with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as audio_file:
+            sf.write(audio_file.name, audio, sr)
+            audio_path = audio_file.name
+        try:
+            result = model.predict(audio_path, segment_duration=2, hop_duration=2)
+        finally:
+            Path(audio_path).unlink(missing_ok=True)
+
+        # Per-class values remain whale-call likelihoods; global background confidence
+        # is the mean model probability for the selected background class.
+        neg_ids = {model.label2id[l] for l in ("water", "vessel", "jingle", "human", "bird") if l in model.label2id}
+        def call_like(p):
+            return 1.0 - float(sum(p[list(neg_ids)]))
+
+        expected_water_mean = (call_like(probs_w0) + call_like(probs_w1) + call_like(probs_w2)) / 3.0
+        expected_water_probability = float(np.mean([
+            probs_w0[model.label2id["water"]],
+            probs_w1[model.label2id["water"]],
+            probs_w2[model.label2id["water"]],
+        ]))
+
+        assert result["global_prediction_label"] == "water"
+        assert pytest.approx(result["per_class_probabilities"]["water"], abs=1e-6) == expected_water_mean
+        assert pytest.approx(result["global_confidence"], abs=1e-6) == expected_water_probability
+
+    @patch('podsai_inference.AutoModelForAudioClassification')
+    @patch('podsai_inference.AutoFeatureExtractor')
     def test_ast_path_uses_segment_frame_length(
         self, mock_extractor_class, mock_model_class,
         mock_feature_extractor, synthetic_audio_60s
@@ -461,11 +877,11 @@ class TestPodsAIInferenceIndexing:
         mock_config = Mock()
         mock_config.id2label = {
             0: "water", 1: "resident", 2: "transient", 3: "humpback",
-            4: "vessel", 5: "jingle", 6: "human"
+            4: "vessel", 5: "jingle", 6: "human", 7: "bird",
         }
         mock_config.label2id = {
             "water": 0, "resident": 1, "transient": 2, "humpback": 3,
-            "vessel": 4, "jingle": 5, "human": 6
+            "vessel": 4, "jingle": 5, "human": 6, "bird": 7,
         }
         mock_config._name_or_path = "test-model"
         mock_config.architectures = ["ASTForAudioClassification"]
@@ -544,6 +960,29 @@ class TestPodsAIInferenceErrorHandling:
         assert mock_extractor_class.from_pretrained.call_count == 1
         assert mock_extractor_class.from_pretrained.call_args.args[0] == "test-model-path"
         assert mock_extractor_class.from_pretrained.call_args.kwargs.get("revision") == "deadbeef"
+
+    @patch('podsai_inference.AutoModelForAudioClassification')
+    @patch('podsai_inference.AutoFeatureExtractor')
+    def test_accepts_abiotic_as_background_class(
+        self, mock_extractor_class, mock_model_class,
+        mock_feature_extractor, mock_podsai_model
+    ):
+        """A model with abiotic as its background label passes initialization."""
+        mock_podsai_model.config.id2label = {
+            0: "abiotic", 1: "resident", 2: "transient", 3: "humpback"
+        }
+        mock_podsai_model.config.label2id = {
+            label: class_id
+            for class_id, label in mock_podsai_model.config.id2label.items()
+        }
+        mock_extractor_class.from_pretrained = Mock(return_value=mock_feature_extractor)
+        mock_model_class.from_pretrained = Mock(return_value=mock_podsai_model)
+
+        from podsai_inference import PodsAIInference
+
+        model = PodsAIInference("test-model-path")
+
+        assert model.negative_class_ids == {0}
     
     @patch('podsai_inference.AutoModelForAudioClassification')
     @patch('podsai_inference.AutoFeatureExtractor')
@@ -564,8 +1003,19 @@ class TestPodsAIInferenceErrorHandling:
         assert result["local_predictions"] == []
         assert result["local_confidences"] == []
         assert result["local_probs"] == []
-        # Should be one of the negative classes (water=0, vessel=4, jingle=5, human=6).
-        assert result["global_prediction"] in [0, 4, 5, 6]
+        assert result["global_prediction_labels"] == []
+        assert result["per_class_probabilities"] == {
+            "water": 0.0,
+            "resident": 0.0,
+            "transient": 0.0,
+            "humpback": 0.0,
+            "vessel": 0.0,
+            "jingle": 0.0,
+            "human": 0.0,
+            "bird": 0.0,
+        }
+        # Should be one of the negative classes (water=0, vessel=4, jingle=5, human=6, bird=7).
+        assert result["global_prediction"] in [0, 4, 5, 6, 7]
         assert result["global_confidence"] == 0.0
         # Error returns must always include hop_duration and segment_duration (matching orcahello behavior).
         assert result["hop_duration"] == 2.0
@@ -580,7 +1030,7 @@ class TestPodsAIInferenceErrorHandling:
         mock_extractor = Mock()
         mock_extractor_class.from_pretrained = Mock(return_value=mock_extractor)
         
-        # Create model with only positive classes (no water, vessel, jingle, human, or other).
+        # Create model with only positive classes (no water, vessel, jingle, human, or bird).
         mock_model = Mock()
         mock_config = Mock()
         mock_config.id2label = {0: "resident", 1: "transient", 2: "humpback"}

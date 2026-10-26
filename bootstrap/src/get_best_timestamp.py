@@ -102,7 +102,7 @@ def build_sample(node_slug: str, timestamp_str: str) -> dict:
     return {
         'Category': '',
         'NodeName': node_name,
-        'Timestamp': timestamp_str,
+        'StartTimestamp': timestamp_str,
         'URI': original_uri,
         'Description': '',
         'Notes': 'tp_human_only',

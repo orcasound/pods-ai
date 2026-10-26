@@ -94,6 +94,7 @@ class OrcaHelloSRKWInference(ModelInference):
         self,
         model_path: str = DEFAULT_MODEL_PATH,
         config: Optional[Dict] = None,
+        model_revision: Optional[str] = None,
     ) -> None:
         """Initialize the OrcaHello SRKW inference wrapper.
 
@@ -102,6 +103,7 @@ class OrcaHelloSRKWInference(ModelInference):
                         Defaults to "orcasound/orcahello-srkw-detector-v1".
             config: Optional configuration overrides as a nested dict.
                     If None, uses the default DetectorInferenceConfig values.
+            model_revision: Optional Hugging Face revision. Ignored for local paths.
 
         Raises:
             ImportError: If the orcahello submodule is not initialized.
@@ -112,16 +114,25 @@ class OrcaHelloSRKWInference(ModelInference):
         OrcaHelloSRKWDetectorV1, DetectorInferenceConfig = _get_orcahello_classes()
         self.inference_config = DetectorInferenceConfig.from_dict(config or {})
 
-        print(f"Loading OrcaHello SRKW detector from {model_path}...")
+        expanded_model_path = Path(model_path).expanduser()
+        is_local_model = expanded_model_path.exists()
+        load_path = str(expanded_model_path) if is_local_model else model_path
+        pretrained_kwargs = {}
+        if model_revision and not is_local_model:
+            pretrained_kwargs["revision"] = model_revision
+
+        revision_info = f" @ {model_revision}" if "revision" in pretrained_kwargs else ""
+        print(f"Loading OrcaHello SRKW detector from {load_path}{revision_info}...")
         try:
             self.model = OrcaHelloSRKWDetectorV1.from_pretrained(
-                model_path,
+                load_path,
                 config=self.inference_config.as_dict(),
+                **pretrained_kwargs,
             )
             self.model.eval()
         except Exception as e:
             raise RuntimeError(
-                f"Error loading OrcaHello model from {model_path}: {type(e).__name__}: {e}"
+                f"Error loading OrcaHello model from {load_path}: {type(e).__name__}: {e}"
             ) from e
 
         print(
@@ -154,13 +165,17 @@ class OrcaHelloSRKWInference(ModelInference):
                 wav_file_path, self.inference_config
             )
         except Exception as e:
-            print(f"Error running inference on {wav_file_path}: {type(e).__name__}: {e}")
+            error_message = (
+                f"{type(e).__name__}: {e}"
+            )
+            print(f"Error running inference on {wav_file_path}: {error_message}")
             return {
                 "local_predictions": [],
                 "local_confidences": [],
                 "global_prediction": 0,
                 "global_prediction_label": "other",
                 "global_confidence": 0.0,
+                "error": error_message,
                 "hop_duration": float(self.inference_config.inference.window_hop_s),
                 "segment_duration": float(self.inference_config.inference.window_s),
             }
@@ -178,15 +193,19 @@ class OrcaHelloSRKWInference(ModelInference):
 
 def get_orcahello_srkw_inference(
     model_path: str = OrcaHelloSRKWInference.DEFAULT_MODEL_PATH,
+    model_revision: Optional[str] = None,
     **kwargs,
 ) -> OrcaHelloSRKWInference:
     """Factory function to create an OrcaHelloSRKWInference instance.
 
     Args:
         model_path: HuggingFace Hub model ID or local path.
+        model_revision: Optional Hugging Face revision for Hub models.
         **kwargs: Additional arguments passed to OrcaHelloSRKWInference.
 
     Returns:
         OrcaHelloSRKWInference instance.
     """
-    return OrcaHelloSRKWInference(model_path, **kwargs)
+    return OrcaHelloSRKWInference(
+        model_path, model_revision=model_revision, **kwargs
+    )
