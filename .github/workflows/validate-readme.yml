@@ -8,6 +8,7 @@ on:
     paths:
       - README.md.template
       - model-comparison.txt
+      - ‎.github/workflows/validate-readme.yml
 
 permissions:
   contents: read
