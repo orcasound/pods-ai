@@ -233,7 +233,7 @@ def get_machine_detections(
     end_time: Optional[datetime] = None
 ) -> List[OrcaHelloDetection]:
     """
-    Retrieve machine detections and return those whose audio URI contains the given feed's node_name.
+    Retrieve machine detections associated with the given feed's node name.
     """
     if not COSMOS_KEY:
         raise ValueError("COSMOS_KEY environment variable must be set and non-empty to fetch machine detections")
