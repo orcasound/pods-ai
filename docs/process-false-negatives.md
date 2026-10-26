@@ -17,7 +17,7 @@ usage: process_false_negatives.py [-h] [--set SET] [--feed FEED] [--start YYYY_M
                                   [--orcahello-model-path ORCAHELLO_MODEL_PATH] [--detections-csv DETECTIONS_CSV]
                                   [--category CATEGORY]
 
-Process confirmed OrcaHello detections, find 60-second false negatives where PODS-AI misses resident calls, and append
+Process confirmed machine detections, find 60-second false negatives where PODS-AI misses resident calls, and append
 corrected resident sub-segments or testing samples to the corresponding manual-samples CSV.
 
 options:
