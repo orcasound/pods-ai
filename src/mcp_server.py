@@ -347,7 +347,7 @@ def compare_models_on_clip(
     Args:
         wav_path: Absolute path to a local .wav file.
         podsai_model_path: Path or HuggingFace Hub ID of the PODS-AI model to compare.
-                            Defaults to 'davethaler/whale-call-detector' if not provided.
+        Defaults to 'davethaler/whale-call-detector' if not provided.
 
     Returns:
         Comparison payload. Each model's details includes the optional
@@ -481,7 +481,9 @@ def generate_spectrogram(
 
     raise RuntimeError(f"Spectrogram generation failed for {wav_path}")
 
-
+# ---------------------------------------------------------------------------
+# Tool 8 — Export an unlabeled detections dataset to a CSV file.
+# ---------------------------------------------------------------------------
 @mcp.tool()
 def export_unlabeled_to_csv(
     node_name: str,

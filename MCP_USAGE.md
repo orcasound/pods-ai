@@ -167,6 +167,7 @@ The MCP server exposes these tools to AI assistants:
 4. **`get_sample_stats`** - Check training/testing data distribution
 5. **`find_unlabeled_detections`** - Find new detections not in training data
 6. **`compare_models_on_clip`** - Test OrcaHello and PODS-AI models on audio
-7. **`export_unlabeled_to_csv`** - Save new detections directly to CSV
+7. **`generate_spectrogram`** - generate a PNG spectrogram for a local WAV clip
+8. **`export_unlabeled_to_csv`** - Save new detections directly to CSV
 
 All tools work without AWS credentials (public data) except model comparison which requires ML dependencies from `requirements.txt`.
