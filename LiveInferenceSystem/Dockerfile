@@ -1,3 +1,5 @@
+# Copyright (c) PODS-AI contributors
+# SPDX-License-Identifier: MIT
 FROM ubuntu:26.04
 
 # System deps
@@ -45,6 +47,7 @@ EOF
 
 # At runtime, never hit the network for the model
 ENV HF_HUB_OFFLINE=1
+ENV PYTHONPATH=/usr/src/app:${PYTHONPATH}
 
 # App working directory
 WORKDIR /usr/src/app
