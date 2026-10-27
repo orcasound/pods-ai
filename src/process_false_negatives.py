@@ -127,9 +127,9 @@ def process_false_negatives(
             #Skip pods-ai detection
             model_id = getattr(detection, "modelId", None)
             if model_id is not None:
-                model_id_str = model_id.lower()
+                model_id = model_id.lower()
             else:
-                model_id_str = "Unknown"
+                model_id = "Unknown"
 
             if ("davethaler/whale-call-detector" in model_id):
                 continue
