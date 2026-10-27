@@ -124,14 +124,14 @@ def process_false_negatives(
             if end_time is not None and detection.timestamp > end_time:
                 continue
 
-            #Skip pods-ai detection
+            #Get model_id for tracing and skip PODS-AI detection
             model_id = getattr(detection, "modelId", None)
             if model_id is not None:
                 model_id = model_id.lower()
             else:
                 model_id = "Unknown"
 
-            if ("davethaler/whale-call-detector" in model_id):
+            if ("davethaler/whale-call-detector" == model_id):
                 continue
 
             summary["confirmed"] += 1
