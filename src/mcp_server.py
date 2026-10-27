@@ -452,7 +452,11 @@ def generate_spectrogram(
         output_file = Path(output_path)
         if not output_file.is_absolute():
             output_file = (path.parent / output_file).resolve()
-        if output_file.suffix.lower() not in ("", ".png"):
+        if output_file.is_dir():
+            output_file = output_file / f"{path.stem}.png"
+        elif output_file.suffix.lower() == "":
+            output_file = output_file.with_suffix(".png")
+        elif output_file.suffix.lower() != ".png":
             raise ValueError("output_path must be a .png file or a directory path.")
         resolved_output = output_file
 
