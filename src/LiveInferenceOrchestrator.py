@@ -9,17 +9,28 @@ import os
 import sys
 import time
 import uuid
+from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
-
 import requests
-from external.orcahello.InferenceSystem.src.model.types import DetectorInferenceConfig
-from pytz import timezone as pytz_tz
+
+external_src = (
+    Path(__file__).resolve().parents[1]
+    / "external"
+    / "orcahello"
+    / "InferenceSystem"
+    / "src"
+)
+if external_src.exists() and str(external_src) not in sys.path:
+    sys.path.insert(0, str(external_src))
 
 from model_inference import get_model_inference
+from pytz import timezone as pytz_tz
 from run_inference import build_tags_list
-
+from external.orcahello.InferenceSystem.src.LiveInferenceOrchestrator import apply_model_config_overrides
+from external.orcahello.InferenceSystem.src.model.types import DetectorInferenceConfig
+from external.orcahello.InferenceSystem.src.model.inference import OrcaHelloSRKWDetectorV1
 
 AZURE_STORAGE_ACCOUNT_NAME = "livemlaudiospecstorage"
 AZURE_STORAGE_AUDIO_CONTAINER_NAME = "audiowavs"
@@ -35,7 +46,6 @@ NEGATIVE_LABELS = {"abiotic", "other", "water", "vessel", "jingle", "human", "bi
 
 PODSAI_MODEL_ID = "davethaler/whale-call-detector"
 from model_revisions import LATEST_PODSAI_MODEL_REVISION
-
 
 def get_hydro_attributes_from_feed() -> dict:
     hydrophone_location_data = {}
@@ -55,24 +65,21 @@ def get_hydro_attributes_from_feed() -> dict:
                 "id": node_name,
                 "name": name,
                 "longitude": float(longitude),
-                "latitude": float(latitude),
+                "latitude": float(latitude)
             }
     except requests.exceptions.HTTPError as err:
         print(f"HTTP Error occurred: {err}")
+        # Print the raw text/JSON from the server which often contains the real error logs
         print("Server Response context:")
         print(response.text)
     return hydrophone_location_data
 
-
 source_guid_to_location = get_hydro_attributes_from_feed()
-
 
 def assemble_blob_uri(container_name: str, item_name: str) -> str:
     """Assemble a blob URI from account/container/item."""
     return "https://{acct}.blob.core.windows.net/{cont}/{item}".format(
-        acct=AZURE_STORAGE_ACCOUNT_NAME,
-        cont=container_name,
-        item=item_name,
+        acct=AZURE_STORAGE_ACCOUNT_NAME, cont=container_name, item=item_name
     )
 
 
@@ -150,6 +157,11 @@ def build_cosmosdb_metadata(
     )
 
     global_label = result.get("global_prediction_label", "")
+    local_labels = [
+        prediction_to_label(p, id2label)
+        for p in result.get("local_predictions", [])
+    ]
+
     tags = build_tags_list(result, id2label=id2label, negative_labels=negative_labels)
 
     return {
@@ -175,7 +187,7 @@ def parse_args() -> argparse.Namespace:
         "--orch_config",
         type=str,
         required=False,
-        help="Path to orchestrator config YAML (default: /config/config.yml).",
+        help="Path to orchestrator config YAML (default: ./LiveInferenceSystem/config.yml).",
     )
     parser.add_argument(
         "--max_live_iterations",
@@ -199,7 +211,9 @@ def parse_args() -> argparse.Namespace:
     args, _ = parser.parse_known_args()
 
     if args.orch_config:
-        print(f"Using orchestrator config from command line argument: {args.orch_config}")
+        print(
+            f"Using orchestrator config from command line argument: {args.orch_config}"
+        )
     else:
         args.orch_config = "/config/config.yml"
         print(f"Using orchestrator config from ConfigMap: {args.orch_config}")
@@ -234,57 +248,29 @@ def setup_logger(connection_string: Optional[str], log_level: str = "DEBUG") -> 
     return logger
 
 
-def apply_model_config_overrides(
-    model_config: Any,
-    overrides: Optional[dict[str, Any]] = None,
-    logger: Optional[logging.Logger] = None,
-) -> Any:
-    """Apply nested overrides onto a model config.
-
-    Supports both dict-like config objects with as_dict() and the detector config type
-    used by OrcaHello's model config YAML. Only nested keys present in the config are
-    changed; unknown sections/keys are skipped with a warning.
-    """
-    if overrides is None:
-        return model_config
-
-    config_dict = model_config.as_dict()
-    logger = logger or logging.getLogger(__name__)
-
-    for section, values in overrides.items():
-        if section not in config_dict:
-            logger.warning(f"model_config_overrides: unknown section '{section}', skipping")
-            continue
-        if not isinstance(values, dict):
-            logger.warning(f"model_config_overrides: section '{section}' must be a dict, skipping")
-            continue
-        for key, val in values.items():
-            if key not in config_dict[section]:
-                logger.warning(f"model_config_overrides: unknown key '{section}.{key}', skipping")
-                continue
-            config_dict[section][key] = val
-
-    return DetectorInferenceConfig.from_dict(config_dict)
-
-
 def load_model(orch_config: dict[str, Any], logger: logging.Logger) -> Any:
-    """Load the configured model and apply model_config_overrides if present."""
-    from external.orcahello.InferenceSystem.src.model.inference import OrcaHelloSRKWDetectorV1
-
+    """Load OrcaHelloSRKWDetectorV1 from HuggingFace (or local cache if HF_HUB_OFFLINE=1), applying any model_config_overrides from orch_config."""
     model_config = DetectorInferenceConfig.from_yaml(orch_config["model_config_path"])
+
     overrides = orch_config.get("model_config_overrides")
     if overrides:
         logger.info(f"Applying model config overrides: {overrides}")
         model_config = apply_model_config_overrides(model_config, overrides, logger)
 
-    repo_id = orch_config.get("model_hf_repo_id", "orcasound/orcahello-srkw-detector-v1")
+    repo_id = orch_config.get(
+        "model_hf_repo_id", "orcasound/orcahello-srkw-detector-v1"
+    )
     if os.getenv("HF_HUB_OFFLINE", "0") == "1":
-        logger.debug(f"Loading model from local HuggingFace cache (HF_HUB_OFFLINE=1): {repo_id}")
+        logger.debug(
+            f"Loading model from local HuggingFace cache (HF_HUB_OFFLINE=1): {repo_id}"
+        )
     else:
         logger.debug(f"Loading model from HuggingFace Hub: {repo_id}")
 
-    model = OrcaHelloSRKWDetectorV1.from_pretrained(repo_id, config=model_config.as_dict())
-    logger.debug(f"Model device: {model._device} | Dtype: {model._dtype}")
+    model = OrcaHelloSRKWDetectorV1.from_pretrained(
+        repo_id, config=model_config.as_dict()
+    )
+    logger.debug(f"Model device: {model._device}  |  Dtype: {model._dtype}")
     return model, model_config
 
 
@@ -364,8 +350,13 @@ def upload_detection_to_azure(
         container=AZURE_STORAGE_SPECTROGRAM_CONTAINER_NAME,
         blob=spectrogram_name,
     )
-    _upload_or_skip_existing(spectrogram_blob_client, spectrogram_path, spectrogram_name)
-    spectrogram_uri = assemble_blob_uri(AZURE_STORAGE_SPECTROGRAM_CONTAINER_NAME, spectrogram_name)
+    _upload_or_skip_existing(
+        spectrogram_blob_client, spectrogram_path, spectrogram_name
+    )
+    spectrogram_uri = assemble_blob_uri(
+        AZURE_STORAGE_SPECTROGRAM_CONTAINER_NAME,
+        spectrogram_name,
+    )
 
     metadata = build_cosmosdb_metadata(
         audio_uri,
@@ -429,20 +420,34 @@ def _process_segment(
         return
 
     start_timestamp = segment.start_iso
-    inference_overrides = (orch_config.get("model_config_overrides") or {}).get("inference", {}) or {}
+    inference_overrides = (
+        (orch_config.get("model_config_overrides") or {}).get("inference", {}) or {}
+    )
     result = model.predict(
         clip_path,
         segment_duration=int(orch_config.get("segment_duration", 3)),
-        hop_duration=float(inference_overrides.get("window_hop_s", orch_config.get("hop_duration", 2))),
+        hop_duration=float(
+            inference_overrides.get(
+                "window_hop_s", orch_config.get("hop_duration", 2)
+            )
+        ),
     )
 
     id2label = getattr(model, "id2label", None)
-    global_prediction_label = prediction_to_label(result.get("global_prediction_label", ""), id2label)
+    global_prediction_label = prediction_to_label(
+        result.get("global_prediction_label", ""),
+        id2label,
+    )
     global_confidence = float(result.get("global_confidence", 0.0))
     positive_segments = count_positive_segments(result, id2label=id2label)
-    global_threshold = (orch_config.get("model_config_overrides") or {}).get("global_prediction", {}).get("pred_global_threshold")
+    global_prediction_threshold = (
+        (orch_config.get("model_config_overrides") or {})
+        .get("global_prediction", {})
+        .get("pred_global_threshold")
+    )
     detected = is_positive_label(global_prediction_label) and (
-        global_threshold is None or global_confidence >= float(global_threshold)
+        global_prediction_threshold is None
+        or global_confidence >= float(global_prediction_threshold)
     )
 
     logger.info(
@@ -570,7 +575,9 @@ def run_loop(
                 segment_size=segment_size,
             )
 
-            logger.info(f"[iter {live_iteration_count}] LiveHLS poll: got {len(segments)} segments")
+            logger.info(
+                f"[iter {live_iteration_count}] LiveHLS poll: got {len(segments)} segments"
+            )
 
             for segment in segments:
                 _process_segment(
@@ -615,13 +622,16 @@ def main() -> int:
     with open(args.orch_config, encoding="utf-8") as f:
         orch_config = yaml.safe_load(f)
 
-    app_insights_connection_string = os.getenv("INFERENCESYSTEM_APPINSIGHTS_CONNECTION_STRING")
+    app_insights_connection_string = os.getenv(
+        "INFERENCESYSTEM_APPINSIGHTS_CONNECTION_STRING"
+    )
     logger = setup_logger(app_insights_connection_string, log_level=args.log_level)
 
-    model_id = orch_config.get("model_id", orch_config.get("model_hf_repo_id", PODSAI_MODEL_ID))
-    logger.info(f"Model ID: {model_id}")
     model, model_config = load_model(orch_config, logger)
-    logger.info("Model loaded")
+
+    model_id = orch_config.get("model_id") or orch_config.get(
+        "model_hf_repo_id", PODSAI_MODEL_ID
+    )
 
     blob_service_client, cosmos_client = setup_azure_clients(orch_config)
     orcasound_client = build_orcasound_client(orch_config)

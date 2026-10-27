@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+# !/usr/bin/env python3
 # Copyright (c) PODS-AI contributors
 # SPDX-License-Identifier: MIT
 """
@@ -22,128 +22,118 @@ Usage:
 """
 
 import dataclasses
+import os
 import sys
-import types
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple, Type, Union, get_args, get_origin
+from typing import Any, Dict, Optional, Tuple, Type, get_args, get_origin
 
 from model_inference import ModelInference
 
+try:
+    import yaml
+except ImportError:  # pragma: no cover
+    yaml = None
 
-def _resolve_nested_dataclass_type(field_type: Any) -> Optional[Type]:
-    """Resolve the dataclass type for a field, including Optional[T]."""
-    if isinstance(field_type, type):
-        return field_type if dataclasses.is_dataclass(field_type) else None
+
+def _coerce_dataclass_value(value: Any, field_type: Any) -> Any:
+    """Recursively coerce nested dicts into dataclass instances."""
+    if value is None:
+        if dataclasses.is_dataclass(field_type):
+            return field_type()
+        return None
 
     origin = get_origin(field_type)
-    union_types = {getattr(types, "UnionType", None), Union}
-    if origin in union_types:
-        args = [arg for arg in get_args(field_type) if arg is not type(None)]
-        if len(args) == 1:
-            return _resolve_nested_dataclass_type(args[0])
-    return None
-
-
-def _patch_detector_inference_config(detector_config_cls: Type) -> None:
-    """Patch the vendored DetectorInferenceConfig to support stable round-trips.
-
-    We intentionally do this in the wrapper layer instead of editing the external
-    submodule so the patch remains local to this repo while keeping the upstream
-    file unchanged.
-    """
-    if getattr(detector_config_cls, "_podsai_roundtrip_patched", False):
-        return
-
-    module = sys.modules.get(detector_config_cls.__module__)
-    nested_types = {
-        field.name: (
-            getattr(module, field_type.__name__, field_type)
-            if module is not None and hasattr(field_type, "__name__")
-            else field_type
-        )
-        for field in dataclasses.fields(detector_config_cls)
-        for field_type in [
-            _resolve_nested_dataclass_type(field.type)
-        ]
-        if field_type is not None
-    }
-
-    def _coerce(value: Any, target_type: Optional[Type]) -> Any:
-        if target_type is None:
+    if origin is not None:
+        args = get_args(field_type)
+        if type(None) in args and value is None:
+            return None
+        if origin in (list, tuple, set):
+            list_type = args[0] if args else None
+            if list_type is None:
+                return value
+            return [
+                _coerce_dataclass_value(item, list_type)
+                for item in value
+            ]
+        if origin is dict:
+            key_type, val_type = args if len(args) == 2 else (None, None)
+            if val_type is not None:
+                return {
+                    key: _coerce_dataclass_value(val, val_type)
+                    for key, val in value.items()
+                }
+        if origin is not None and not args:
             return value
-        if value is None:
-            return target_type() if dataclasses.is_dataclass(target_type) else value
-        if isinstance(value, target_type):
-            return value
-        if dataclasses.is_dataclass(value):
-            return value
+
+    if dataclasses.is_dataclass(field_type) and not isinstance(value, field_type):
         if isinstance(value, dict):
-            if not dataclasses.is_dataclass(target_type):
-                raise TypeError(
-                    f"Expected dataclass type, got {target_type!r} for {type(value).__name__}"
-                )
-            nested_target_types = {
-                nested_field.name: _resolve_nested_dataclass_type(nested_field.type)
-                for nested_field in dataclasses.fields(target_type)
-            }
-            resolved = {}
-            for field in dataclasses.fields(target_type):
-                if field.name not in value:
-                    continue
-                nested_target_type = nested_target_types.get(field.name)
-                resolved[field.name] = _coerce(value[field.name], nested_target_type)
-            return target_type(**resolved)
-        raise TypeError(
-            f"Expected {target_type.__name__} or dict, got {type(value).__name__}"
-        )
+            if hasattr(field_type, "from_dict") and callable(getattr(field_type, "from_dict")):
+                return field_type.from_dict(value)
+            return field_type(**value)
+        return value
 
-    def _patched_post_init(self):
-        for field in dataclasses.fields(self):
-            value = getattr(self, field.name)
-            target_type = nested_types.get(field.name)
-            if target_type is not None:
-                setattr(self, field.name, _coerce(value, target_type))
+    return value
 
-    def _patched_from_dict(cls, d: Optional[Dict[str, Any]]):
-        if d is None:
-            return cls()
-        if isinstance(d, cls):
-            return d
-        if not isinstance(d, dict):
-            raise TypeError(f"Expected dict or {cls.__name__}, got {type(d).__name__}")
 
-        resolved = {}
+def _patch_detector_inference_config(config_cls: Type) -> Type:
+    """Patch a config dataclass to support YAML/Dict loading with nested defaults."""
+    if getattr(config_cls, "_podsai_config_patched", False):
+        return config_cls
+
+    for field in dataclasses.fields(config_cls):
+        if dataclasses.is_dataclass(field.type) and not getattr(field.type, "_podsai_config_patched", False):
+            _patch_detector_inference_config(field.type)
+
+    def _from_dict(cls: Type, values: Optional[Dict[str, Any]] = None) -> Any:
+        payload = values or {}
+        if not isinstance(payload, dict):
+            raise TypeError(f"{cls.__name__}.from_dict() expects a dict, got {type(payload).__name__}")
+
+        kwargs: Dict[str, Any] = {}
         for field in dataclasses.fields(cls):
-            if field.name in d:
-                value = d[field.name]
-            elif field.default is not dataclasses.MISSING:
-                value = field.default
-            elif field.default_factory is not dataclasses.MISSING:
-                value = field.default_factory()
-            else:
-                value = getattr(cls, field.name, None)
+            field_value = payload.get(field.name, dataclasses.MISSING)
+            if field_value is dataclasses.MISSING:
+                if dataclasses.is_dataclass(field.type):
+                    kwargs[field.name] = field.type()
+                elif hasattr(cls, field.name):
+                    kwargs[field.name] = getattr(cls, field.name)
+                continue
+            if field_value is None and dataclasses.is_dataclass(field.type):
+                kwargs[field.name] = field.type()
+                continue
+            kwargs[field.name] = _coerce_dataclass_value(field_value, field.type)
 
-            target_type = nested_types.get(field.name)
-            if target_type is not None:
-                resolved[field.name] = _coerce(value, target_type)
-            else:
-                resolved[field.name] = value
-        return cls(**resolved)
+        return cls(**kwargs)
 
-    def _patched_from_yaml(cls, yaml_path: str):
-        import yaml
+    def _from_yaml(cls: Type, yaml_path: str) -> Any:
+        if not os.path.exists(yaml_path):
+            return cls.from_dict({})
+        if yaml is None:
+            raise ImportError("PyYAML is required to load config YAML files")
+        with open(yaml_path, "r", encoding="utf-8") as fh:
+            content = fh.read().strip()
 
-        try:
-            with open(yaml_path, "r", encoding="utf-8") as handle:
-                data = yaml.safe_load(handle) or {}
-        except FileNotFoundError:
-            data = {}
-        return cls.from_dict(data)
+        if not content:
+            return cls.from_dict({})
 
-    detector_config_cls.__post_init__ = _patched_post_init
-    detector_config_cls.from_dict = classmethod(_patched_from_dict)
-    detector_config_cls.from_yaml = classmethod(_patched_from_yaml)
-    detector_config_cls._podsai_roundtrip_patched = True
+        lines = content.splitlines()
+        nonempty = [line for line in lines if line.strip()]
+        if nonempty:
+            indents = [len(line) - len(line.lstrip(" \t")) for line in nonempty]
+            base_indent = min(indents) if indents else 0
+            normalized = "\n".join(
+                line[base_indent:] if line.strip() else "" for line in lines
+            )
+            payload = yaml.safe_load(normalized) or {}
+        else:
+            payload = {}
+
+        return cls.from_dict(payload)
+
+    config_cls.from_dict = classmethod(_from_dict)
+    config_cls.from_yaml = classmethod(_from_yaml)
+    config_cls._podsai_config_patched = True
+    return config_cls
 
 
 # Path to the orcahello submodule's model package.
@@ -191,7 +181,6 @@ def _get_orcahello_classes() -> Tuple[Type, Type]:
             f"Original error: {e}"
         ) from e
 
-    _patch_detector_inference_config(DetectorInferenceConfig)
     _ORCAHELLO_IMPORTS = (OrcaHelloSRKWDetectorV1, DetectorInferenceConfig)
     return _ORCAHELLO_IMPORTS
 
@@ -231,6 +220,7 @@ class OrcaHelloSRKWInference(ModelInference):
         super().__init__(model_path=model_path)
 
         OrcaHelloSRKWDetectorV1, DetectorInferenceConfig = _get_orcahello_classes()
+        _patch_detector_inference_config(DetectorInferenceConfig)
         self.inference_config = DetectorInferenceConfig.from_dict(config or {})
 
         expanded_model_path = Path(model_path).expanduser()

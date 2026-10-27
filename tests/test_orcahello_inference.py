@@ -1,4 +1,4 @@
-"""Tests for OrcaHello inference configuration compatibility."""
+"""Tests for OrcaHello/pods-ai inference configuration compatibility."""
 
 from dataclasses import dataclass
 

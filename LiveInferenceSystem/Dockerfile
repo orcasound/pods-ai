@@ -52,12 +52,8 @@ WORKDIR /usr/src/app
 # PODS-AI source code
 COPY ./src/ ./src/
 
-# OrcaHello source tree required by imports like:
-# from external.orcahello.InferenceSystem.src.model.types import DetectorInferenceConfig
-COPY ./external/ ./external/
-
-# Make sure the repo root is importable when the app runs
-ENV PYTHONPATH=/usr/src/app:${PYTHONPATH}
+# OrcaHello HLS client (required by LiveInferenceOrchestrator.py)
+COPY ./external/orcahello/InferenceSystem/src/orcasound_hls/ ./external/orcahello/InferenceSystem/src/orcasound_hls/
 
 ENTRYPOINT ["/usr/src/venv/bin/python3", "-u", "./src/LiveInferenceOrchestrator.py"]
 CMD []
