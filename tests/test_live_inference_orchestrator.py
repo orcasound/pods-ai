@@ -232,6 +232,8 @@ def test_build_cosmosdb_metadata_comments_appends_dominant_extra_class() -> None
         model_id="podsai-model",
     )
 
+    # Tags should only include srkw (positive label) and negative local (vessel)
+
     assert metadata["tags"] == "srkw;vessel"
 
 
