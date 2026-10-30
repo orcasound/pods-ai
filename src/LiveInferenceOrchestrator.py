@@ -12,7 +12,9 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
+
 import requests
+import yaml
 
 external_src = (
     Path(__file__).resolve().parents[1]
@@ -247,9 +249,72 @@ def setup_logger(connection_string: Optional[str], log_level: str = "DEBUG") -> 
     return logger
 
 
+def _normalize_yaml_payload(raw_text: str) -> str:
+    """Strip common indentation so YAML blocks parse reliably when nested under Python strings."""
+    if not raw_text.strip():
+        return ""
+    lines = raw_text.splitlines()
+    nonempty = [line for line in lines if line.strip()]
+    if not nonempty:
+        return ""
+    indent_widths = [len(line) - len(line.lstrip(" \t")) for line in nonempty]
+    base_indent = min(indent_widths) if indent_widths else 0
+    return "\n".join(
+        line[base_indent:] if line.strip() else "" for line in lines
+    )
+
+
+def _load_model_config(config_path: str) -> DetectorInferenceConfig:
+    """Load DetectorInferenceConfig from YAML while tolerating indented block strings."""
+    if not os.path.exists(config_path):
+        return DetectorInferenceConfig.from_dict({})
+
+    with open(config_path, "r", encoding="utf-8") as config_file:
+        raw_text = config_file.read()
+
+    normalized = _normalize_yaml_payload(raw_text)
+    payload = yaml.safe_load(normalized) if normalized.strip() else {}
+    return DetectorInferenceConfig.from_dict(payload or {})
+
+
+def apply_model_config_overrides(
+    model_config: DetectorInferenceConfig,
+    overrides: dict[str, Any],
+    logger: Optional[logging.Logger] = None,
+) -> DetectorInferenceConfig:
+    """Apply nested config overrides while preserving unrelated settings."""
+    logger = logger or logging.getLogger(__name__)
+    config_dict = model_config.as_dict()
+
+    for section, values in overrides.items():
+        if section not in config_dict:
+            logger.warning(f"model_config_overrides: unknown section '{section}', skipping")
+            continue
+        if not isinstance(values, dict):
+            logger.warning(f"model_config_overrides: section '{section}' must be a dict, skipping")
+            continue
+
+        section_dict = config_dict[section]
+        for key, new_value in values.items():
+            if key not in section_dict:
+                logger.warning(
+                    f"model_config_overrides: unknown key '{section}.{key}', skipping"
+                )
+                continue
+            if isinstance(section_dict.get(key), dict) and isinstance(new_value, dict):
+                current = section_dict[key] or {}
+                merged = dict(current)
+                merged.update(new_value)
+                section_dict[key] = merged
+            else:
+                section_dict[key] = new_value
+
+    return DetectorInferenceConfig.from_dict(config_dict)
+
+
 def load_model(orch_config: dict[str, Any], logger: logging.Logger) -> Any:
     """Load OrcaHelloSRKWDetectorV1 from HuggingFace (or local cache if HF_HUB_OFFLINE=1), applying any model_config_overrides from orch_config."""
-    model_config = DetectorInferenceConfig.from_yaml(orch_config["model_config_path"])
+    model_config = _load_model_config(orch_config["model_config_path"])
 
     overrides = orch_config.get("model_config_overrides")
     if overrides:

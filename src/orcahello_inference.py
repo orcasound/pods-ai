@@ -77,6 +77,8 @@ def _coerce_dataclass_value(value: Any, field_type: Any) -> Any:
 
 def _patch_detector_inference_config(config_cls: Type) -> Type:
     """Patch a config dataclass to support YAML/Dict loading with nested defaults."""
+    if not dataclasses.is_dataclass(config_cls):
+        return config_cls
     if getattr(config_cls, "_podsai_config_patched", False):
         return config_cls
 
