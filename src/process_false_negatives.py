@@ -126,7 +126,7 @@ def process_false_negatives(
 
             # Get model_id for tracing and skip PODS-AI detection.
             model_id = getattr(detection, "modelId", None)
-            if model_id is not None:
+            if isinstance(model_id, str) and model_id:
                 model_id = model_id.lower()
             else:
                 model_id = "Unknown"
