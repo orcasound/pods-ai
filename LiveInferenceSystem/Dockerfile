@@ -1,3 +1,5 @@
+# Copyright (c) PODS-AI contributors
+# SPDX-License-Identifier: MIT
 FROM ubuntu:26.04
 
 # System deps
@@ -45,6 +47,7 @@ EOF
 
 # At runtime, never hit the network for the model
 ENV HF_HUB_OFFLINE=1
+ENV PYTHONPATH=/usr/src/app:${PYTHONPATH}
 
 # App working directory
 WORKDIR /usr/src/app
@@ -52,8 +55,9 @@ WORKDIR /usr/src/app
 # PODS-AI source code
 COPY ./src/ ./src/
 
-# OrcaHello HLS client (required by LiveInferenceOrchestrator.py)
-COPY ./external/orcahello/InferenceSystem/src/orcasound_hls/ ./external/orcahello/InferenceSystem/src/orcasound_hls/
+# OrcaHello runtime dependency: copy the full InferenceSystem source tree so
+# imports like `from external.orcahello.InferenceSystem.src...` resolve.
+COPY ./external/orcahello/InferenceSystem/src/ ./external/orcahello/InferenceSystem/src/
 
 ENTRYPOINT ["/usr/src/venv/bin/python3", "-u", "./src/LiveInferenceOrchestrator.py"]
 CMD []

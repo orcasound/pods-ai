@@ -12,12 +12,26 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
+
 import requests
+import yaml
+
+external_src = (
+    Path(__file__).resolve().parents[1]
+    / "external"
+    / "orcahello"
+    / "InferenceSystem"
+    / "src"
+)
+if external_src.exists() and str(external_src) not in sys.path:
+    sys.path.insert(0, str(external_src))
 
 from model_inference import get_model_inference
 from pytz import timezone as pytz_tz
 from run_inference import build_tags_list
-
+from external.orcahello.InferenceSystem.src.LiveInferenceOrchestrator import apply_model_config_overrides
+from external.orcahello.InferenceSystem.src.model.types import DetectorInferenceConfig
+from external.orcahello.InferenceSystem.src.model.inference import OrcaHelloSRKWDetectorV1
 
 AZURE_STORAGE_ACCOUNT_NAME = "livemlaudiospecstorage"
 AZURE_STORAGE_AUDIO_CONTAINER_NAME = "audiowavs"
@@ -174,7 +188,7 @@ def parse_args() -> argparse.Namespace:
         "--orch_config",
         type=str,
         required=False,
-        help="Path to orchestrator config YAML (default: /config/config.yml).",
+        help="Path to orchestrator config YAML (default: ./LiveInferenceSystem/config.yml).",
     )
     parser.add_argument(
         "--max_live_iterations",
@@ -235,30 +249,93 @@ def setup_logger(connection_string: Optional[str], log_level: str = "DEBUG") -> 
     return logger
 
 
+def _normalize_yaml_payload(raw_text: str) -> str:
+    """Strip common indentation so YAML blocks parse reliably when nested under Python strings."""
+    if not raw_text.strip():
+        return ""
+    lines = raw_text.splitlines()
+    nonempty = [line for line in lines if line.strip()]
+    if not nonempty:
+        return ""
+    indent_widths = [len(line) - len(line.lstrip(" \t")) for line in nonempty]
+    base_indent = min(indent_widths) if indent_widths else 0
+    return "\n".join(
+        line[base_indent:] if line.strip() else "" for line in lines
+    )
+
+
+def _load_model_config(config_path: str) -> DetectorInferenceConfig:
+    """Load DetectorInferenceConfig from YAML while tolerating indented block strings."""
+    if not os.path.exists(config_path):
+        return DetectorInferenceConfig.from_dict({})
+
+    with open(config_path, "r", encoding="utf-8") as config_file:
+        raw_text = config_file.read()
+
+    normalized = _normalize_yaml_payload(raw_text)
+    payload = yaml.safe_load(normalized) if normalized.strip() else {}
+    return DetectorInferenceConfig.from_dict(payload or {})
+
+
+def apply_model_config_overrides(
+    model_config: DetectorInferenceConfig,
+    overrides: dict[str, Any],
+    logger: Optional[logging.Logger] = None,
+) -> DetectorInferenceConfig:
+    """Apply nested config overrides while preserving unrelated settings."""
+    logger = logger or logging.getLogger(__name__)
+    config_dict = model_config.as_dict()
+
+    for section, values in overrides.items():
+        if section not in config_dict:
+            logger.warning(f"model_config_overrides: unknown section '{section}', skipping")
+            continue
+        if not isinstance(values, dict):
+            logger.warning(f"model_config_overrides: section '{section}' must be a dict, skipping")
+            continue
+
+        section_dict = config_dict[section]
+        for key, new_value in values.items():
+            if key not in section_dict:
+                logger.warning(
+                    f"model_config_overrides: unknown key '{section}.{key}', skipping"
+                )
+                continue
+            if isinstance(section_dict.get(key), dict) and isinstance(new_value, dict):
+                current = section_dict[key] or {}
+                merged = dict(current)
+                merged.update(new_value)
+                section_dict[key] = merged
+            else:
+                section_dict[key] = new_value
+
+    return DetectorInferenceConfig.from_dict(config_dict)
+
+
 def load_model(orch_config: dict[str, Any], logger: logging.Logger) -> Any:
-    """Load PODS-AI model using the model_inference factory."""
-    model_path = orch_config.get("model_hf_repo_id", PODSAI_MODEL_ID)
-    model_revision = orch_config.get("model_hf_repo_revision", LATEST_PODSAI_MODEL_REVISION)
-    threshold = float(orch_config.get("threshold", 0.5))
-    min_num_positive_calls_threshold = int(
-        orch_config.get("min_num_positive_calls_threshold", 2)
-    )
-    device = orch_config.get("device")
+    """Load OrcaHelloSRKWDetectorV1 from HuggingFace (or local cache if HF_HUB_OFFLINE=1), applying any model_config_overrides from orch_config."""
+    model_config = _load_model_config(orch_config["model_config_path"])
 
-    kwargs: dict[str, Any] = {
-        "threshold": threshold,
-        "min_num_positive_calls_threshold": min_num_positive_calls_threshold,
-        "model_revision": model_revision,
-    }
-    if device:
-        kwargs["device"] = device
+    overrides = orch_config.get("model_config_overrides")
+    if overrides:
+        logger.info(f"Applying model config overrides: {overrides}")
+        model_config = apply_model_config_overrides(model_config, overrides, logger)
 
-    logger.debug(f"Loading PODS-AI model from {model_path}")
-    return get_model_inference(
-        model_type="podsai",
-        model_path=model_path,
-        **kwargs,
+    repo_id = orch_config.get(
+        "model_hf_repo_id", "orcasound/orcahello-srkw-detector-v1"
     )
+    if os.getenv("HF_HUB_OFFLINE", "0") == "1":
+        logger.debug(
+            f"Loading model from local HuggingFace cache (HF_HUB_OFFLINE=1): {repo_id}"
+        )
+    else:
+        logger.debug(f"Loading model from HuggingFace Hub: {repo_id}")
+
+    model = OrcaHelloSRKWDetectorV1.from_pretrained(
+        repo_id, config=model_config.as_dict()
+    )
+    logger.debug(f"Model device: {model._device}  |  Dtype: {model._dtype}")
+    return model, model_config
 
 
 def setup_azure_clients(orch_config: dict[str, Any]) -> tuple[Any, Any]:
@@ -407,10 +484,17 @@ def _process_segment(
         return
 
     start_timestamp = segment.start_iso
+    inference_overrides = (
+        (orch_config.get("model_config_overrides") or {}).get("inference", {}) or {}
+    )
     result = model.predict(
         clip_path,
         segment_duration=int(orch_config.get("segment_duration", 3)),
-        hop_duration=int(orch_config.get("hop_duration", 2)),
+        hop_duration=float(
+            inference_overrides.get(
+                "window_hop_s", orch_config.get("hop_duration", 2)
+            )
+        ),
     )
 
     id2label = getattr(model, "id2label", None)
@@ -420,7 +504,15 @@ def _process_segment(
     )
     global_confidence = float(result.get("global_confidence", 0.0))
     positive_segments = count_positive_segments(result, id2label=id2label)
-    detected = is_positive_label(global_prediction_label)
+    global_prediction_threshold = (
+        (orch_config.get("model_config_overrides") or {})
+        .get("global_prediction", {})
+        .get("pred_global_threshold")
+    )
+    detected = is_positive_label(global_prediction_label) and (
+        global_prediction_threshold is None
+        or global_confidence >= float(global_prediction_threshold)
+    )
 
     logger.info(
         f"Inference: prediction={global_prediction_label}, "
@@ -599,8 +691,11 @@ def main() -> int:
     )
     logger = setup_logger(app_insights_connection_string, log_level=args.log_level)
 
-    model_id = orch_config.get("model_id", orch_config.get("model_hf_repo_id", PODSAI_MODEL_ID))
-    model = load_model(orch_config, logger)
+    model, model_config = load_model(orch_config, logger)
+
+    model_id = orch_config.get("model_id") or orch_config.get(
+        "model_hf_repo_id", PODSAI_MODEL_ID
+    )
 
     blob_service_client, cosmos_client = setup_azure_clients(orch_config)
     orcasound_client = build_orcasound_client(orch_config)

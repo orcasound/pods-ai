@@ -5,6 +5,7 @@
 from unittest.mock import Mock, patch
 
 import LiveInferenceOrchestrator as orchestrator
+from external.orcahello.InferenceSystem.src.model.types import DetectorInferenceConfig
 
 
 @patch("LiveInferenceOrchestrator.requests.get")
@@ -18,10 +19,8 @@ def test_orcasound_attributes_pulled_from_feed(mock_get) -> None:
                 "attributes": {
                     "name": "Andrews Bay",
                     "node_name": "rpi_andrews_bay",
-                    "location_point": {
-                        "coordinates": [-123.166408, 48.546653]
-                    }
-                }
+                    "location_point": {"coordinates": [-123.166408, 48.546653]},
+                },
             }
         ]
     }
@@ -70,6 +69,116 @@ def test_build_prediction_list_filters_negative_labels() -> None:
     assert predictions[0]["duration"] == 3.0
     assert predictions[1]["label"] == "humpback"
     assert predictions[1]["startTime"] == 4.0
+
+
+def test_apply_model_config_overrides_deep_merges_nested_values() -> None:
+    """Nested model config overrides should override only the targeted keys."""
+    base = DetectorInferenceConfig.from_dict(
+        {"inference": {"max_batch_size": 16, "window_hop_s": 2.0}, "global_prediction": {"pred_global_threshold": 0.5}}
+    )
+    overrides = {
+        "inference": {"max_batch_size": 8},
+        "global_prediction": {"pred_global_threshold": 0.8},
+    }
+
+    result = orchestrator.apply_model_config_overrides(base, overrides)
+
+    assert result.inference.max_batch_size == 8
+    assert result.inference.window_hop_s == 2.0
+    assert result.global_prediction.pred_global_threshold == 0.8
+
+
+def test_apply_model_config_overrides_skips_unknown_custom_sections() -> None:
+    """Only supported DetectorInferenceConfig sections should be accepted."""
+    base = DetectorInferenceConfig.from_dict(
+        {"inference": {"max_batch_size": 16}, "global_prediction": {"pred_global_threshold": 0.5}}
+    )
+    overrides = {"custom": {"foo": "bar"}, "inference": {"max_batch_size": 8}}
+    logger = Mock()
+
+    result = orchestrator.apply_model_config_overrides(base, overrides, logger)
+
+    assert result.inference.max_batch_size == 8
+    logger.warning.assert_any_call("model_config_overrides: unknown section 'custom', skipping")
+
+
+def test_load_model_applies_known_overrides_before_from_pretrained(tmp_path) -> None:
+    """Supported overrides should be merged and forwarded to the model factory."""
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        """
+        inference:
+          window_s: 3.0
+          window_hop_s: 2.0
+          max_batch_size: 8
+          strict_segments: true
+        global_prediction:
+          pred_global_threshold: 0.6
+        """.strip()
+    )
+    orch_config = {
+        "model_config_path": str(config_path),
+        "model_hf_repo_id": "custom/model",
+        "model_config_overrides": {
+            "inference": {"max_batch_size": 4},
+            "global_prediction": {"pred_global_threshold": 0.8},
+        },
+    }
+    logger = Mock()
+
+    class DummyModel:
+        _device = "cpu"
+        _dtype = "float32"
+
+    with patch(
+        "external.orcahello.InferenceSystem.src.model.inference.OrcaHelloSRKWDetectorV1.from_pretrained",
+        return_value=DummyModel(),
+    ) as mock_from_pretrained:
+        model, model_config = orchestrator.load_model(orch_config, logger)
+
+    assert model._device == "cpu"
+    assert model_config.inference.max_batch_size == 4
+    assert model_config.global_prediction.pred_global_threshold == 0.8
+    assert mock_from_pretrained.call_args.kwargs["config"]["inference"]["max_batch_size"] == 4
+    assert (
+        mock_from_pretrained.call_args.kwargs["config"]["global_prediction"]["pred_global_threshold"]
+        == 0.8
+    )
+    assert mock_from_pretrained.call_args.args[0] == "custom/model"
+
+
+def test_process_segment_applies_inference_overrides() -> None:
+    """Process segment should honor nested inference overrides before calling model.predict."""
+    segment = Mock(
+        folder_epoch=1,
+        start_index=0,
+        end_index=1,
+        start_iso="2026-01-01T00:00:00Z",
+        duration_s=60.0,
+    )
+    segment.download_as_wav.return_value = "clip.wav"
+    model = Mock()
+    model.predict.return_value = {
+        "global_prediction_label": "resident",
+        "global_confidence": 0.7,
+        "local_predictions": [1],
+    }
+    config = {
+        "hls_hydrophone_id": "test",
+        "delete_local_wavs": True,
+        "upload_to_azure": False,
+        "model_config_overrides": {
+            "inference": {"window_hop_s": 1.5},
+            "global_prediction": {"pred_global_threshold": 0.8},
+        },
+    }
+    logger = Mock()
+
+    with patch("LiveInferenceOrchestrator.os.remove"):
+        orchestrator._process_segment(segment, model, config, None, None, logger, "model", ".")
+
+    model.predict.assert_called_once_with("clip.wav", segment_duration=3, hop_duration=1.5)
+    assert not any(call.args[0].startswith("Whale call detected") for call in logger.info.call_args_list)
 
 
 def test_build_cosmosdb_metadata_includes_multiclass_fields() -> None:
@@ -124,6 +233,7 @@ def test_build_cosmosdb_metadata_comments_appends_dominant_extra_class() -> None
     )
 
     # Tags should only include srkw (positive label) and negative local (vessel)
+
     assert metadata["tags"] == "srkw;vessel"
 
 
@@ -172,10 +282,7 @@ def test_upload_detection_to_azure_skips_existing_blobs(tmp_path) -> None:
     spectrogram_blob_client = Mock()
     spectrogram_blob_client.upload_blob.side_effect = BlobAlreadyExistsError()
     blob_service_client = Mock()
-    blob_service_client.get_blob_client.side_effect = [
-        audio_blob_client,
-        spectrogram_blob_client,
-    ]
+    blob_service_client.get_blob_client.side_effect = [audio_blob_client, spectrogram_blob_client]
 
     container = Mock()
     database = Mock()
