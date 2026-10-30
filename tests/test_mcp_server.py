@@ -224,7 +224,7 @@ class TestMCPServer(unittest.TestCase):
             output_file.write_bytes(b"png")
             return str(output_file)
 
-        mock_module.write_spectrogram = fake_write
+        mock_module.write_spectrogram = MagicMock(side_effect=fake_write)
 
         with tempfile.TemporaryDirectory() as tmpdir:
             wav_path = Path(tmpdir) / "clip.wav"
@@ -235,10 +235,12 @@ class TestMCPServer(unittest.TestCase):
             with patch.dict(sys.modules, {"spectrogram_visualizer": mock_module}):
                 dir_result = generate_spectrogram(str(wav_path), output_path=str(spectra_dir))
                 self.assertEqual(dir_result["png_path"], str(spectra_dir / "clip.png"))
+                self.assertEqual(mock_module.write_spectrogram.call_args_list[0].args[0], wav_path)
                 self.assertTrue((spectra_dir / "clip.png").exists())
 
                 file_result = generate_spectrogram(str(wav_path), output_path=str(Path(tmpdir) / "custom_name"))
                 self.assertEqual(file_result["png_path"], str(Path(tmpdir) / "custom_name.png"))
+                self.assertEqual(mock_module.write_spectrogram.call_args_list[1].args[0], wav_path)
                 self.assertTrue((Path(tmpdir) / "custom_name.png").exists())
 
     def test_generate_spectrogram_dependency_guard(self):
@@ -271,7 +273,7 @@ class TestMCPServer(unittest.TestCase):
             output.write_bytes(b"png-data")
             return str(output)
 
-        mock_module.write_spectrogram = fake_write
+        mock_module.write_spectrogram = MagicMock(side_effect=fake_write)
 
         with tempfile.TemporaryDirectory() as tmpdir:
             wav_path = Path(tmpdir) / "clip.wav"
@@ -286,6 +288,7 @@ class TestMCPServer(unittest.TestCase):
             self.assertEqual(result["output_path"], str(png_path))
             self.assertEqual(result["size_bytes"], png_path.stat().st_size)
             self.assertGreater(result["size_bytes"], 0)
+            self.assertEqual(mock_module.write_spectrogram.call_args.args[0], wav_path)
 
     @patch("model_inference.get_model_inference")
     @patch("mcp_server.Path.exists")
