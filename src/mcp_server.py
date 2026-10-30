@@ -448,26 +448,34 @@ def generate_spectrogram(
         raise ValueError("Only .wav files are supported.")
 
     resolved_output: Optional[Path] = None
-    default_png_path: Optional[Path] = None
     if output_path:
         output_file = Path(output_path)
         if not output_file.is_absolute():
             output_file = (path.parent / output_file).resolve()
         if output_file.is_dir():
             output_file = output_file / f"{path.stem}.png"
-            default_png_path = output_file
         elif output_file.suffix.lower() == "":
             output_file = output_file.with_suffix(".png")
         elif output_file.suffix.lower() != ".png":
             raise ValueError("output_path must be a .png file or a directory path.")
         resolved_output = output_file
-    else:
-        default_png_path = path.with_suffix(".png")
 
     logger.info("generate_spectrogram", wav=wav_path, output_path=str(resolved_output) if resolved_output else None)
 
-    if default_png_path is not None and default_png_path.exists():
-        raise FileExistsError(f"Spectrogram output already exists: {default_png_path}")
+    if output_path is None:
+        default_png_path = path.with_suffix(".png")
+        if default_png_path.exists():
+            raise FileExistsError(f"Spectrogram output already exists: {default_png_path}")
+    elif output_path:
+        resolved_dir = Path(output_path)
+        if not resolved_dir.is_absolute():
+            resolved_dir = (path.parent / resolved_dir).resolve()
+        if resolved_dir.is_dir():
+            directory_png = resolved_dir / f"{path.stem}.png"
+            if directory_png.exists():
+                raise FileExistsError(f"Spectrogram output already exists: {directory_png}")
+        if directory_png.exists():
+            raise FileExistsError(f"Spectrogram output already exists: {directory_png}")
 
     try:
         from spectrogram_visualizer import write_spectrogram
