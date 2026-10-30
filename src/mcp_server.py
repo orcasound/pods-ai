@@ -466,11 +466,14 @@ def generate_spectrogram(
         default_png_path = path.with_suffix(".png")
         if default_png_path.exists():
             raise FileExistsError(f"Spectrogram output already exists: {default_png_path}")
-    elif output_path and Path(output_path).is_dir():
+    elif output_path:
         resolved_dir = Path(output_path)
         if not resolved_dir.is_absolute():
             resolved_dir = (path.parent / resolved_dir).resolve()
-        directory_png = resolved_dir / f"{path.stem}.png"
+        if resolved_dir.is_dir():
+            directory_png = resolved_dir / f"{path.stem}.png"
+            if directory_png.exists():
+                raise FileExistsError(f"Spectrogram output already exists: {directory_png}")
         if directory_png.exists():
             raise FileExistsError(f"Spectrogram output already exists: {directory_png}")
 
