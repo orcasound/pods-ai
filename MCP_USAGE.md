@@ -11,7 +11,7 @@ To run this server, you need:
 *   **An AI Client**: Like Claude Desktop, Gemini, or VS Code (with an MCP plugin).
 
 > [!NOTE]
-> The base `requirements-mcp.txt` installs a minimal set of dependencies for basic data interrogation. Running the model comparison tool (`compare_models_on_clip`) requires the full ML/audio dependencies from the main `requirements.txt`.
+> The base `requirements-mcp.txt` installs a minimal set of dependencies for basic data interrogation. Running the model comparison tool (`compare_models_on_clip`) or the spectrogram tool (`generate_spectrogram`) requires the full ML/audio dependencies from the main `requirements.txt`.
 
 ## How it works
 
@@ -38,6 +38,9 @@ Because the tool names (like `get_recent_detections`) and their instructions are
    source .venv/bin/activate
    uv pip install -r requirements-mcp.txt
    ```
+
+   > [!NOTE]
+   > If you plan to use `compare_models_on_clip` or `generate_spectrogram`, install the full audio stack from `requirements.txt` instead of relying on the minimal `requirements-mcp.txt` install.
 
 3. **Test it (The "Inspector")**:
    Run this to see a web page with all the tools:
@@ -66,6 +69,9 @@ Because the tool names (like `get_recent_detections`) and their instructions are
    .venv\Scripts\activate
    uv pip install -r requirements-mcp.txt
    ```
+
+   > [!NOTE]
+   > If you plan to use `compare_models_on_clip` or `generate_spectrogram`, install the full audio stack from `requirements.txt` instead of relying on the minimal `requirements-mcp.txt` install.
 
 3. **Test it (The "Inspector")**:
    Run this to see a web page with all the tools:

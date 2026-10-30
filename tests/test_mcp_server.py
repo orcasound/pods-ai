@@ -254,15 +254,34 @@ class TestMCPServer(unittest.TestCase):
 
     def test_generate_spectrogram_requires_generated_file(self):
         mock_module = MagicMock()
-        mock_module.write_spectrogram = MagicMock(return_value=str(Path("/tmp/does-not-exist.png")))
 
         with tempfile.TemporaryDirectory() as tmpdir:
+            missing_png = Path(tmpdir) / "does-not-exist.png"
+            mock_module.write_spectrogram = MagicMock(return_value=str(missing_png))
             wav_path = Path(tmpdir) / "clip.wav"
             wav_path.write_bytes(b"not-really-audio")
 
             with patch.dict(sys.modules, {"spectrogram_visualizer": mock_module}):
                 with self.assertRaisesRegex(RuntimeError, "Spectrogram generation failed"):
                     generate_spectrogram(str(wav_path))
+
+    def test_generate_spectrogram_rejects_existing_default_or_directory_targets(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            wav_path = Path(tmpdir) / "clip.wav"
+            wav_path.write_bytes(b"not-really-audio")
+            default_png = wav_path.with_suffix(".png")
+            default_png.write_bytes(b"existing")
+
+            spectra_dir = Path(tmpdir) / "spectra"
+            spectra_dir.mkdir()
+            dir_png = spectra_dir / "clip.png"
+            dir_png.write_bytes(b"existing")
+
+            with patch.dict(sys.modules, {"spectrogram_visualizer": MagicMock()}):
+                with self.assertRaisesRegex(FileExistsError, "already exists"):
+                    generate_spectrogram(str(wav_path))
+                with self.assertRaisesRegex(FileExistsError, "already exists"):
+                    generate_spectrogram(str(wav_path), output_path=str(spectra_dir))
 
     def test_generate_spectrogram_returns_metadata(self):
         mock_module = MagicMock()
