@@ -59,7 +59,7 @@ from typing import Optional
 from urllib.parse import quote, unquote, urlparse, parse_qs
 
 import ffmpeg
-from pytz import timezone
+from pytz import AmbiguousTimeError, timezone
 
 from model_inference import get_model_inference
 from orcasite_feeds import get_orcasite_feeds, OrcasiteFeed
@@ -74,13 +74,13 @@ DEFAULT_OUTPUT_DIR = "new"  # Default output directory for segments.
 DEFAULT_MODEL_PATH = "davethaler/whale-call-detector"  # Default HuggingFace model ID.
 from model_revisions import LATEST_PODSAI_MODEL_REVISION
 DEFAULT_DETECTIONS_CSV = "bootstrap/csv/detections.csv"  # Default path to detections.csv
-PACIFIC_TZ = timezone("US/Pacific")  # Pacific timezone for timestamp formatting.
+PACIFIC_TZ = timezone("America/Los_Angeles")  # Pacific timezone for timestamp formatting.
 UTC_TZ = timezone("UTC")  # UTC timezone for URI generation.
 
 # Regex that matches filenames produced by download_wavs.py:
-# {node_name_with_hyphens}_{YYYY_MM_DD_HH_MM_SS_PST}.wav
+# {node_name_with_hyphens}_{YYYY_MM_DD_HH_MM_SS_{TZ}}.wav
 _FILENAME_PATTERN = re.compile(
-    r"^(?P<node>.+?)_(?P<ts>\d{4}_\d{2}_\d{2}_\d{2}_\d{2}_\d{2}_PST)\.wav$",
+    r"^(?P<node>.+?)_(?P<ts>\d{4}_\d{2}_\d{2}_\d{2}_\d{2}_\d{2}_(?:PST|PDT))\.wav$",
     re.IGNORECASE,
 )
 
@@ -133,7 +133,7 @@ def parse_node_and_timestamp_from_filename(wav_file: str) -> tuple[str, str]:
 
 def parse_timestamp_pst(timestamp_str: str) -> datetime:
     """
-    Parse a PST timestamp string in the format YYYY_MM_DD_HH_MM_SS_PST.
+    Parse a Pacific timestamp string in the format YYYY_MM_DD_HH_MM_SS_{TZ}.
 
     Args:
         timestamp_str: Timestamp string (e.g., "2025_12_24_17_51_23_PST").
@@ -141,9 +141,14 @@ def parse_timestamp_pst(timestamp_str: str) -> datetime:
     Returns:
         Parsed datetime object localized to the Pacific timezone.
     """
-    timestamp_str = timestamp_str.replace("_PST", "")
+    abbreviation = None
+    if timestamp_str.endswith(("_PST", "_PDT")):
+        timestamp_str, abbreviation = timestamp_str.rsplit("_", 1)
     dt_naive = datetime.strptime(timestamp_str, "%Y_%m_%d_%H_%M_%S")
-    return PACIFIC_TZ.localize(dt_naive)
+    try:
+        return PACIFIC_TZ.localize(dt_naive, is_dst=None)
+    except AmbiguousTimeError:
+        return PACIFIC_TZ.localize(dt_naive, is_dst=abbreviation == "PDT")
 
 
 def get_node_slug(node_name: str) -> str:

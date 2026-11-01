@@ -18,7 +18,7 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
-from pytz import timezone
+from pytz import AmbiguousTimeError, timezone
 import os
 import sys
 from tempfile import TemporaryDirectory
@@ -39,7 +39,7 @@ from src.audio_utils import (
 # Offset, in seconds, between the detection end time and the start of the downloaded audio.
 AUDIO_OFFSET_SECONDS: int = 2
 
-PACIFIC_TZ = timezone('US/Pacific')
+PACIFIC_TZ = timezone('America/Los_Angeles')
 UTC_TZ = timezone('UTC')
 PREFERRED_NOTES = {'tp_machine_only', 'fp_machine_only'}
 QUALITY_FILTER_TERMS = {'faint', 'distant', 'quiet', 'noise'}
@@ -58,14 +58,22 @@ OTHER_HUMPBACK_SAMPLES = len(glob.glob(str(REPO_ROOT / 'output' / 'wav' / 'humpb
 SEGMENT_DURATION_SECONDS = 3  # Default duration of each audio segment for model inference.
 
 def parse_timestamp(timestamp_str: str) -> datetime:
-    """Parse a PST timestamp string to datetime object."""
-    dt = datetime.strptime(timestamp_str, '%Y_%m_%d_%H_%M_%S_PST')
-    return PACIFIC_TZ.localize(dt)
+    """Parse a Pacific timestamp string in YYYY_MM_DD_HH_MM_SS_{TZ} format."""
+    abbreviation = None
+    if timestamp_str.endswith(('_PST', '_PDT')):
+        timestamp_str, abbreviation = timestamp_str.rsplit('_', 1)
+    else:
+        raise ValueError(f"Timestamp '{timestamp_str}' must end with '_PST' or '_PDT'")
+    dt = datetime.strptime(timestamp_str, '%Y_%m_%d_%H_%M_%S')
+    try:
+        return PACIFIC_TZ.localize(dt, is_dst=None)
+    except AmbiguousTimeError:
+        return PACIFIC_TZ.localize(dt, is_dst=abbreviation == 'PDT')
 
 
 def format_timestamp(dt: datetime) -> str:
-    """Format a datetime object to PST timestamp string."""
-    return dt.strftime('%Y_%m_%d_%H_%M_%S_PST')
+    """Format a datetime object as a Pacific timestamp string."""
+    return dt.astimezone(PACIFIC_TZ).strftime('%Y_%m_%d_%H_%M_%S_%Z')
 
 
 def subtract_segment_duration(timestamp_str: str, segment_duration: int = SEGMENT_DURATION_SECONDS) -> str:

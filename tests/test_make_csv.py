@@ -163,6 +163,18 @@ class TestProcessAllFeedsTimestampFilter:
         rows = self._run(dets)
         assert len(rows) == 3
 
+    def test_start_timestamp_uses_dynamic_pacific_abbreviation(self):
+        """CSV timestamps use PDT in summer and PST in winter."""
+        rows = self._run([
+            _make_det(_utc(2024, 7, 15, 12)),
+            _make_det(_utc(2024, 1, 15, 12)),
+        ])
+        timestamps = {row["StartTimestamp"] for row in rows}
+        assert timestamps == {
+            "2024_07_15_05_00_00_PDT",
+            "2024_01_15_04_00_00_PST",
+        }
+
     def test_end_time_excludes_later_detections(self):
         """Detections after end_time must not appear in the output."""
         end = parse_timestamp_pst("2026_03_17_00_00_00_PST")

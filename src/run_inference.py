@@ -26,6 +26,7 @@ from tempfile import TemporaryDirectory
 from typing import Any, Optional
 
 import ffmpeg
+from pytz import AmbiguousTimeError
 
 from audio_utils import (
     format_utc_iso_z,
@@ -51,9 +52,16 @@ NEGATIVE_LABELS = {"abiotic", "other", "water", "vessel", "jingle", "human", "bi
 
 
 def parse_pst_end_timestamp(timestamp_str: str) -> datetime:
-    """Parse PST end timestamp format YYYY_MM_DD_HH_MM_SS_PST."""
-    dt = datetime.strptime(timestamp_str, "%Y_%m_%d_%H_%M_%S_PST")
-    return PACIFIC_TZ.localize(dt)
+    """Parse a Pacific end timestamp in YYYY_MM_DD_HH_MM_SS_{TZ} format."""
+    if timestamp_str.endswith(("_PST", "_PDT")):
+        timestamp_str, abbreviation = timestamp_str.rsplit("_", 1)
+    else:
+        raise ValueError(f"Timestamp '{timestamp_str}' must end with '_PST' or '_PDT'")
+    dt = datetime.strptime(timestamp_str, "%Y_%m_%d_%H_%M_%S")
+    try:
+        return PACIFIC_TZ.localize(dt, is_dst=None)
+    except AmbiguousTimeError:
+        return PACIFIC_TZ.localize(dt, is_dst=abbreviation == "PDT")
 
 
 def parse_utc_start_timestamp(timestamp_str: str) -> datetime:
@@ -485,8 +493,8 @@ def main() -> int:
         "--end-timestamp-str",
         default=None,
         help=(
-            "PST end timestamp used with --node-name to download audio "
-            "(format: YYYY_MM_DD_HH_MM_SS_PST)."
+            "Pacific end timestamp used with --node-name to download audio "
+            "(format: YYYY_MM_DD_HH_MM_SS_{TZ})."
         ),
     )
     parser.add_argument(

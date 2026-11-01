@@ -5,7 +5,7 @@
 import csv
 import io
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import MagicMock, patch
@@ -59,14 +59,35 @@ class TestFormatTimestampPst:
 
     def test_roundtrip(self):
         """Formatting a parsed timestamp should reproduce the original string."""
-        original = "2025_06_01_08_15_30_PST"
+        original = "2025_06_01_08_15_30_PDT"
         dt = parse_timestamp_pst(original)
         assert format_timestamp_pst(dt) == original
 
-    def test_adds_pst_suffix(self):
-        """format_timestamp_pst should always end with _PST."""
+    def test_formats_winter_as_pst(self):
+        """January timestamps use the standard-time abbreviation."""
         dt = parse_timestamp_pst("2025_01_01_00_00_00_PST")
         assert format_timestamp_pst(dt).endswith("_PST")
+
+    @pytest.mark.parametrize(
+        ("utc_timestamp", "expected"),
+        [
+            (datetime(2024, 7, 15, 12, tzinfo=timezone.utc), "2024_07_15_05_00_00_PDT"),
+            (datetime(2024, 1, 15, 12, tzinfo=timezone.utc), "2024_01_15_04_00_00_PST"),
+            (datetime(2024, 3, 10, 9, 59, 59, tzinfo=timezone.utc), "2024_03_10_01_59_59_PST"),
+            (datetime(2024, 3, 10, 10, tzinfo=timezone.utc), "2024_03_10_03_00_00_PDT"),
+            (datetime(2024, 11, 3, 8, 59, 59, tzinfo=timezone.utc), "2024_11_03_01_59_59_PDT"),
+            (datetime(2024, 11, 3, 9, tzinfo=timezone.utc), "2024_11_03_01_00_00_PST"),
+        ],
+    )
+    def test_formats_dynamic_pacific_abbreviation(self, utc_timestamp, expected):
+        """UTC timestamps use the applicable Pacific standard or daylight abbreviation."""
+        assert format_timestamp_pst(utc_timestamp) == expected
+
+    def test_parses_repeated_fall_back_hour_using_suffix(self):
+        """The suffix identifies the occurrence during the repeated fall-back hour."""
+        pdt = parse_timestamp_pst("2024_11_03_01_30_00_PDT")
+        pst = parse_timestamp_pst("2024_11_03_01_30_00_PST")
+        assert (pst - pdt).total_seconds() == 3600
 
 
 # ---------------------------------------------------------------------------

@@ -16,12 +16,12 @@ from urllib.parse import quote, urlparse, parse_qs
 
 import ffmpeg
 import m3u8
-from pytz import timezone
+from pytz import AmbiguousTimeError, timezone
 import requests
 
 from add_samples import get_orcasite_feeds
 
-PACIFIC_TZ = timezone('US/Pacific')
+PACIFIC_TZ = timezone('America/Los_Angeles')
 N_SECONDS = 3  # Create 3-second wav files.
 TESTING_WINDOW_SECONDS = 60
 DEFAULT_DCLDE_MANIFEST = Path("output/csv/dclde_60s_samples.csv")
@@ -87,7 +87,7 @@ def parse_csv(csv_path: Path) -> List[CSVRow]:
 
 def parse_timestamp_pst(timestamp_str: str) -> datetime:
     """
-    Parse a PST timestamp string in the format YYYY_MM_DD_HH_MM_SS_PST.
+    Parse a Pacific timestamp string in the format YYYY_MM_DD_HH_MM_SS_{TZ}.
 
     Parameters:
         timestamp_str (str): Timestamp string (e.g., "2025_12_24_17_51_23_PST").
@@ -95,14 +95,18 @@ def parse_timestamp_pst(timestamp_str: str) -> datetime:
     Returns:
         datetime: Parsed datetime object with Pacific timezone.
     """
-    # Remove _PST suffix if present.
-    timestamp_str = timestamp_str.replace('_PST', '')
+    abbreviation = None
+    if timestamp_str.endswith(('_PST', '_PDT')):
+        timestamp_str, abbreviation = timestamp_str.rsplit('_', 1)
 
     # Parse the datetime.
     dt_naive = datetime.strptime(timestamp_str, "%Y_%m_%d_%H_%M_%S")
 
     # Localize to Pacific timezone.
-    dt_aware = PACIFIC_TZ.localize(dt_naive)
+    try:
+        dt_aware = PACIFIC_TZ.localize(dt_naive, is_dst=None)
+    except AmbiguousTimeError:
+        dt_aware = PACIFIC_TZ.localize(dt_naive, is_dst=abbreviation == 'PDT')
 
     return dt_aware
 
@@ -116,10 +120,10 @@ def add_seconds_to_timestamp_pst(timestamp_str: str, seconds: int) -> str:
         seconds (int): Number of seconds to add (or subtract if negative).
 
     Returns:
-        str: Adjusted timestamp in the format YYYY_MM_DD_HH_MM_SS_PST.
+        str: Adjusted timestamp in the format YYYY_MM_DD_HH_MM_SS_{TZ}.
     """
-    adjusted = parse_timestamp_pst(timestamp_str) + timedelta(seconds=seconds)
-    return adjusted.strftime("%Y_%m_%d_%H_%M_%S_PST")
+    adjusted = PACIFIC_TZ.normalize(parse_timestamp_pst(timestamp_str) + timedelta(seconds=seconds))
+    return adjusted.strftime("%Y_%m_%d_%H_%M_%S_%Z")
 
 
 def _training_window(row: CSVRow) -> tuple[datetime, datetime]:
@@ -345,9 +349,9 @@ def _format_timestamp_pst(dt: datetime) -> str:
         dt: Timezone-aware datetime to format in the Pacific timezone.
 
     Returns:
-        Timestamp string in ``YYYY_MM_DD_HH_MM_SS_PST`` format.
+        Timestamp string in ``YYYY_MM_DD_HH_MM_SS_{TZ}`` format.
     """
-    return dt.astimezone(PACIFIC_TZ).strftime("%Y_%m_%d_%H_%M_%S_PST")
+    return dt.astimezone(PACIFIC_TZ).strftime("%Y_%m_%d_%H_%M_%S_%Z")
 
 
 def _default_slug_from_node_name(node_name: str) -> str:
@@ -725,7 +729,7 @@ def validate_uri_timestamps(rows: list[CSVRow]) -> None:
             )
             continue
 
-        if uri_timestamp_pst != row.timestamp_pst:
+        if parse_timestamp_pst(uri_timestamp_pst) != parse_timestamp_pst(row.timestamp_pst):
             mismatches.append(
                 "Timestamp mismatch between CSV and URI:\n"
                 f"  csv: {row.node_name} {row.timestamp_pst}\n"
