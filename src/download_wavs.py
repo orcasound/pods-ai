@@ -695,7 +695,7 @@ def validate_aligned_entries(testing_rows: list[CSVRow]) -> None:
             continue
 
         _, corrected_timestamp_pst = _find_matching_detection(row)
-        if row.timestamp_pst != corrected_timestamp_pst:
+        if parse_timestamp_pst(row.timestamp_pst) != parse_timestamp_pst(corrected_timestamp_pst):
             corrected_row = _build_corrected_testing_row(row, corrected_timestamp_pst)
             mismatches.append(
                 "Unaligned false-positive testing row:\n"

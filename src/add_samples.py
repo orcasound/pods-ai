@@ -127,7 +127,7 @@ def parse_node_and_timestamp_from_filename(wav_file: str) -> tuple[str, str]:
             "Use --node-name and --timestamp to provide them explicitly."
         )
     node_name = match.group("node").replace("-", "_")
-    timestamp_str = match.group("ts")
+    timestamp_str = match.group("ts").upper()
     return node_name, timestamp_str
 
 
