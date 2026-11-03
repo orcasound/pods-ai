@@ -4,43 +4,81 @@
 
 echo "Applying Python 3.11 compatibility patch to fastai_audio..."
 
-# Find the fastai_audio installation directory using pip show
-AUDIO_PACKAGE_DIR=$(python3 -c "import sys; import site; print([p for p in sys.path if 'site-packages' in p][0])" 2>/dev/null)
+AUDIO_DATA_FILE=$(python3 - <<'PY'
+import os
+import sys
+import sysconfig
 
-if [ -z "$AUDIO_PACKAGE_DIR" ]; then
-    echo "Error: Could not find site-packages directory"
-    exit 1
-fi
+paths = [p for p in sys.path if p and os.path.isdir(p)]
+paths += [
+    sysconfig.get_paths().get('purelib'),
+    sysconfig.get_paths().get('platlib'),
+]
 
-# Look for the audio package
-AUDIO_DATA_FILE="${AUDIO_PACKAGE_DIR}/audio/data.py"
+seen = set()
+for base in paths:
+    if not base or base in seen:
+        continue
+    seen.add(base)
+    candidate = os.path.join(base, 'audio', 'data.py')
+    if os.path.isfile(candidate):
+        print(candidate)
+        raise SystemExit
 
-if [ ! -f "$AUDIO_DATA_FILE" ]; then
-    echo "Error: Could not find audio/data.py at $AUDIO_DATA_FILE"
-    echo "Checking if audio package is installed..."
-    python3 -c "import audio" 2>&1 || echo "audio package not found"
+for base in paths:
+    if not base:
+        continue
+    if 'site-packages' in base or 'dist-packages' in base:
+        for root, dirs, _ in os.walk(base):
+            if 'audio' in dirs:
+                candidate = os.path.join(root, 'audio', 'data.py')
+                if os.path.isfile(candidate):
+                    print(candidate)
+                    raise SystemExit
+print('')
+PY
+)
+
+if [ -z "$AUDIO_DATA_FILE" ]; then
+    echo "Error: Could not locate audio/data.py in any Python site-packages directory."
+    echo "fastai_audio may not be installed in this environment."
+    echo "Try: python -m pip install -r requirements.txt"
     exit 1
 fi
 
 echo "Found audio/data.py at: $AUDIO_DATA_FILE"
 
-# Create a backup
 cp "$AUDIO_DATA_FILE" "${AUDIO_DATA_FILE}.bak"
 
-# Apply the fix using sed
-# Change: sg_cfg: SpectrogramConfig = SpectrogramConfig()
-# To: sg_cfg: SpectrogramConfig = field(default_factory=SpectrogramConfig)
+python3 - "$AUDIO_DATA_FILE" <<'PY'
+import pathlib
+import sys
 
-# First, add 'field' to the dataclasses import
-sed -i 's/from dataclasses import dataclass, asdict/from dataclasses import dataclass, asdict, field/' "$AUDIO_DATA_FILE"
+path = pathlib.Path(sys.argv[1])
+text = path.read_text(encoding='utf-8')
+original = text
 
-# Then, fix the sg_cfg line
-sed -i 's/sg_cfg: SpectrogramConfig = SpectrogramConfig()/sg_cfg: SpectrogramConfig = field(default_factory=SpectrogramConfig)/' "$AUDIO_DATA_FILE"
+if 'from dataclasses import dataclass, asdict, field' not in text:
+    text = text.replace(
+        'from dataclasses import dataclass, asdict',
+        'from dataclasses import dataclass, asdict, field',
+    )
+
+if 'field(default_factory=SpectrogramConfig)' not in text:
+    text = text.replace(
+        'sg_cfg: SpectrogramConfig = SpectrogramConfig()',
+        'sg_cfg: SpectrogramConfig = field(default_factory=SpectrogramConfig)',
+    )
+
+if text == original:
+    raise SystemExit('No compatible patch targets found in audio/data.py')
+
+path.write_text(text, encoding='utf-8')
+PY
 
 echo "Patch applied successfully!"
 echo "Backup saved to: ${AUDIO_DATA_FILE}.bak"
 
-# Verify the patch was applied
 if grep -q "field(default_factory=SpectrogramConfig)" "$AUDIO_DATA_FILE"; then
     echo "✓ Patch verification successful: field(default_factory=SpectrogramConfig) found"
 else

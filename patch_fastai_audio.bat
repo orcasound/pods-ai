@@ -7,23 +7,27 @@ REM Based on https://github.com/orcasound/aifororcas-livesystem/blob/main/Infere
 
 echo Applying Python 3.11 compatibility patch to fastai_audio...
 
-REM Find the site-packages directory
-for /f "delims=" %%i in ('python -c "import sys; import site; print([p for p in sys.path if 'site-packages' in p][0])"') do set SITE_PACKAGES=%%i
+REM Resolve the actual audio/data.py path in whichever site-packages directory contains the package.
+for /f "delims=" %%i in ('python -c "import os, sys, sysconfig; paths=[p for p in sys.path if p and os.path.isdir(p)] + [sysconfig.get_paths().get('purelib'), sysconfig.get_paths().get('platlib')]; seen=set();
+for p in paths:
+    if p and p not in seen:
+        seen.add(p)
+        c=os.path.join(p,'audio','data.py')
+        if os.path.isfile(c):
+            print(c)
+            raise SystemExit
+for p in paths:
+    if 'site-packages' in p or 'dist-packages' in p:
+        for root, dirs, files in os.walk(p):
+            if 'audio' in dirs and os.path.isfile(os.path.join(root,'audio','data.py')):
+                print(os.path.join(root,'audio','data.py'))
+                raise SystemExit
+print('')"') do set AUDIO_DATA=%%i
 
-if "%SITE_PACKAGES%"=="" (
-    echo Error: Could not find site-packages directory
-    exit /b 1
-)
-
-echo Site-packages directory: %SITE_PACKAGES%
-
-REM Apply the patch to audio/data.py
-set AUDIO_DATA=%SITE_PACKAGES%\audio\data.py
-
-if not exist "%AUDIO_DATA%" (
-    echo Error: Could not find audio/data.py at %AUDIO_DATA%
-    echo Checking if audio package is installed...
-    python -c "import audio" 2>nul || echo audio package not found
+if "%AUDIO_DATA%"=="" (
+    echo Error: Could not locate audio/data.py in any Python site-packages directory.
+    echo fastai_audio may not be installed in this environment.
+    echo Try: python -m pip install -r requirements.txt
     exit /b 1
 )
 
@@ -34,13 +38,7 @@ copy "%AUDIO_DATA%" "%AUDIO_DATA%.bak" >nul
 
 echo Patching %AUDIO_DATA%...
 
-REM Apply the fix using Python to do replacements
-REM Change: from dataclasses import dataclass, asdict
-REM To: from dataclasses import dataclass, asdict, field
-REM Change: sg_cfg: SpectrogramConfig = SpectrogramConfig()
-REM To: sg_cfg: SpectrogramConfig = field(default_factory=SpectrogramConfig)
-
-python -c "import sys; content = open(r'%AUDIO_DATA%', 'r', encoding='utf-8').read(); content = content.replace('from dataclasses import dataclass, asdict', 'from dataclasses import dataclass, asdict, field').replace('sg_cfg: SpectrogramConfig = SpectrogramConfig()', 'sg_cfg: SpectrogramConfig = field(default_factory=SpectrogramConfig)'); open(r'%AUDIO_DATA%', 'w', encoding='utf-8').write(content)"
+python -c "import pathlib, sys; p = pathlib.Path(r'%AUDIO_DATA%'); text = p.read_text(encoding='utf-8'); original = text; text = text.replace('from dataclasses import dataclass, asdict', 'from dataclasses import dataclass, asdict, field') if 'from dataclasses import dataclass, asdict, field' not in text else text; text = text.replace('sg_cfg: SpectrogramConfig = SpectrogramConfig()', 'sg_cfg: SpectrogramConfig = field(default_factory=SpectrogramConfig)') if 'field(default_factory=SpectrogramConfig)' not in text else text; assert text != original, 'No compatible patch targets found in audio/data.py'; p.write_text(text, encoding='utf-8')"
 
 if %ERRORLEVEL% neq 0 (
     echo Error: Failed to apply patch
