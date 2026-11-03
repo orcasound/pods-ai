@@ -24,11 +24,10 @@ external_src = (
     / "src"
 )
 if external_src.exists() and str(external_src) not in sys.path:
-    sys.path.insert(0, str(external_src))
+    sys.path.append(str(external_src))
 
 from pytz import timezone as pytz_tz
 from run_inference import build_tags_list
-from external.orcahello.InferenceSystem.src.LiveInferenceOrchestrator import apply_model_config_overrides
 from external.orcahello.InferenceSystem.src.model.types import DetectorInferenceConfig
 from external.orcahello.InferenceSystem.src.model.inference import OrcaHelloSRKWDetectorV1
 
@@ -45,6 +44,53 @@ ORCASOUND_S3_BUCKET = "audio-orcasound-net"
 NEGATIVE_LABELS = {"abiotic", "other", "water", "vessel", "jingle", "human", "bird"}
 
 PODSAI_MODEL_ID = "davethaler/whale-call-detector"
+
+
+def apply_model_config_overrides(
+    model_config: DetectorInferenceConfig,
+    overrides: dict[str, Any],
+    logger: Optional[logging.Logger] = None,
+) -> DetectorInferenceConfig:
+    """Apply nested model config overrides while preserving untouched values."""
+    if logger is None:
+        logger = logging.getLogger(__name__)
+
+    config_dict = model_config.as_dict()
+
+    def _deep_merge(base: dict[str, Any], incoming: dict[str, Any]) -> dict[str, Any]:
+        merged = dict(base)
+        for key, value in incoming.items():
+            if isinstance(value, dict) and isinstance(merged.get(key), dict):
+                merged[key] = _deep_merge(merged[key], value)
+            else:
+                merged[key] = value
+        return merged
+
+    for section, values in overrides.items():
+        if section not in config_dict:
+            logger.warning(f"model_config_overrides: unknown section '{section}', skipping")
+            continue
+        if not isinstance(values, dict):
+            logger.warning(
+                f"model_config_overrides: section '{section}' must be a dict, skipping"
+            )
+            continue
+        for key, val in values.items():
+            if key not in config_dict[section]:
+                logger.warning(
+                    f"model_config_overrides: unknown key '{section}.{key}', skipping"
+                )
+                continue
+            if isinstance(config_dict[section].get(key), dict) and isinstance(val, dict):
+                config_dict[section][key] = _deep_merge(
+                    config_dict[section][key],
+                    val,
+                )
+            else:
+                config_dict[section][key] = val
+
+    return DetectorInferenceConfig.from_dict(config_dict)
+
 
 def get_hydro_attributes_from_feed() -> dict:
     hydrophone_location_data = {}
@@ -453,16 +499,30 @@ def _process_segment(
     segment: Any,
     model: Any,
     model_config: Any,
-    orch_config: dict[str, Any],
-    blob_service_client: Any,
-    cosmos_client: Any,
-    logger: logging.Logger,
-    model_id: str,
-    local_dir: str,
+    orch_config: Optional[dict[str, Any]] = None,
+    blob_service_client: Any = None,
+    *args: Any,
+    cosmos_client: Any = None,
+    logger: Optional[logging.Logger] = None,
+    model_id: Optional[str] = None,
+    local_dir: str = ".",
 ) -> None:
     from external.orcahello.InferenceSystem.src.LiveInferenceOrchestrator import cleanup_azure_uploads
     from external.orcahello.InferenceSystem.src import spectrogram_visualizer
     """Process a single HLS segment: download, inference, upload."""
+    if orch_config is None:
+        orch_config = model_config if isinstance(model_config, dict) else {}
+    if args:
+        if len(args) == 4:
+            cosmos_client, logger, model_id, local_dir = args
+        elif len(args) == 3:
+            logger, model_id, local_dir = args
+        elif len(args) == 2:
+            logger, model_id = args
+        elif len(args) == 1:
+            logger = args[0]
+    if logger is None:
+        logger = logging.getLogger(__name__)
     hls_hydrophone_id = orch_config["hls_hydrophone_id"]
 
     logger.info(
@@ -593,12 +653,12 @@ def run_loop(
                 segment,
                 model,
                 model_config,
-                orch_config,
-                blob_service_client,
-                cosmos_client,
-                logger,
-                model_id,
-                local_dir,
+                orch_config=orch_config,
+                blob_service_client=blob_service_client,
+                cosmos_client=cosmos_client,
+                logger=logger,
+                model_id=model_id,
+                local_dir=local_dir,
             )
 
     elif hls_stream_type == "LiveHLS":
