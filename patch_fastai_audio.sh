@@ -3,18 +3,44 @@
 
 set -e
 
+PYTHON_BIN="${PYTHON_BIN:-${PYTHON:-python}}"
+if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
+    if command -v python3 >/dev/null 2>&1; then
+        PYTHON_BIN=python3
+    elif command -v python >/dev/null 2>&1; then
+        PYTHON_BIN=python
+    else
+        echo "Error: No Python interpreter found on PATH."
+        exit 1
+    fi
+fi
+
 echo "Applying Python 3.11 compatibility patch to fastai_audio..."
 
-AUDIO_DATA_FILE=$(python3 - <<'PY'
+AUDIO_DATA_FILE=$("$PYTHON_BIN" - <<'PY'
 import os
 import sys
 import sysconfig
+
+try:
+    import site
+except ImportError:
+    site = None
 
 roots = [p for p in sys.path if p and os.path.isdir(p)]
 roots += [
     sysconfig.get_paths().get('purelib'),
     sysconfig.get_paths().get('platlib'),
 ]
+if site is not None:
+    try:
+        roots += site.getsitepackages()
+    except Exception:
+        pass
+    try:
+        roots += [site.getusersitepackages()]
+    except Exception:
+        pass
 seen = set()
 package_names = ['audio', 'fastaudio', 'fastai_audio']
 
@@ -32,7 +58,7 @@ for base in roots:
     if not base:
         continue
     if 'site-packages' in base or 'dist-packages' in base:
-        for root, dirs, _ in os.walk(base):
+        for root, _, _ in os.walk(base):
             for pkg in package_names:
                 candidate = os.path.join(root, pkg, 'data.py')
                 if os.path.isfile(candidate):
@@ -52,7 +78,7 @@ fi
 echo "Found patch target at: $AUDIO_DATA_FILE"
 cp "$AUDIO_DATA_FILE" "${AUDIO_DATA_FILE}.bak"
 
-python3 - "$AUDIO_DATA_FILE" <<'PY'
+"$PYTHON_BIN" - "$AUDIO_DATA_FILE" <<'PY'
 import pathlib
 import sys
 
