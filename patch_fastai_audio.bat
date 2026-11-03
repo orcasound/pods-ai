@@ -7,22 +7,29 @@ REM Based on https://github.com/orcasound/aifororcas-livesystem/blob/main/Infere
 
 echo Applying Python 3.11 compatibility patch to fastai_audio...
 
-REM Resolve the actual audio/data.py path in whichever site-packages directory contains the package.
-for /f "delims=" %%i in ('python -c "import os, sys, sysconfig; paths=[p for p in sys.path if p and os.path.isdir(p)] + [sysconfig.get_paths().get('purelib'), sysconfig.get_paths().get('platlib')]; seen=set();
-for p in paths:
-    if p and p not in seen:
-        seen.add(p)
-        c=os.path.join(p,'audio','data.py')
-        if os.path.isfile(c):
-            print(c)
-            raise SystemExit
-for p in paths:
-    if 'site-packages' in p or 'dist-packages' in p:
-        for root, dirs, files in os.walk(p):
-            if 'audio' in dirs and os.path.isfile(os.path.join(root,'audio','data.py')):
-                print(os.path.join(root,'audio','data.py'))
-                raise SystemExit
-print('')"') do set AUDIO_DATA=%%i
+set "TEMP_PY=%TEMP%\find_audio_data.py"
+> "%TEMP_PY%" (
+  echo import os, sys, sysconfig
+  echo paths = [p for p in sys.path if p and os.path.isdir(p)] + [sysconfig.get_paths().get("purelib"), sysconfig.get_paths().get("platlib")]
+  echo seen = set()
+  echo for p in paths:
+  echo     if p and p not in seen:
+  echo         seen.add(p)
+  echo         c = os.path.join(p, "audio", "data.py")
+  echo         if os.path.isfile(c):
+  echo             print(c)
+  echo             raise SystemExit
+  echo for p in paths:
+  echo     if "site-packages" in p or "dist-packages" in p:
+  echo         for root, dirs, _ in os.walk(p):
+  echo             if "audio" in dirs and os.path.isfile(os.path.join(root, "audio", "data.py")):
+  echo                 print(os.path.join(root, "audio", "data.py"))
+  echo                 raise SystemExit
+  echo print("")
+)
+
+for /f "delims=" %%i in ('python "%TEMP_PY%"') do set "AUDIO_DATA=%%i"
+del "%TEMP_PY%"
 
 if "%AUDIO_DATA%"=="" (
     echo Error: Could not locate audio/data.py in any Python site-packages directory.
@@ -38,12 +45,35 @@ copy "%AUDIO_DATA%" "%AUDIO_DATA%.bak" >nul
 
 echo Patching %AUDIO_DATA%...
 
-python -c "import pathlib, sys; p = pathlib.Path(r'%AUDIO_DATA%'); text = p.read_text(encoding='utf-8'); original = text; text = text.replace('from dataclasses import dataclass, asdict', 'from dataclasses import dataclass, asdict, field') if 'from dataclasses import dataclass, asdict, field' not in text else text; text = text.replace('sg_cfg: SpectrogramConfig = SpectrogramConfig()', 'sg_cfg: SpectrogramConfig = field(default_factory=SpectrogramConfig)') if 'field(default_factory=SpectrogramConfig)' not in text else text; assert text != original, 'No compatible patch targets found in audio/data.py'; p.write_text(text, encoding='utf-8')"
+set "PATCH_PY=%TEMP%\patch_audio_data.py"
+> "%PATCH_PY%" (
+  echo import pathlib, sys
+  echo path = pathlib.Path(sys.argv[1])
+  echo text = path.read_text(encoding="utf-8")
+  echo original = text
+  echo if "from dataclasses import dataclass, asdict, field" not in text:
+  echo     text = text.replace(
+  echo         "from dataclasses import dataclass, asdict",
+  echo         "from dataclasses import dataclass, asdict, field",
+  echo     )
+  echo if "field(default_factory=SpectrogramConfig)" not in text:
+  echo     text = text.replace(
+  echo         "sg_cfg: SpectrogramConfig = SpectrogramConfig()",
+  echo         "sg_cfg: SpectrogramConfig = field(default_factory=SpectrogramConfig)",
+  echo     )
+  echo if text == original:
+  echo     raise SystemExit("No compatible patch targets found in audio/data.py")
+  echo path.write_text(text, encoding="utf-8")
+)
 
+python "%PATCH_PY%" "%AUDIO_DATA%"
 if %ERRORLEVEL% neq 0 (
     echo Error: Failed to apply patch
+    del "%PATCH_PY%"
     exit /b 1
 )
+
+del "%PATCH_PY%"
 
 echo Patch applied successfully!
 echo Backup saved to: %AUDIO_DATA%.bak
