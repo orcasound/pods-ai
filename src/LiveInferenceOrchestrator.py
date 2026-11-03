@@ -542,6 +542,7 @@ def _process_segment(
 def run_loop(
     orcasound_client: Any,
     model: Any,
+    model_config: Any,
     orch_config: dict[str, Any],
     blob_service_client: Any,
     cosmos_client: Any,
@@ -591,6 +592,7 @@ def run_loop(
             _process_segment(
                 segment,
                 model,
+                model_config,
                 orch_config,
                 blob_service_client,
                 cosmos_client,
@@ -633,6 +635,7 @@ def run_loop(
                 _process_segment(
                     segment,
                     model,
+                    model_config,
                     orch_config,
                     blob_service_client,
                     cosmos_client,
@@ -689,6 +692,7 @@ def main() -> int:
     run_loop(
         orcasound_client,
         model,
+        model_config,
         orch_config,
         blob_service_client,
         cosmos_client,
