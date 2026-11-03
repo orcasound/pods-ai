@@ -26,7 +26,6 @@ external_src = (
 if external_src.exists() and str(external_src) not in sys.path:
     sys.path.insert(0, str(external_src))
 
-from model_inference import get_model_inference
 from pytz import timezone as pytz_tz
 from run_inference import build_tags_list
 from external.orcahello.InferenceSystem.src.LiveInferenceOrchestrator import apply_model_config_overrides
@@ -46,11 +45,13 @@ ORCASOUND_S3_BUCKET = "audio-orcasound-net"
 NEGATIVE_LABELS = {"abiotic", "other", "water", "vessel", "jingle", "human", "bird"}
 
 PODSAI_MODEL_ID = "davethaler/whale-call-detector"
-from model_revisions import LATEST_PODSAI_MODEL_REVISION
 
 def get_hydro_attributes_from_feed() -> dict:
     hydrophone_location_data = {}
     """Get the API data from the Orcasound feed."""
+    response = None
+    longitude = None
+    latitude = None
     try:
         response = requests.get("https://live.orcasound.net/api/json/feeds")
         response.raise_for_status()
@@ -60,19 +61,21 @@ def get_hydro_attributes_from_feed() -> dict:
             node_name = attributes.get("node_name")
             name = attributes.get("name")
             coordinates = attributes.get("location_point", {}).get("coordinates", [])
+            longitude_value = None
+            latitude_value = None
             if len(coordinates) == 2:
-                longitude, latitude = coordinates
+                longitude_value, latitude_value = coordinates
             hydrophone_location_data[node_name] = {
                 "id": node_name,
                 "name": name,
-                "longitude": float(longitude),
-                "latitude": float(latitude)
+                "longitude": float(longitude_value) if longitude_value is not None else None,
+                "latitude": float(latitude_value) if latitude_value is not None else None,
             }
     except requests.exceptions.HTTPError as err:
         print(f"HTTP Error occurred: {err}")
-        # Print the raw text/JSON from the server which often contains the real error logs
-        print("Server Response context:")
-        print(response.text)
+        if response is not None:
+            print("Server Response context:")
+            print(response.text)
     return hydrophone_location_data
 
 source_guid_to_location = get_hydro_attributes_from_feed()
@@ -294,41 +297,6 @@ def _load_model_config(config_path: str) -> DetectorInferenceConfig:
         return DetectorInferenceConfig.from_dict(payload or {})
 
 
-def apply_model_config_overrides(
-    model_config: DetectorInferenceConfig,
-    overrides: dict[str, Any],
-    logger: Optional[logging.Logger] = None,
-) -> DetectorInferenceConfig:
-    """Apply nested config overrides while preserving unrelated settings."""
-    logger = logger or logging.getLogger(__name__)
-    config_dict = model_config.as_dict()
-
-    for section, values in overrides.items():
-        if section not in config_dict:
-            logger.warning(f"model_config_overrides: unknown section '{section}', skipping")
-            continue
-        if not isinstance(values, dict):
-            logger.warning(f"model_config_overrides: section '{section}' must be a dict, skipping")
-            continue
-
-        section_dict = config_dict[section]
-        for key, new_value in values.items():
-            if key not in section_dict:
-                logger.warning(
-                    f"model_config_overrides: unknown key '{section}.{key}', skipping"
-                )
-                continue
-            if isinstance(section_dict.get(key), dict) and isinstance(new_value, dict):
-                current = section_dict[key] or {}
-                merged = dict(current)
-                merged.update(new_value)
-                section_dict[key] = merged
-            else:
-                section_dict[key] = new_value
-
-    return DetectorInferenceConfig.from_dict(config_dict)
-
-
 def load_model(orch_config: dict[str, Any], logger: logging.Logger) -> Any:
     """Load OrcaHelloSRKWDetectorV1 from HuggingFace (or local cache if HF_HUB_OFFLINE=1), applying any model_config_overrides from orch_config."""
     if "model_config_path" not in orch_config:
@@ -399,7 +367,7 @@ def build_orcasound_client(orch_config: dict[str, Any]) -> Any:
 
 def upload_detection_to_azure(
     clip_path: str,
-    spectrogram_path: str,
+    spectrogram_path: Optional[str],
     result: dict[str, Any],
     start_timestamp: str,
     hls_hydrophone_id: str,
@@ -411,6 +379,8 @@ def upload_detection_to_azure(
     negative_labels: Optional[set[str]] = None,
 ) -> tuple[str, str, str]:
     """Upload detection assets and metadata for a positive multiclass detection."""
+    if spectrogram_path is None:
+        raise ValueError("spectrogram_path is required for Azure uploads")
 
     def _upload_or_skip_existing(blob_client: Any, file_path: str, blob_name: str) -> None:
         try:
@@ -482,6 +452,7 @@ def count_positive_segments(
 def _process_segment(
     segment: Any,
     model: Any,
+    model_config: Any,
     orch_config: dict[str, Any],
     blob_service_client: Any,
     cosmos_client: Any,
@@ -489,7 +460,9 @@ def _process_segment(
     model_id: str,
     local_dir: str,
 ) -> None:
-    """Process a single HLS segment: download, inference, optional upload."""
+    from external.orcahello.InferenceSystem.src.LiveInferenceOrchestrator import cleanup_azure_uploads
+    from external.orcahello.InferenceSystem.src import spectrogram_visualizer
+    """Process a single HLS segment: download, inference, upload."""
     hls_hydrophone_id = orch_config["hls_hydrophone_id"]
 
     logger.info(
@@ -498,6 +471,7 @@ def _process_segment(
         f"start={segment.start_iso}, duration={segment.duration_s:.1f}s"
     )
 
+    # --- Download and convert to WAV ---
     try:
         clip_path = segment.download_as_wav(local_dir)
     except Exception as e:
@@ -505,57 +479,36 @@ def _process_segment(
         return
 
     start_timestamp = segment.start_iso
-    inference_overrides = (
-        (orch_config.get("model_config_overrides") or {}).get("inference", {}) or {}
-    )
-    result = model.predict(
-        clip_path,
-        segment_duration=int(orch_config.get("segment_duration", 3)),
-        hop_duration=float(
-            inference_overrides.get(
-                "window_hop_s", orch_config.get("hop_duration", 2)
-            )
-        ),
+    logger.info(
+        f"Processing clip: {os.path.basename(clip_path)}, "
+        f"start_timestamp={start_timestamp}"
     )
 
-    id2label = getattr(model, "id2label", None)
-    global_prediction_label = prediction_to_label(
-        result.get("global_prediction_label", ""),
-        id2label,
-    )
-    global_confidence = float(result.get("global_confidence", 0.0))
-    positive_segments = count_positive_segments(result, id2label=id2label)
-    global_prediction_threshold = (
-        (orch_config.get("model_config_overrides") or {})
-        .get("global_prediction", {})
-        .get("pred_global_threshold")
-    )
-    detected = is_positive_label(global_prediction_label) and (
-        global_prediction_threshold is None
-        or global_confidence >= float(global_prediction_threshold)
-    )
+    # --- Run inference ---
+    result = model.detect_srkw_from_file(clip_path, model_config)
+    result.print_summary(verbose=False)
 
     logger.info(
-        f"Inference: prediction={global_prediction_label}, "
-        f"confidence={global_confidence:.3f}, "
-        f"positive_segments={positive_segments}/{len(result.get('local_predictions', []))}",
+        f"Inference: prediction={result.global_prediction}, "
+        f"confidence={result.global_confidence:.3f}, "
+        f"positive_segments={sum(result.local_predictions)}/{len(result.local_predictions)}",
         extra={"custom_dimensions": {"Hydrophone ID": hls_hydrophone_id}},
     )
 
-    if detected or not orch_config["delete_local_wavs"]:
-        import spectrogram_visualizer
-
+    # Generate spectrogram only when it will be used.
+    if result.global_prediction == 1 or not orch_config["delete_local_wavs"]:
         spectrogram_path = spectrogram_visualizer.write_spectrogram(clip_path)
+        logger.debug(f"Generated spectrogram: {spectrogram_path}")
     else:
         spectrogram_path = None
 
-    if detected:
+    if result.global_prediction == 1:
         logger.info(
-            f"Whale call detected ({global_prediction_label}, confidence={global_confidence:.3f})",
+            f"Orca detected (confidence={result.global_confidence:.3f})",
             extra={"custom_dimensions": {"Hydrophone ID": hls_hydrophone_id}},
         )
-        if orch_config["upload_to_azure"] and spectrogram_path is not None:
-            upload_detection_to_azure(
+        if orch_config["upload_to_azure"]:
+            uploaded = upload_detection_to_azure(
                 clip_path,
                 spectrogram_path,
                 result,
@@ -565,13 +518,25 @@ def _process_segment(
                 blob_service_client,
                 cosmos_client,
                 logger,
-                id2label=id2label,
             )
+            if orch_config.get(
+                "cleanup_azure_uploads", False
+            ):  # Used for local testing only
+                cleanup_azure_uploads(
+                    [uploaded],
+                    blob_service_client,
+                    cosmos_client,
+                    hls_hydrophone_id,
+                    logger,
+                )
 
     if orch_config["delete_local_wavs"]:
         os.remove(clip_path)
+        deleted = [clip_path]
         if spectrogram_path is not None:
             os.remove(spectrogram_path)
+            deleted.append(spectrogram_path)
+        logger.debug(f"Deleted local files: {', '.join(deleted)}")
 
 
 def run_loop(
