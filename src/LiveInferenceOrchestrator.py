@@ -253,15 +253,29 @@ def _normalize_yaml_payload(raw_text: str) -> str:
     """Strip common indentation so YAML blocks parse reliably when nested under Python strings."""
     if not raw_text.strip():
         return ""
+
     lines = raw_text.splitlines()
     nonempty = [line for line in lines if line.strip()]
     if not nonempty:
         return ""
+
     indent_widths = [len(line) - len(line.lstrip(" \t")) for line in nonempty]
-    base_indent = min(indent_widths) if indent_widths else 0
-    return "\n".join(
-        line[base_indent:] if line.strip() else "" for line in lines
-    )
+    positive_indents = [indent for indent in indent_widths if indent > 0]
+    base_indent = min(positive_indents) if positive_indents else 0
+
+    normalized_lines: list[str] = []
+    for line in lines:
+        if not line.strip():
+            normalized_lines.append("")
+            continue
+
+        leading = len(line) - len(line.lstrip(" \t"))
+        if leading >= base_indent:
+            normalized_lines.append(line[base_indent:])
+        else:
+            normalized_lines.append(line)
+
+    return "\n".join(normalized_lines)
 
 
 def _load_model_config(config_path: str) -> DetectorInferenceConfig:
@@ -269,12 +283,15 @@ def _load_model_config(config_path: str) -> DetectorInferenceConfig:
     if not os.path.exists(config_path):
         return DetectorInferenceConfig.from_dict({})
 
-    with open(config_path, "r", encoding="utf-8") as config_file:
-        raw_text = config_file.read()
+    try:
+        return DetectorInferenceConfig.from_yaml(config_path)
+    except Exception:
+        with open(config_path, "r", encoding="utf-8") as config_file:
+            raw_text = config_file.read()
 
-    normalized = _normalize_yaml_payload(raw_text)
-    payload = yaml.safe_load(normalized) if normalized.strip() else {}
-    return DetectorInferenceConfig.from_dict(payload or {})
+        normalized = _normalize_yaml_payload(raw_text)
+        payload = yaml.safe_load(normalized) if normalized.strip() else {}
+        return DetectorInferenceConfig.from_dict(payload or {})
 
 
 def apply_model_config_overrides(

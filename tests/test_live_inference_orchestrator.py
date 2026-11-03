@@ -102,11 +102,12 @@ def test_apply_model_config_overrides_skips_unknown_custom_sections() -> None:
     logger.warning.assert_any_call("model_config_overrides: unknown section 'custom', skipping")
 
 
-def test_load_model_applies_known_overrides_before_from_pretrained(tmp_path) -> None:
-    """Supported overrides should be merged and forwarded to the model factory."""
+def test_load_model_uses_yaml_config_loader_and_applies_overrides(tmp_path) -> None:
+    """Model config should load through DetectorInferenceConfig.from_yaml before overrides are applied."""
     config_path = tmp_path / "config.yaml"
     config_path.write_text(
         """
+        ## test config
         inference:
           window_s: 3.0
           window_hop_s: 2.0
@@ -137,6 +138,7 @@ def test_load_model_applies_known_overrides_before_from_pretrained(tmp_path) -> 
         model, model_config = orchestrator.load_model(orch_config, logger)
 
     assert model._device == "cpu"
+    assert model_config.inference.window_s == 3.0
     assert model_config.inference.max_batch_size == 4
     assert model_config.global_prediction.pred_global_threshold == 0.8
     assert mock_from_pretrained.call_args.kwargs["config"]["inference"]["max_batch_size"] == 4
@@ -145,6 +147,29 @@ def test_load_model_applies_known_overrides_before_from_pretrained(tmp_path) -> 
         == 0.8
     )
     assert mock_from_pretrained.call_args.args[0] == "custom/model"
+
+
+def test_load_model_config_returns_detector_config_from_yaml_file(tmp_path) -> None:
+    """The YAML loader should produce a DetectorInferenceConfig instance even when file content is indented."""
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        """
+        inference:
+          window_s: 5.0
+          window_hop_s: 1.0
+          max_batch_size: 12
+        global_prediction:
+          pred_global_threshold: 0.9
+        """.strip()
+    )
+
+    model_config = orchestrator._load_model_config(str(config_path))
+
+    assert isinstance(model_config, DetectorInferenceConfig)
+    assert model_config.inference.window_s == 5.0
+    assert model_config.inference.window_hop_s == 1.0
+    assert model_config.inference.max_batch_size == 12
+    assert model_config.global_prediction.pred_global_threshold == 0.9
 
 
 def test_process_segment_applies_inference_overrides() -> None:
