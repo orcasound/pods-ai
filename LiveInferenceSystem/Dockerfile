@@ -55,6 +55,9 @@ WORKDIR /usr/src/app
 # PODS-AI source code
 COPY ./src/ ./src/
 
+# Copy the default detector config used by config.yml model_config_path.
+COPY ./external/orcahello/InferenceSystem/model/ ./model/
+
 # OrcaHello runtime dependency: copy the full InferenceSystem source tree so
 # imports like `from external.orcahello.InferenceSystem.src...` resolve.
 COPY ./external/orcahello/InferenceSystem/src/ ./external/orcahello/InferenceSystem/src/

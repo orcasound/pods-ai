@@ -86,6 +86,7 @@ Similar to [aifororcas-livesystem config files](https://github.com/orcasound/aif
 
 ```yaml
 model_hf_repo_id: "davethaler/whale-call-detector"
+model_config_path: "./model/config.yaml"
 threshold: 0.5
 min_num_positive_calls_threshold: 2
 

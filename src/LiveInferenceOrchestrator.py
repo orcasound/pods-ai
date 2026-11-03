@@ -281,7 +281,7 @@ def _normalize_yaml_payload(raw_text: str) -> str:
 def _load_model_config(config_path: str) -> DetectorInferenceConfig:
     """Load DetectorInferenceConfig from YAML while tolerating indented block strings."""
     if not os.path.exists(config_path):
-        return DetectorInferenceConfig.from_dict({})
+        raise FileNotFoundError(f"model_config_path does not exist: {config_path}")
 
     try:
         return DetectorInferenceConfig.from_yaml(config_path)
@@ -331,7 +331,11 @@ def apply_model_config_overrides(
 
 def load_model(orch_config: dict[str, Any], logger: logging.Logger) -> Any:
     """Load OrcaHelloSRKWDetectorV1 from HuggingFace (or local cache if HF_HUB_OFFLINE=1), applying any model_config_overrides from orch_config."""
-    model_config = _load_model_config(orch_config["model_config_path"])
+    if "model_config_path" not in orch_config:
+        raise KeyError("orch_config is missing required 'model_config_path'")
+
+    model_config_path = str(orch_config["model_config_path"])
+    model_config = _load_model_config(model_config_path)
 
     overrides = orch_config.get("model_config_overrides")
     if overrides:

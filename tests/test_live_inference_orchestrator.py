@@ -149,6 +149,22 @@ def test_load_model_uses_yaml_config_loader_and_applies_overrides(tmp_path) -> N
     assert mock_from_pretrained.call_args.args[0] == "custom/model"
 
 
+def test_load_model_requires_model_config_path() -> None:
+    """A PODS-AI orch_config should fail fast when model_config_path is omitted."""
+    orch_config = {
+        "model_hf_repo_id": "custom/model",
+        "model_config_overrides": {"inference": {"max_batch_size": 4}},
+    }
+    logger = Mock()
+
+    try:
+        orchestrator.load_model(orch_config, logger)
+    except KeyError as exc:
+        assert "model_config_path" in str(exc)
+    else:
+        raise AssertionError("Expected KeyError when model_config_path is missing")
+
+
 def test_load_model_config_returns_detector_config_from_yaml_file(tmp_path) -> None:
     """The YAML loader should produce a DetectorInferenceConfig instance even when file content is indented."""
     config_path = tmp_path / "config.yaml"
