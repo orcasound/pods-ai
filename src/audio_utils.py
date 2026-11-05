@@ -210,24 +210,15 @@ def format_timestamp_pacific(dt: datetime) -> str:
     return dt_pacific.strftime("%Y_%m_%d_%H_%M_%S_%Z")
 
 
-format_timestamp_pst = format_timestamp_pacific
-
-
 def parse_timestamp_pacific(ts_str: str) -> datetime:
     """
     Parse a Pacific timestamp string into a timezone-aware datetime.
     """
-    ts_str = ts_str.upper()
-    if ts_str.endswith(("_PST", "_PDT")):
-        body, abbreviation = ts_str.rsplit("_", 1)
-    else:
-        body, abbreviation = ts_str, "PST"
+    if not ts_str.upper().endswith(("_PST", "_PDT")):
+        raise ValueError(f"Timestamp '{ts_str}' must end with '_PST' or '_PDT'")
+    body, abbreviation = ts_str.upper().rsplit("_", 1)
     dt_naive = datetime.strptime(body, "%Y_%m_%d_%H_%M_%S")
     return PACIFIC_TZ.localize(dt_naive, is_dst=abbreviation == "PDT")
-
-
-parse_timestamp_pst = parse_timestamp_pacific
-
 
 def get_node_name_for_feed(feed: OrcasiteFeed) -> str:
     """Retrieve the node name associated with an OrcasiteFeed."""

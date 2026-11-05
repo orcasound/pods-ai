@@ -15,9 +15,7 @@ import pytest
 from model_revisions import LATEST_PODSAI_MODEL_REVISION
 from audio_utils import (
     format_timestamp_pacific,
-    format_timestamp_pst,
     parse_timestamp_pacific,
-    parse_timestamp_pst,
 )
 from add_samples import (
     DEFAULT_MODEL_PATH,
@@ -59,11 +57,6 @@ class TestParseTimestampPacific:
         assert pdt.tzname() == "PDT"
         assert pst.tzname() == "PST"
 
-    def test_parses_without_suffix_as_standard_time(self):
-        dt = parse_timestamp_pacific("2025_01_15_12_30_00")
-        assert dt.tzname() == "PST"
-
-
 class TestFormatTimestampPacific:
     """Tests for format_timestamp_pacific."""
 
@@ -72,10 +65,6 @@ class TestFormatTimestampPacific:
         original = "2025_06_01_08_15_30_PDT"
         dt = parse_timestamp_pacific(original)
         assert format_timestamp_pacific(dt) == original
-
-    def test_pst_formatter_alias_remains_available(self):
-        assert format_timestamp_pst is format_timestamp_pacific
-        assert parse_timestamp_pst is parse_timestamp_pacific
 
     def test_formats_winter_as_pst(self):
         """January timestamps use the standard-time abbreviation."""
@@ -102,31 +91,6 @@ class TestFormatTimestampPacific:
         pdt = parse_timestamp_pacific("2024_11_03_01_30_00_PDT")
         pst = parse_timestamp_pacific("2024_11_03_01_30_00_PST")
         assert (pst - pdt).total_seconds() == 3600
-
-    def test_legacy_summer_pst_csv_row_matches_pdt_filename(self, tmp_path):
-        detections_csv = tmp_path / "detections.csv"
-        with detections_csv.open("w", newline="", encoding="utf-8") as csv_file:
-            writer = csv.DictWriter(
-                csv_file,
-                fieldnames=["NodeName", "StartTimestamp", "URI", "Description", "Notes", "Tags"],
-            )
-            writer.writeheader()
-            writer.writerow({
-                "NodeName": "rpi_sunset_bay",
-                "StartTimestamp": "2024_07_12_16_58_11_PST",
-                "URI": "https://example.com/legacy",
-                "Description": "Human voices",
-                "Notes": "fp_machine_only",
-                "Tags": "human",
-            })
-
-        result = lookup_detection_in_csv(
-            "rpi_sunset_bay", "2024_07_12_16_58_11_PDT", str(detections_csv)
-        )
-
-        assert result is not None
-        assert result.uri == "https://example.com/legacy"
-        assert result.description == "Human voices"
 
     def test_fall_back_pst_row_does_not_match_distinct_pdt_instant(self, tmp_path):
         detections_csv = tmp_path / "detections.csv"

@@ -65,9 +65,12 @@ class TestParseTimestampPacific:
         assert dt_pst.minute == 0
         assert dt_pst.second == 0
 
-    def test_defaults_missing_suffix_to_standard_time(self):
-        """Suffix-less values retain the established PST default."""
-        assert parse_timestamp_pacific("2026_01_17_00_00_00").tzname() == "PST"
+    def test_missing_suffix_raises_value_error(self):
+        with pytest.raises(
+            ValueError,
+            match="Timestamp '2026_01_17_00_00_00' must end with '_PST' or '_PDT'",
+        ):
+            parse_timestamp_pacific("2026_01_17_00_00_00")
 
     def test_raises_on_invalid_format(self):
         """ValueError should be raised on an unparseable timestamp body."""

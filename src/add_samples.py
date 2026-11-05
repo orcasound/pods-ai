@@ -284,7 +284,7 @@ def generate_uri(node_name: str, timestamp_str: str) -> str:
 
 def lookup_detection_in_csv(node_name: str, timestamp_str: str, detections_csv: str) -> Optional[DetectionInfo]:
     """
-    Look up detection info in detections.csv by matching NodeName and timestamp instant.
+    Look up detection info in detections.csv by matching NodeName and StartTimestamp.
 
     Args:
         node_name: Hydrophone node name (e.g., "rpi_orcasound_lab").
@@ -300,18 +300,12 @@ def lookup_detection_in_csv(node_name: str, timestamp_str: str, detections_csv: 
         return None
 
     try:
-        requested_timestamp = parse_timestamp_pacific(timestamp_str)
+        requested_timestamp = timestamp_str.strip().upper()
         with open(detections_path, 'r', encoding='utf-8') as f:
             reader = csv.DictReader(f)
             for row in reader:
-                if row.get('NodeName', '') != node_name:
-                    continue
-                row_timestamp_str = (row.get('StartTimestamp') or '').strip()
-                try:
-                    row_timestamp = parse_timestamp_pacific(row_timestamp_str)
-                except ValueError:
-                    continue
-                if row_timestamp != requested_timestamp:
+                row_timestamp = (row.get('StartTimestamp') or '').strip().upper()
+                if row.get('NodeName', '') != node_name or row_timestamp != requested_timestamp:
                     continue
 
                 uri = row.get('URI', '').strip()
