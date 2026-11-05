@@ -28,7 +28,7 @@ try:
     from orcasite_feeds import OrcasiteFeed
 except ImportError:  # pragma: no cover
     from src.orcasite_feeds import OrcasiteFeed
-from pytz import AmbiguousTimeError, timezone
+from pytz import timezone
 import requests
 
 
@@ -204,25 +204,29 @@ def load_m3u8_with_retry(stream_url: str) -> m3u8.M3U8:
     raise last_exception
 
 
-def format_timestamp_pst(dt: datetime) -> str:
+def format_timestamp_pacific(dt: datetime) -> str:
     """Format a datetime in Pacific time as ``YYYY_MM_DD_HH_MM_SS_{TZ}``."""
     dt_pacific = dt.astimezone(PACIFIC_TZ)
     return dt_pacific.strftime("%Y_%m_%d_%H_%M_%S_%Z")
 
 
-def parse_timestamp_pst(ts_str: str) -> datetime:
+format_timestamp_pst = format_timestamp_pacific
+
+
+def parse_timestamp_pacific(ts_str: str) -> datetime:
     """
     Parse a Pacific timestamp string into a timezone-aware datetime.
     """
+    ts_str = ts_str.upper()
     if ts_str.endswith(("_PST", "_PDT")):
         body, abbreviation = ts_str.rsplit("_", 1)
     else:
-        raise ValueError(f"Timestamp '{ts_str}' must end with '_PST' or '_PDT'")
+        body, abbreviation = ts_str, "PST"
     dt_naive = datetime.strptime(body, "%Y_%m_%d_%H_%M_%S")
-    try:
-        return PACIFIC_TZ.localize(dt_naive, is_dst=None)
-    except AmbiguousTimeError:
-        return PACIFIC_TZ.localize(dt_naive, is_dst=abbreviation == "PDT")
+    return PACIFIC_TZ.localize(dt_naive, is_dst=abbreviation == "PDT")
+
+
+parse_timestamp_pst = parse_timestamp_pacific
 
 
 def get_node_name_for_feed(feed: OrcasiteFeed) -> str:
@@ -310,7 +314,7 @@ def get_machine_detections(
 
 
 def _get_aligned_end_time(timestamp_pst_str: str) -> datetime:
-    raw_end = parse_timestamp_pst(timestamp_pst_str)
+    raw_end = parse_timestamp_pacific(timestamp_pst_str)
     snapped_sec = ((raw_end.second + 9) // 10) * 10
     if snapped_sec == 60:
         # roll over to next minute.

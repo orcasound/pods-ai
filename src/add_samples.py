@@ -59,13 +59,14 @@ from typing import Optional
 from urllib.parse import quote, unquote, urlparse, parse_qs
 
 import ffmpeg
-from pytz import AmbiguousTimeError, timezone
+from pytz import timezone
 
 from model_inference import get_model_inference
 from orcasite_feeds import get_orcasite_feeds, OrcasiteFeed
 from audio_utils import (
     download_60s_audio,
-    format_timestamp_pst,
+    format_timestamp_pacific,
+    parse_timestamp_pacific,
 )
 
 SEGMENT_DURATION = 3  # Duration of each segment in seconds.
@@ -129,26 +130,6 @@ def parse_node_and_timestamp_from_filename(wav_file: str) -> tuple[str, str]:
     node_name = match.group("node").replace("-", "_")
     timestamp_str = match.group("ts").upper()
     return node_name, timestamp_str
-
-
-def parse_timestamp_pst(timestamp_str: str) -> datetime:
-    """
-    Parse a Pacific timestamp string in the format YYYY_MM_DD_HH_MM_SS_{TZ}.
-
-    Args:
-        timestamp_str: Timestamp string (e.g., "2025_12_24_17_51_23_PST").
-
-    Returns:
-        Parsed datetime object localized to the Pacific timezone.
-    """
-    abbreviation = None
-    if timestamp_str.endswith(("_PST", "_PDT")):
-        timestamp_str, abbreviation = timestamp_str.rsplit("_", 1)
-    dt_naive = datetime.strptime(timestamp_str, "%Y_%m_%d_%H_%M_%S")
-    try:
-        return PACIFIC_TZ.localize(dt_naive, is_dst=None)
-    except AmbiguousTimeError:
-        return PACIFIC_TZ.localize(dt_naive, is_dst=abbreviation == "PDT")
 
 
 def get_node_slug(node_name: str) -> str:
@@ -266,7 +247,7 @@ def parse_uri(uri: str) -> tuple[str, str]:
 
     utc_dt = UTC_TZ.localize(utc_dt)
     pst_dt = utc_dt.astimezone(PACIFIC_TZ)
-    timestamp_str = format_timestamp_pst(pst_dt)
+    timestamp_str = format_timestamp_pacific(pst_dt)
 
     return node_name, timestamp_str
 
@@ -289,7 +270,7 @@ def generate_uri(node_name: str, timestamp_str: str) -> str:
     slug = get_node_slug(node_name)
 
     # Parse timestamp and convert to UTC.
-    dt = parse_timestamp_pst(timestamp_str)
+    dt = parse_timestamp_pacific(timestamp_str)
     utc_dt = dt.astimezone(UTC_TZ)
 
     # Format as ISO 8601 with milliseconds and Z suffix.
@@ -303,7 +284,7 @@ def generate_uri(node_name: str, timestamp_str: str) -> str:
 
 def lookup_detection_in_csv(node_name: str, timestamp_str: str, detections_csv: str) -> Optional[DetectionInfo]:
     """
-    Look up detection info in detections.csv by matching NodeName and StartTimestamp.
+    Look up detection info in detections.csv by matching NodeName and timestamp instant.
 
     Args:
         node_name: Hydrophone node name (e.g., "rpi_orcasound_lab").
@@ -319,23 +300,32 @@ def lookup_detection_in_csv(node_name: str, timestamp_str: str, detections_csv: 
         return None
 
     try:
+        requested_timestamp = parse_timestamp_pacific(timestamp_str)
         with open(detections_path, 'r', encoding='utf-8') as f:
             reader = csv.DictReader(f)
             for row in reader:
-                # Match both NodeName and StartTimestamp.
-                if row.get('NodeName', '') == node_name and row.get('StartTimestamp', '') == timestamp_str:
-                    uri = row.get('URI', '').strip()
-                    description = row.get('Description', '').strip()
-                    notes = row.get('Notes', '').strip()
-                    tags = row.get('Tags', '').strip()
+                if row.get('NodeName', '') != node_name:
+                    continue
+                row_timestamp_str = (row.get('StartTimestamp') or '').strip()
+                try:
+                    row_timestamp = parse_timestamp_pacific(row_timestamp_str)
+                except ValueError:
+                    continue
+                if row_timestamp != requested_timestamp:
+                    continue
 
-                    if uri:
-                        print(f"Found detection in detections.csv:")
-                        print(f"  URI: {uri}")
-                        print(f"  Description: {description if description else '(empty)'}")
-                        print(f"  Notes: {notes if notes else '(empty)'}")
-                        print(f"  Tags: {tags if tags else '(empty)'}")
-                        return DetectionInfo(uri=uri, description=description, notes=notes, tags=tags)
+                uri = row.get('URI', '').strip()
+                description = row.get('Description', '').strip()
+                notes = row.get('Notes', '').strip()
+                tags = row.get('Tags', '').strip()
+
+                if uri:
+                    print(f"Found detection in detections.csv:")
+                    print(f"  URI: {uri}")
+                    print(f"  Description: {description if description else '(empty)'}")
+                    print(f"  Notes: {notes if notes else '(empty)'}")
+                    print(f"  Tags: {tags if tags else '(empty)'}")
+                    return DetectionInfo(uri=uri, description=description, notes=notes, tags=tags)
     except Exception as e:
         print(f"Warning: Failed to read detections.csv: {e}")
         return None
@@ -389,7 +379,7 @@ def split_wav_into_segments(
         num_positions = 1
 
     # Parse base timestamp and build filename prefix.
-    start_time = parse_timestamp_pst(start_timestamp)
+    start_time = parse_timestamp_pacific(start_timestamp)
     # Replace underscores with hyphens in the node name (matches download_wavs.py convention).
     node_name_in_filename = node_name.replace("_", "-")
 
@@ -397,7 +387,7 @@ def split_wav_into_segments(
     for pos_idx in range(num_positions):
         start_offset = pos_idx * hop_duration
         seg_time = start_time + timedelta(seconds=start_offset)
-        timestamp_str = format_timestamp_pst(seg_time)
+        timestamp_str = format_timestamp_pacific(seg_time)
         filename = f"{node_name_in_filename}_{timestamp_str}.wav"
         out_path = output_dir / filename
 
@@ -542,7 +532,7 @@ def add_training_3s_samples(
 
         # Download the 60-second WAV file.
         temp_dir = TemporaryDirectory()
-        min_end_timestamp_pst_str=format_timestamp_pst(parse_timestamp_pst(start_timestamp) + timedelta(seconds=60))
+        min_end_timestamp_pst_str=format_timestamp_pacific(parse_timestamp_pacific(start_timestamp) + timedelta(seconds=60))
         wav_path = download_60s_audio(
             node_name=node_name,
             min_end_timestamp_pst_str=min_end_timestamp_pst_str,

@@ -13,6 +13,12 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from model_revisions import LATEST_PODSAI_MODEL_REVISION
+from audio_utils import (
+    format_timestamp_pacific,
+    format_timestamp_pst,
+    parse_timestamp_pacific,
+    parse_timestamp_pst,
+)
 from add_samples import (
     DEFAULT_MODEL_PATH,
     DEFAULT_OUTPUT_DIR,
@@ -20,11 +26,10 @@ from add_samples import (
     SEGMENT_DURATION,
     add_testing_60s_sample,
     add_training_3s_samples,
-    format_timestamp_pst,
     get_segment_prediction,
+    lookup_detection_in_csv,
     main as add_samples_main,
     parse_node_and_timestamp_from_filename,
-    parse_timestamp_pst,
     split_wav_into_segments,
 )
 
@@ -34,12 +39,12 @@ from add_samples import (
 # ---------------------------------------------------------------------------
 
 
-class TestParseTimestampPst:
-    """Tests for parse_timestamp_pst."""
+class TestParseTimestampPacific:
+    """Tests for parse_timestamp_pacific."""
 
     def test_parses_timestamp_with_pst_suffix(self):
-        """parse_timestamp_pst should strip _PST and return a localized datetime."""
-        dt = parse_timestamp_pst("2025_01_15_12_30_00_PST")
+        """parse_timestamp_pacific should strip _PST and return a localized datetime."""
+        dt = parse_timestamp_pacific("2025_01_15_12_30_00_PST")
         assert dt.year == 2025
         assert dt.month == 1
         assert dt.day == 15
@@ -47,26 +52,35 @@ class TestParseTimestampPst:
         assert dt.minute == 30
         assert dt.second == 0
 
-    def test_parses_timestamp_without_pst_suffix(self):
-        """parse_timestamp_pst should also accept strings without _PST."""
-        dt = parse_timestamp_pst("2025_01_15_12_30_00")
-        assert dt.year == 2025
-        assert dt.hour == 12
+    def test_parses_daylight_and_standard_time_without_exception(self):
+        """Both suffixes parse and retain their correct Pacific offset."""
+        pdt = parse_timestamp_pacific("2025_07_15_12_30_00_PDT")
+        pst = parse_timestamp_pacific("2025_01_15_12_30_00_PST")
+        assert pdt.tzname() == "PDT"
+        assert pst.tzname() == "PST"
+
+    def test_parses_without_suffix_as_standard_time(self):
+        dt = parse_timestamp_pacific("2025_01_15_12_30_00")
+        assert dt.tzname() == "PST"
 
 
-class TestFormatTimestampPst:
-    """Tests for format_timestamp_pst."""
+class TestFormatTimestampPacific:
+    """Tests for format_timestamp_pacific."""
 
     def test_roundtrip(self):
         """Formatting a parsed timestamp should reproduce the original string."""
         original = "2025_06_01_08_15_30_PDT"
-        dt = parse_timestamp_pst(original)
-        assert format_timestamp_pst(dt) == original
+        dt = parse_timestamp_pacific(original)
+        assert format_timestamp_pacific(dt) == original
+
+    def test_pst_formatter_alias_remains_available(self):
+        assert format_timestamp_pst is format_timestamp_pacific
+        assert parse_timestamp_pst is parse_timestamp_pacific
 
     def test_formats_winter_as_pst(self):
         """January timestamps use the standard-time abbreviation."""
-        dt = parse_timestamp_pst("2025_01_01_00_00_00_PST")
-        assert format_timestamp_pst(dt).endswith("_PST")
+        dt = parse_timestamp_pacific("2025_01_01_00_00_00_PST")
+        assert format_timestamp_pacific(dt).endswith("_PST")
 
     @pytest.mark.parametrize(
         ("utc_timestamp", "expected"),
@@ -81,13 +95,61 @@ class TestFormatTimestampPst:
     )
     def test_formats_dynamic_pacific_abbreviation(self, utc_timestamp, expected):
         """UTC timestamps use the applicable Pacific standard or daylight abbreviation."""
-        assert format_timestamp_pst(utc_timestamp) == expected
+        assert format_timestamp_pacific(utc_timestamp) == expected
 
     def test_parses_repeated_fall_back_hour_using_suffix(self):
         """The suffix identifies the occurrence during the repeated fall-back hour."""
-        pdt = parse_timestamp_pst("2024_11_03_01_30_00_PDT")
-        pst = parse_timestamp_pst("2024_11_03_01_30_00_PST")
+        pdt = parse_timestamp_pacific("2024_11_03_01_30_00_PDT")
+        pst = parse_timestamp_pacific("2024_11_03_01_30_00_PST")
         assert (pst - pdt).total_seconds() == 3600
+
+    def test_legacy_summer_pst_csv_row_matches_pdt_filename(self, tmp_path):
+        detections_csv = tmp_path / "detections.csv"
+        with detections_csv.open("w", newline="", encoding="utf-8") as csv_file:
+            writer = csv.DictWriter(
+                csv_file,
+                fieldnames=["NodeName", "StartTimestamp", "URI", "Description", "Notes", "Tags"],
+            )
+            writer.writeheader()
+            writer.writerow({
+                "NodeName": "rpi_sunset_bay",
+                "StartTimestamp": "2024_07_12_16_58_11_PST",
+                "URI": "https://example.com/legacy",
+                "Description": "Human voices",
+                "Notes": "fp_machine_only",
+                "Tags": "human",
+            })
+
+        result = lookup_detection_in_csv(
+            "rpi_sunset_bay", "2024_07_12_16_58_11_PDT", str(detections_csv)
+        )
+
+        assert result is not None
+        assert result.uri == "https://example.com/legacy"
+        assert result.description == "Human voices"
+
+    def test_fall_back_pst_row_does_not_match_distinct_pdt_instant(self, tmp_path):
+        detections_csv = tmp_path / "detections.csv"
+        with detections_csv.open("w", newline="", encoding="utf-8") as csv_file:
+            writer = csv.DictWriter(
+                csv_file,
+                fieldnames=["NodeName", "StartTimestamp", "URI", "Description", "Notes", "Tags"],
+            )
+            writer.writeheader()
+            writer.writerow({
+                "NodeName": "rpi_sunset_bay",
+                "StartTimestamp": "2024_11_03_01_30_00_PST",
+                "URI": "https://example.com/standard-time",
+                "Description": "Fall-back PST occurrence",
+                "Notes": "fp_machine_only",
+                "Tags": "human",
+            })
+
+        result = lookup_detection_in_csv(
+            "rpi_sunset_bay", "2024_11_03_01_30_00_PDT", str(detections_csv)
+        )
+
+        assert result is None
 
 
 # ---------------------------------------------------------------------------

@@ -3,7 +3,7 @@
 """
 Unit tests for make_csv.py.
 
-Tests cover parse_timestamp_pst(), the timestamp-range filtering logic
+Tests cover parse_timestamp_pacific(), the timestamp-range filtering logic
 inside process_all_feeds(), and the fail-fast behaviour of get_orcasite_feeds().
 """
 from datetime import datetime, timezone
@@ -19,27 +19,27 @@ from make_csv import (
     get_orcasite_detections,
     get_orcahello_detections,
     get_orcasite_feeds,
-    parse_timestamp_pst,
+    parse_timestamp_pacific,
     process_all_feeds,
 )
 from orcasite_feeds import OrcasiteFeed, get_orcasite_feeds_with_retry
 
 
 # ---------------------------------------------------------------------------
-# parse_timestamp_pst
+# parse_timestamp_pacific
 # ---------------------------------------------------------------------------
 
-class TestParseTimestampPst:
+class TestParseTimestampPacific:
     """Tests for parsing YYYY_MM_DD_HH_MM_SS_PST strings into datetimes."""
 
     def test_returns_timezone_aware_datetime(self):
         """Result must carry timezone info."""
-        dt = parse_timestamp_pst("2026_03_17_00_00_00_PST")
+        dt = parse_timestamp_pacific("2026_03_17_00_00_00_PST")
         assert dt.tzinfo is not None
 
     def test_correct_date_components(self):
         """Date components should match the input string."""
-        dt = parse_timestamp_pst("2025_12_24_17_51_23_PST")
+        dt = parse_timestamp_pacific("2025_12_24_17_51_23_PST")
         dt_pst = dt.astimezone(PACIFIC_TZ)
         assert dt_pst.year == 2025
         assert dt_pst.month == 12
@@ -50,7 +50,7 @@ class TestParseTimestampPst:
 
     def test_timezone_is_pacific(self):
         """Result should be localized to US/Pacific."""
-        dt = parse_timestamp_pst("2026_01_01_00_00_00_PST")
+        dt = parse_timestamp_pacific("2026_01_01_00_00_00_PST")
         # Convert to UTC and check the offset matches PST (UTC-8) or PDT (UTC-7).
         utc_dt = dt.astimezone(UTC_TZ)
         offset_hours = (dt.utcoffset().total_seconds()) / 3600
@@ -59,21 +59,20 @@ class TestParseTimestampPst:
 
     def test_midnight_boundary(self):
         """Midnight (00:00:00) should parse correctly."""
-        dt = parse_timestamp_pst("2026_03_17_00_00_00_PST")
+        dt = parse_timestamp_pacific("2026_03_17_00_00_00_PST")
         dt_pst = dt.astimezone(PACIFIC_TZ)
         assert dt_pst.hour == 0
         assert dt_pst.minute == 0
         assert dt_pst.second == 0
 
-    def test_raises_on_missing_pst_suffix(self):
-        """ValueError should be raised if the string doesn't end with _PST."""
-        with pytest.raises(ValueError, match="_PST"):
-            parse_timestamp_pst("2026_03_17_00_00_00")
+    def test_defaults_missing_suffix_to_standard_time(self):
+        """Suffix-less values retain the established PST default."""
+        assert parse_timestamp_pacific("2026_01_17_00_00_00").tzname() == "PST"
 
     def test_raises_on_invalid_format(self):
         """ValueError should be raised on an unparseable timestamp body."""
         with pytest.raises(ValueError):
-            parse_timestamp_pst("not_a_timestamp_PST")
+            parse_timestamp_pacific("not_a_timestamp_PST")
 
 
 # ---------------------------------------------------------------------------
@@ -177,7 +176,7 @@ class TestProcessAllFeedsTimestampFilter:
 
     def test_end_time_excludes_later_detections(self):
         """Detections after end_time must not appear in the output."""
-        end = parse_timestamp_pst("2026_03_17_00_00_00_PST")
+        end = parse_timestamp_pacific("2026_03_17_00_00_00_PST")
         before = _make_det(_utc(2025, 12, 1))
         after = _make_det(_utc(2026, 6, 1))
         rows = self._run([before, after], end_time=end)
@@ -185,7 +184,7 @@ class TestProcessAllFeedsTimestampFilter:
 
     def test_start_time_excludes_earlier_detections(self):
         """Detections before start_time must not appear in the output."""
-        start = parse_timestamp_pst("2025_06_01_00_00_00_PST")
+        start = parse_timestamp_pacific("2025_06_01_00_00_00_PST")
         before = _make_det(_utc(2025, 1, 1))
         after = _make_det(_utc(2025, 12, 1))
         rows = self._run([before, after], start_time=start)
@@ -193,7 +192,7 @@ class TestProcessAllFeedsTimestampFilter:
 
     def test_detection_on_end_boundary_is_included(self):
         """A detection exactly at end_time should be included (<=)."""
-        end = parse_timestamp_pst("2026_03_17_00_00_00_PST")
+        end = parse_timestamp_pacific("2026_03_17_00_00_00_PST")
         # Convert end to UTC and use it as the detection timestamp.
         end_utc = end.astimezone(timezone.utc)
         det = _make_det(end_utc)
@@ -202,7 +201,7 @@ class TestProcessAllFeedsTimestampFilter:
 
     def test_detection_on_start_boundary_is_included(self):
         """A detection exactly at start_time should be included (>=)."""
-        start = parse_timestamp_pst("2025_06_01_00_00_00_PST")
+        start = parse_timestamp_pacific("2025_06_01_00_00_00_PST")
         start_utc = start.astimezone(timezone.utc)
         det = _make_det(start_utc)
         rows = self._run([det], start_time=start)
@@ -210,8 +209,8 @@ class TestProcessAllFeedsTimestampFilter:
 
     def test_range_filter_combined(self):
         """Only detections within [start, end] should be included."""
-        start = parse_timestamp_pst("2025_01_01_00_00_00_PST")
-        end = parse_timestamp_pst("2025_12_31_23_59_59_PST")
+        start = parse_timestamp_pacific("2025_01_01_00_00_00_PST")
+        end = parse_timestamp_pacific("2025_12_31_23_59_59_PST")
         too_early = _make_det(_utc(2024, 12, 31))
         in_range = _make_det(_utc(2025, 6, 15))
         too_late = _make_det(_utc(2026, 2, 1))
@@ -243,7 +242,7 @@ class TestCliEndArgument:
         args = parser.parse_args([])
         assert args.end == "2026_03_17_00_00_00_PST"
         # Should parse without error.
-        end_time = None if (args.end or "").lower() == "now" else parse_timestamp_pst(args.end)
+        end_time = None if (args.end or "").lower() == "now" else parse_timestamp_pacific(args.end)
         assert end_time is not None
 
     def test_end_now_yields_none(self):
@@ -252,7 +251,7 @@ class TestCliEndArgument:
         parser = argparse.ArgumentParser()
         parser.add_argument("--end", type=str, default="2026_03_17_00_00_00_PST")
         args = parser.parse_args(["--end", "now"])
-        end_time = None if (args.end or "").lower() == "now" else parse_timestamp_pst(args.end)
+        end_time = None if (args.end or "").lower() == "now" else parse_timestamp_pacific(args.end)
         assert end_time is None
 
     def test_end_now_case_insensitive(self):
@@ -261,7 +260,7 @@ class TestCliEndArgument:
         parser = argparse.ArgumentParser()
         parser.add_argument("--end", type=str, default="2026_03_17_00_00_00_PST")
         args = parser.parse_args(["--end", "NOW"])
-        end_time = None if (args.end or "").lower() == "now" else parse_timestamp_pst(args.end)
+        end_time = None if (args.end or "").lower() == "now" else parse_timestamp_pacific(args.end)
         assert end_time is None
 
 
