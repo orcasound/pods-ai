@@ -85,11 +85,33 @@ def process_wav_files(wav_root: Path, png_root: Path, skip_existing: bool = True
 
 
 def main() -> int:
-    """Generate spectrograms for WAV files under the default output directory."""
+    """Generate spectrograms for one WAV file or the default directory."""
     parser = argparse.ArgumentParser(
-        description="Generate spectrograms for WAV files in output/wav."
+        description="Generate spectrograms for a WAV file or files in output/wav."
     )
-    parser.parse_args()
+    parser.add_argument(
+        "wav_file",
+        nargs="?",
+        type=Path,
+        help="Generate a spectrogram for this WAV file only.",
+    )
+    args = parser.parse_args()
+
+    if args.wav_file is not None:
+        if not args.wav_file.is_file():
+            print(f"Error: WAV file not found: {args.wav_file}")
+            return 1
+
+        import spectrogram_visualizer
+
+        try:
+            print(f"Processing: {args.wav_file}")
+            spec_path = spectrogram_visualizer.write_spectrogram(args.wav_file)
+            print(f"  -> Created spectrogram: {spec_path}")
+        except Exception as e:
+            print(f"  -> ERROR processing {args.wav_file}: {type(e).__name__}: {str(e)}")
+            return 1
+        return 0
 
     wav_root = Path("output/wav")
     png_root = Path("output/png")
