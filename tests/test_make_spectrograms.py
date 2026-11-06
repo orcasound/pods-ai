@@ -38,3 +38,21 @@ def test_main_processes_only_specified_wav_file(monkeypatch, tmp_path: Path) -> 
 
     assert make_spectrograms.main() == 0
     assert processed_files == [wav_file]
+
+
+def test_main_processes_default_directory_without_wav_argument(
+    monkeypatch, tmp_path: Path
+) -> None:
+    wav_root = tmp_path / "output" / "wav"
+    wav_root.mkdir(parents=True)
+    processed_roots = []
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("sys.argv", ["make_spectrograms.py"])
+    monkeypatch.setattr(
+        make_spectrograms,
+        "process_wav_files",
+        lambda wav_root, png_root: processed_roots.append((wav_root, png_root)),
+    )
+
+    assert make_spectrograms.main() == 0
+    assert processed_roots == [(Path("output/wav"), Path("output/png"))]
