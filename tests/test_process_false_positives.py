@@ -89,9 +89,112 @@ class TestGetCorrectedClass:
         """If tags contain no known classes, return 'water'."""
         assert get_corrected_class("Boat noise", "unknown;maybe") == "water"
 
-    def test_tags_first_match_returned(self):
-        """First matching tag should be returned when multiple known tags present."""
-        assert get_corrected_class("", "resident;vessel") == "resident"
+    def test_tags_first_match_returned_within_same_tier(self):
+        """First matching tag should be returned when competing tags are in the same priority tier."""
+        assert get_corrected_class("", "vessel;water") == "vessel"
+
+    def test_tags_negative_tier_takes_priority_over_background_tier(self):
+        """A sporadic-event tag (jingle, bird) wins over a constant background tag (vessel, etc.),
+        regardless of position, matching the positive/negative/background priority used for live
+        model predictions in podsai_inference.py."""
+        assert get_corrected_class("", "vessel;jingle") == "jingle"
+        assert get_corrected_class("", "water;bird") == "bird"
+
+    def test_tags_background_hum_loses_to_negative_tier(self):
+        """'hum' is background tier, so it loses to a sporadic-event tag like jingle or bird."""
+        assert get_corrected_class("", "hum;jingle") == "jingle"
+
+    def test_tags_whale_species_takes_priority_regardless_of_position(self):
+        """A whale-species tag wins over a noise tag even when the noise tag is listed first."""
+        assert get_corrected_class("", "vessel;resident") == "resident"
+
+    def test_tags_whale_species_takes_priority_over_hum(self):
+        """A whale-species tag wins over 'hum' even when hum appears first, since a real call was present."""
+        assert get_corrected_class("", "hum;transient;orca;whale") == "transient"
+
+    def test_tags_hum_returns_hum(self):
+        """A bare 'hum' tag resolves to the 'hum' category."""
+        assert get_corrected_class("", "hum") == "hum"
+
+    def test_tags_60hz_alias_returns_hum(self):
+        """The older '60Hz' tag is treated as an alias for 'hum'."""
+        assert get_corrected_class("", "60Hz") == "hum"
+
+    def test_tags_60_hz_with_space_alias_returns_hum(self):
+        """A '60 Hz' tag (with a space) is treated as an alias for 'hum'."""
+        assert get_corrected_class("", "60 Hz") == "hum"
+
+    def test_tags_60_hz_with_hyphen_alias_returns_hum(self):
+        """A '60-Hz' tag (with a hyphen) is treated as an alias for 'hum'."""
+        assert get_corrected_class("", "60-Hz") == "hum"
+
+    def test_tags_hum_and_60hz_together_returns_hum_once(self):
+        """A detection tagged with both 'hum' and '60Hz' still resolves to 'hum'."""
+        assert get_corrected_class("", "ship;60Hz;hum") == "hum"
+
+    def test_comments_hum_word_returns_hum(self):
+        """A standalone 'hum' mention in comments resolves to 'hum'."""
+        assert get_corrected_class("Loud hum in background.", None) == "hum"
+
+    def test_comments_electrical_keyword_returns_hum(self):
+        """'Electrical' noise mentioned in comments resolves to 'hum'."""
+        assert get_corrected_class("Electrical noise, nothing else.", None) == "hum"
+
+    def test_comments_electric_keyword_returns_hum(self):
+        """'Electric' (without the '-al' suffix) resolves to 'hum'."""
+        assert get_corrected_class("Electric buzz, nothing else.", None) == "hum"
+
+    def test_comments_electrician_does_not_match_as_hum(self):
+        """'electrician' must not match as a substring of 'electric' in free-text comments."""
+        assert get_corrected_class("Local electrician repaired the dock wiring today.", None) == "water"
+
+    def test_comments_60_hz_with_space_returns_hum(self):
+        """'60 Hz' (with a space) resolves to 'hum'."""
+        assert get_corrected_class("60 Hz interference, nothing else.", None) == "hum"
+
+    def test_comments_60_hz_with_hyphen_returns_hum(self):
+        """'60-Hz' (with a hyphen) resolves to 'hum'."""
+        assert get_corrected_class("60-Hz interference, nothing else.", None) == "hum"
+
+    def test_comments_negated_hum_falls_through_to_vessel(self):
+        """'No hum' must not override an explicit vessel/boat signal."""
+        assert get_corrected_class("No hum. Boat noise.", None) == "vessel"
+
+    def test_comments_negated_hum_alone_returns_water(self):
+        """'No hum' with no other positive signal resolves to 'water'."""
+        assert get_corrected_class("No hum. Nothing else.", None) == "water"
+
+    def test_comments_negated_60hz_falls_through_to_vessel(self):
+        """'Not 60Hz' must not override an explicit vessel/boat signal."""
+        assert get_corrected_class("Not 60hz, just vessel noise.", None) == "vessel"
+
+    def test_comments_negated_electrical_hum_falls_through_to_vessel(self):
+        """'No electrical hum' must not override an explicit vessel/boat signal."""
+        assert get_corrected_class("No electrical hum, just vessel noise.", None) == "vessel"
+
+    def test_comments_negated_hum_with_article_falls_through_to_vessel(self):
+        """'Not a hum' must not override an explicit vessel/boat signal."""
+        assert get_corrected_class("Not a hum, that's clearly a boat.", None) == "vessel"
+
+    def test_comments_no_humpback_does_not_falsely_negate_unrelated_hum(self):
+        """Negating 'humpback' must not suppress an unrelated, explicit hum signal."""
+        assert get_corrected_class("No humpback. Electrical hum present.", None) == "hum"
+
+    def test_comments_hum_does_not_match_inside_humpback(self):
+        """'hum' must not match as a substring of 'humpback' in free-text comments."""
+        assert get_corrected_class("Humpback calls amid electrical hum.", None) == "humpback"
+
+    def test_comments_hum_does_not_match_inside_human(self):
+        """'hum' must not match as a substring of 'human' in free-text comments."""
+        assert get_corrected_class("Human voices, electrical noise.", None) == "human"
+
+    def test_comments_electrical_alongside_negated_humpback_returns_hum(self):
+        """An explicit 'electrical' mention still resolves to 'hum' even alongside an unrelated, negated 'No humpback'."""
+        assert get_corrected_class("Electrical noise. No humpback nor vessel.", None) == "hum"
+
+    def test_comments_humming_returns_hum(self):
+        """Inflected forms like 'humming' still resolve to 'hum'."""
+        assert get_corrected_class("Constant humming in background.", None) == "hum"
 
 
 class TestAppendManualSamples:
