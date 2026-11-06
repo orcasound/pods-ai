@@ -9,7 +9,8 @@ using System.Runtime.CompilerServices;
 
 namespace DatasetManager
 {
-    public class SampleRecord : INotifyPropertyChanged
+    [CsvRecord]
+    public partial class SampleRecord : INotifyPropertyChanged
     {
         public event PropertyChangedEventHandler? PropertyChanged;
         public string Category { get; set; } = "";
