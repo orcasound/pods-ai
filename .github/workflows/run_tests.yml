@@ -36,8 +36,6 @@ jobs:
               - 'requirements.txt'
               - 'requirements-onnx.txt'
               - 'output/csv/**'
-              - 'bootstrap/src/**'
-              - 'bootstrap/csv/**'
               - 'tests/**'
               - 'src/**'
               - '.github/workflows/run_tests.yml'
@@ -55,7 +53,7 @@ jobs:
 
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43  # v2.22.3
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a  # v2.22.4
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -82,7 +80,7 @@ jobs:
         uses: fkirc/skip-duplicate-actions@b974a9395958c231af965b70070979a577efa578  # v5.3.2
         with:
           cancel_others: 'false'
-          paths: '["requirements.txt", "requirements-onnx.txt", "output/csv/**", "bootstrap/src/**", "bootstrap/csv/**", "tests/**", "src/**", ".github/workflows/run_tests.yml"]'
+          paths: '["requirements.txt", "requirements-onnx.txt", "output/csv/**", "tests/**", "src/**", ".github/workflows/run_tests.yml"]'
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         if: steps.skip_check.outputs.should_skip != 'true'
@@ -150,7 +148,7 @@ jobs:
 
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43  # v2.22.3
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a  # v2.22.4
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -189,7 +187,7 @@ jobs:
         uses: fkirc/skip-duplicate-actions@b974a9395958c231af965b70070979a577efa578  # v5.3.2
         with:
           cancel_others: 'false'
-          paths: '["requirements.txt", "requirements-onnx.txt", "output/csv/**", "bootstrap/src/**", "bootstrap/csv/**", "tests/**", "src/**", ".github/workflows/run_tests.yml"]'
+          paths: '["requirements.txt", "requirements-onnx.txt", "output/csv/**", "tests/**", "src/**", ".github/workflows/run_tests.yml"]'
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         if: steps.skip_check.outputs.should_skip != 'true'
