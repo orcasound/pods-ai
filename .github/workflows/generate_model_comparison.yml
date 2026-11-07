@@ -117,15 +117,14 @@ jobs:
           REF_TYPE: ${{ github.ref_type }}
           REF_SHA: ${{ github.sha }}
         run: |
+          checkout_ref="$REF_SHA"
           if [ "$REF_TYPE" = "branch" ]; then
-            checkout_ref="$REF_NAME"
             push_branch="$REF_NAME"
           else
-            checkout_ref="$REF_SHA"
             push_branch=""
           fi
 
-          if [ "$checkout_ref" = "main" ] && [ -n "$push_branch" ]; then
+          if [ "$push_branch" = "main" ]; then
             push_branch="update-model-comparison"
           fi
 
