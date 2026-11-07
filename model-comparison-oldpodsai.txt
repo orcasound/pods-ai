@@ -8,7 +8,8 @@ oldpodsai             832       269     32.3%   0.679    8.5%   16.9%    0.1%   
 
 Definitions:
   Accuracy     = Correct / Evaluated
-  Correct      = fastai/orcahello: resident vs other; wav2vec2/oldpodsai/podsai: category in prediction set
+  Correct      = fastai/orcahello: resident vs other; wav2vec2/oldpodsai/podsai/custom: category in prediction set
+                 abiotic also accepts water, vessel, or jingle
   F1           = macro F1 over humpback, resident, and transient classes that are present
   [R|T|H]FP%   = among non-[R|T|H] samples, fraction predicted as that class
   [R|T|H]FN%   = among actual samples of that class, fraction predicted as another class
