@@ -25,7 +25,7 @@ python src/compare_models.py [options]
 | `--custom-model-revision REVISION` | Optional revision for a custom Hugging Face model. Ignored for local paths. |
 | `--orcahello-model-path PATH_OR_HF_ID` | OrcaHello model path, PODS-AI-compatible ONNX file, or Hub ID. Default: `orcasound/orcahello-srkw-detector-v1`. |
 | `--orcahello-model-revision REVISION` | Optional Hugging Face revision for OrcaHello. Used only when `--orcahello-model-path` is a Hub ID. |
-| `--podsai-model-path PATH_OR_HF_ID` | PODS-AI model path, ONNX file, or Hub ID for `oldpodsai`, and `podsai`. Default: `davethaler/whale-call-detector`. |
+| `--podsai-model-path PATH_OR_HF_ID` | PODS-AI model path, ONNX file, or Hub ID for `oldpodsai` and `podsai`. Default: `davethaler/whale-call-detector`. |
 | `--podsai-model-revision REVISION` | Revision for the built-in `podsai` model. |
 | `--max-samples N` | Evaluate at most `N` WAV files. `N` must be positive. |
 | `--category NAME` | Evaluate only the named category. |
