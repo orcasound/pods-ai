@@ -15,7 +15,7 @@ Reports correct identifications, whale-class F1, and per-whale-class false-posit
 A "correct" identification means:
   - For orcahello, model predicted "resident" (SRKW) when the label is
     "resident", or anything other than "resident" when the label is not "resident".
-  - For custom, podsai and oldpodsai, the actual category is present in the model's
+  - For custom, podsai, and oldpodsai, the actual category is present in the model's
     multi-label prediction set (with a single-label fallback for older models).
     Abiotic samples also accept water, vessel, or jingle predictions.
 
