@@ -22,6 +22,9 @@ humpback,rpi_andrews_bay,2026_10_04_23_31_51_PDT,https://live.orcasound.net/bout
 humpback,rpi_andrews_bay,2026_10_05_02_26_53_PDT,https://live.orcasound.net/bouts/new/andrews-bay?time=2026-10-05T09%3A26%3A53.000Z,"Humpback calls, electrical noise",fp_machine,100,humpback;hum
 humpback,rpi_andrews_bay,2026_10_05_02_28_53_PDT,https://live.orcasound.net/bouts/new/andrews-bay?time=2026-10-05T09%3A28%3A53.000Z,"Faint Humpback calls, electrical noise",fp_machine,100,humpback;hum
 humpback,rpi_andrews_bay,2026_10_05_02_29_53_PDT,https://live.orcasound.net/bouts/new/andrews-bay?time=2026-10-05T09%3A29%3A53.000Z,"Humpback calls, electrical noise",fp_machine,100,humpback;hum
+humpback,rpi_andrews_bay,2026_10_24_03_07_51_PDT,https://live.orcasound.net/bouts/new/andrews-bay?time=2026-10-24T10%3A07%3A51.000Z,"Humpback calls, electrical noise",fp_machine,100,humpback;whale;hum
+humpback,rpi_andrews_bay,2026_10_24_03_11_51_PDT,https://live.orcasound.net/bouts/new/andrews-bay?time=2026-10-24T10%3A11%3A51.000Z,"Humpback calls, electrical noise",fp_machine,100,humpback;whale;hum
+humpback,rpi_north_sjc,2026_10_17_18_47_06_PDT,https://live.orcasound.net/bouts/new/north-sjc?time=2026-10-18T01%3A47%3A06.000Z,Whale sounds,tp_human_only,,
 humpback,rpi_orcasound_lab,2023_10_28_08_08_03_PDT,https://live.orcasound.net/bouts/new/orcasound-lab?time=2023-10-28T15%3A08%3A03.000Z,Humpback sound as ship noise rises.,tp_human_only,,
 humpback,rpi_orcasound_lab,2023_10_28_09_42_11_PDT,https://live.orcasound.net/bouts/new/orcasound-lab?time=2023-10-28T16%3A42%3A11.000Z,Humpback,tp_human_only,,
 humpback,rpi_orcasound_lab,2024_11_17_08_05_24_PST,https://live.orcasound.net/bouts/new/orcasound-lab?time=2024-11-17T16%3A05%3A24.000Z,humpback rumbling,tp_human_only,,
