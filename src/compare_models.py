@@ -7,7 +7,7 @@ Compare multiple models on a test set of audio samples.
 Usage:
     python compare_models.py [options]
 
-Loads a test set from WAV files under output/testing-wav, then runs each enabled model (orcahello, oldpodsai or podsai) 
+Loads a test set from WAV files under output/testing-wav, then runs each enabled model (orcahello, oldpodsai, or podsai) 
 on the corresponding 60-second WAV files.
 
 Reports correct identifications, whale-class F1, and per-whale-class false-positive/false-negative rates per model.
