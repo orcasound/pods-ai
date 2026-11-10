@@ -61,7 +61,7 @@ python src/compare_models.py --models podsai,custom --custom-model-path podsai.o
 ```
 
 Custom models are PODS-AI-compatible multi-class models. They use the same
-category-membership evaluation as `oldpodsai`, and `podsai`,
+category-membership evaluation as `oldpodsai` and `podsai`,
 including the confusion matrix, F1, and FP/FN calculations.
 
 ### Inference contract
