@@ -52,7 +52,7 @@ SUMMARY_LABELS = [
 MATRIX_CELL_PADDING = 2
 PODSAI_MODEL_ID = "davethaler/whale-call-detector"
 
-# Maps user-facing model names to inference backends. oldpodsai reuse podsai
+# Maps user-facing model names to inference backends. oldpodsai reuses podsai
 # inference with a different pinned model revision.
 MODEL_TYPE_TO_INFERENCE_TYPE = {
     "orcahello": "orcahello",
