@@ -787,7 +787,7 @@ class TestPrintSummary:
             assert header not in captured
 
     def test_binary_model_non_resident_whale_rates_match_expected_summary(self, capsys):
-        """orcahello show 0% FP and 100% FN rates for transient/humpback when present."""
+        """orcahello shows 0% FP and 100% FN rates for transient/humpback when present."""
         from compare_models import ModelResult, print_summary
         result = ModelResult(
             model_type="orcahello",
