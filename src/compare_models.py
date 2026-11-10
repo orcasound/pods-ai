@@ -34,6 +34,7 @@ from model_inference import get_model_inference
 from model_revisions import (
     LATEST_PODSAI_MODEL_REVISION,
     PREVIOUS_PODSAI_MODEL_REVISION,
+    PODSAI_WAV2VEC2_MODEL_REVISION,
 )
 from run_inference import run_inference
 
