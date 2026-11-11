@@ -38,6 +38,7 @@ from sklearn.metrics import accuracy_score, precision_recall_fscore_support
 from transformers import (
     AutoFeatureExtractor,
     AutoModelForAudioClassification,
+    EarlyStoppingCallback,
     EvalPrediction,
     Trainer,
     TrainingArguments,
@@ -476,8 +477,8 @@ def main() -> None:
     parser.add_argument(
         "--epochs",
         type=int,
-        default=5,
-        help="Number of training epochs (default: 5)",
+        default=8,
+        help="Number of training epochs (default: 8)",
     )
     parser.add_argument(
         "--batch_size",
@@ -599,6 +600,7 @@ def main() -> None:
         train_dataset=dataset["train"],
         eval_dataset=dataset["test"],
         compute_metrics=compute_metrics,
+        callbacks=[EarlyStoppingCallback(early_stopping_patience=2)],
     )
 
     # Resume from checkpoint if provided.
