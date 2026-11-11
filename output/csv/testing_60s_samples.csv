@@ -99,7 +99,10 @@ resident,rpi_sunset_bay,2025_12_11_02_08_42_PST,https://live.orcasound.net/bouts
 resident,rpi_sunset_bay,2026_01_08_01_52_39_PST,https://live.orcasound.net/bouts/new/sunset-bay?time=2026-01-08T09%3A52%3A39.000Z,,tp_machine_only,77.0132,
 resident,rpi_sunset_bay,2026_01_08_01_55_18_PST,https://live.orcasound.net/bouts/new/sunset-bay?time=2026-01-08T09%3A55%3A18.644Z,,tp_machine_only,64.3573,
 transient,rpi_andrews_bay,2026_11_07_11_01_51_PST,https://live.orcasound.net/bouts/new/andrews-bay?time=2026-11-07T19%3A01%3A51.000Z,Transient call,fp_machine,100,transient;orca;whale
+transient,rpi_andrews_bay,2026_10_03_06_11_51_PDT,https://live.orcasound.net/bouts/new/andrews-bay?time=2026-10-03T13%3A11%3A51.000Z,"Faint to good transient calls, electrical noise",tp_machine,100,transient;orca;whale;hum
 transient,rpi_north_sjc,2026_05_11_14_47_10_PST,https://live.orcasound.net/bouts/new/north-sjc?time=2026-05-11T21%3A47%3A10.000Z,calls,tp_human_only,100,
+transient,rpi_north_sjc,2026_05_11_15_04_10_PDT,https://live.orcasound.net/bouts/new/north-sjc?time=2026-05-11T22%3A04%3A10.000Z,,tp_human_only,100,
+transient,rpi_north_sjc,2026_05_11_16_04_10_PDT,https://live.orcasound.net/bouts/new/north-sjc?time=2026-05-11T23%3A04%3A10.000Z,,tp_human_only,100,
 transient,rpi_orcasound_lab,2024_12_31_15_44_05_PST,https://live.orcasound.net/bouts/new/orcasound-lab?time=2024-12-31T23%3A44%3A05.067Z,"Bigg's calls clear, then whistles and fainter calls.",tp_machine_only,81.82,
 transient,rpi_orcasound_lab,2024_12_31_15_55_39_PST,https://live.orcasound.net/bouts/new/orcasound-lab?time=2024-12-31T23%3A55%3A39.135Z,"A couple good transient calls, followed by increasing boat noise",tp_machine_only,70.7498,
 transient,rpi_orcasound_lab,2024_12_31_16_19_01_PST,https://live.orcasound.net/bouts/new/orcasound-lab?time=2025-01-01T00%3A19%3A01.338Z,"Good transient calls, brief small boat noise",tp_machine_only,72.2897,
