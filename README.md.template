@@ -116,22 +116,20 @@ To have GitHub train a new model from the latest `main` branch:
    ```
    The Docker image reads this same revision from that file.
 8. Push the changes to a separate branch in the main repository.
-9. Generate a model comparison as follows. Go to https://github.com/orcasound/pods-ai/actions/workflows/generate_model_comparison.yml in a browser, click the "Run workflow" dropdown, select the branch to use in "Use workflow from" and click "Run workflow". Results are committed to the selected branch, except that selecting `main` commits them to `update-model-comparison`. The workflow compares `orcahello`, `oldpodsai`, and `podsai` in parallel, saves `model-comparison-<model>.txt` for each model, and builds a combined README. This may take several hours to run. You could instead run it locally using `python src/compare_models.py --models podsai | tee model-comparison-podsai.txt` to verify that the F1 does not regress from the latest model as shown at the top of this README. Don't proceed further unless the F1 improves.
-10. Update `README.md.template` with any documentation changes, then run
-    `python src/build-readme.py` to regenerate `README.md`.
-11. Generate a pull request with the changes
-12. Once the pull request is merged, add another tag to the main branch such as
+9. Generate a model comparison as follows. Go to https://github.com/orcasound/pods-ai/actions/workflows/generate_model_comparison.yml in a browser, click the "Run workflow" dropdown, select the branch to use in "Use workflow from" and click "Run workflow". Results are committed to the selected branch, except that selecting `main` commits them to `update-model-comparison`. The workflow compares `orcahello`, `oldpodsai`, and `podsai` in parallel, saves `model-comparison-<model>.txt` for each model, and builds a combined `README.md`. This will take a couple of hours to run. Don't proceed further unless the F1 improves.
+10. Generate a pull request with the changes
+11. Once the pull request is merged, add another tag to the main branch such as
    `LiveInferenceSystem.v1.4.0` (bumping the version from the most recent such tag).
     This will cause the
     [LiveInferenceSystem-deploy.yaml](.github/workflows/LiveInferenceSystem-deploy.yaml)
     workflow to build a new container image and push it to the Azure Container Registry.
-13. Once that succeeds, update the `LiveInferenceSystem/deploy/<slug>.yaml` files to
+12. Once that succeeds, update the `LiveInferenceSystem/deploy/<slug>.yaml` files to
     reference the new image.  For example:
     ```
     image: orcaconservancycr.azurecr.io/pods-ai-live-inference-system:09-05-2026.v1.4.0
     ```
-14. Generate a pull request with those changes.
-15. Once that pull request merges, apply the config, e.g., `kubectl apply -f deploy/andrews-bay.yaml` from the
+13. Generate a pull request with those changes.
+14. Once that pull request merges, apply the config, e.g., `kubectl apply -f deploy/andrews-bay.yaml` from the
     `LiveInferenceSystem` directory.  See [AzurePlaybook.md](https://github.com/orcasound/orcahello/blob/main/InferenceSystem/AzurePlaybook.md) for troubleshooting guidance if needed.
 
 You can instead train a model locally:
