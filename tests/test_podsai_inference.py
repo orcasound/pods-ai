@@ -438,12 +438,12 @@ class TestPodsAIInferenceIndexing:
         self, mock_extractor_class, mock_model_class,
         mock_feature_extractor
     ):
-        """Bird/jingle labels must be ordered before vessel/water when all qualify."""
+        """Bird/jingle labels must be ordered before vessel/water/hum when all qualify."""
         mock_model = Mock()
         mock_config = Mock()
         mock_config.id2label = {
             0: "water", 1: "resident", 2: "transient", 3: "humpback",
-            4: "vessel", 5: "jingle", 6: "human", 7: "bird",
+            4: "vessel", 5: "jingle", 6: "human", 7: "bird", 8: "hum",
         }
         mock_config.label2id = {
             label: class_id for class_id, label in mock_config.id2label.items()
@@ -456,13 +456,13 @@ class TestPodsAIInferenceIndexing:
         mock_model.to = Mock(return_value=mock_model)
         mock_model.eval = Mock(return_value=mock_model)
 
-        predicted_ids = [4, 5, 4, 7, 0, 5, 0, 7, 4, 7, 0, 4, 7, 4]
+        predicted_ids = [4, 7, 5, 0, 8, 7, 4, 5, 0, 8, 7, 4, 7, 4]
 
         def mock_forward(**kwargs):
             batch_size = kwargs["input_values"].shape[0]
             logits = []
             for index in range(batch_size):
-                row = [-4.0] * 8
+                row = [-4.0] * 9
                 row[predicted_ids[index]] = 4.0
                 logits.append(row)
             output = Mock()
@@ -487,7 +487,7 @@ class TestPodsAIInferenceIndexing:
             Path(audio_path).unlink(missing_ok=True)
 
         assert result["global_prediction_label"] == "bird"
-        assert result["global_prediction_labels"] == ["bird", "jingle", "vessel", "water"]
+        assert result["global_prediction_labels"] == ["bird", "jingle", "vessel", "hum", "water"]
 
     @patch('podsai_inference.AutoModelForAudioClassification')
     @patch('podsai_inference.AutoFeatureExtractor')

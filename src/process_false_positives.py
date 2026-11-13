@@ -18,6 +18,7 @@ For each rejected detection in the selected timeframe, this script:
 import argparse
 import csv
 import io
+import re
 import sys
 from contextlib import redirect_stdout
 from datetime import datetime, timedelta
@@ -54,8 +55,19 @@ TRANSIENT_TERMS = ("bigg", "transient")
 HUMAN_TERMS = ("human", "radio")
 VESSEL_TERMS = ("vessel", "ship", "boat", "train")
 OTHER_TERMS = ("seal","sea lion")
+# "hum"/"electric" use word-boundary regexes, not plain substring checks,
+# since "humpback"/"human" would otherwise falsely match.
+HUM_TERMS = ("60hz", "60 hz", "60-hz")
+HUM_WORD_PATTERN = re.compile(r"\b(?:hum(?:s|ming|med)?|electric(?:al|ity|ally)?)\b")
+NO_HUM_PATTERN = re.compile(
+    r"\b(?:no|not|nor)(?:\s+\w+){0,2}?\s+(?:hum(?:s|ming|med)?|electric(?:al|ity|ally)?|60[\s-]?hz)\b"
+)
+# Priority mirrors podsai_inference.py's live prediction ordering: whale
+# species > sporadic noise (negative) > constant background noise.
 WHALE_CLASSES = {"resident", "transient", "humpback"}
-OTHER_CLASSES = {"bird", "human", "vessel", "jingle", "water", "other"}
+NEGATIVE_CLASSES = {"jingle", "bird"}
+BACKGROUND_CLASSES = {"vessel", "human", "water", "other", "hum"}
+TAG_ALIASES = {"60hz": "hum", "60 hz": "hum", "60-hz": "hum", "ship": "vessel"}
 # Phrases that negate "humpback" or "vessel" labels (e.g. human-written "No humpback nor vessel").
 NO_HUMPBACK_TERMS = ("no humpback", "not humpback")
 NO_VESSEL_TERMS = ("no vessel", "nor vessel", "no boat", "nor boat", "no ship", "nor ship", "no train", "nor train")
@@ -75,10 +87,22 @@ def get_corrected_class(comments: str, tags: Optional[str]) -> Optional[str]:
       ``"water"``.
     """
     if tags:
-        # Use the first tag matching a class as the corrected class if available.
-        for tag in tags.split(";"):
-            normalized_tag = tag.strip().lower()
-            if normalized_tag in WHALE_CLASSES or normalized_tag in OTHER_CLASSES:
+        normalized_tags = [tag.strip().lower() for tag in tags.split(";")]
+        normalized_tags = [
+            TAG_ALIASES.get(tag, tag) for tag in normalized_tags
+        ]
+
+        # Priority order regardless of tag position: see constants above.
+        for normalized_tag in normalized_tags:
+            if normalized_tag in WHALE_CLASSES:
+                return normalized_tag
+
+        for normalized_tag in normalized_tags:
+            if normalized_tag in NEGATIVE_CLASSES:
+                return normalized_tag
+
+        for normalized_tag in normalized_tags:
+            if normalized_tag in BACKGROUND_CLASSES:
                 return normalized_tag
         return "water"
 
@@ -95,6 +119,7 @@ def get_corrected_class(comments: str, tags: Optional[str]) -> Optional[str]:
     # Detect explicit negations before checking for positive keywords.
     no_humpback = any(term in text for term in NO_HUMPBACK_TERMS)
     no_vessel = any(term in text for term in NO_VESSEL_TERMS)
+    no_hum = bool(NO_HUM_PATTERN.search(text))
 
     if any(term in text for term in RESIDENT_TERMS):
         return "resident"
@@ -104,12 +129,14 @@ def get_corrected_class(comments: str, tags: Optional[str]) -> Optional[str]:
         return "humpback"
     if any(term in text for term in BIRD_TERMS):
         return "bird"
-    if any(term in text for term in HUMAN_TERMS):
-        return "human"
-    if any(term in text for term in VESSEL_TERMS) and not no_vessel:
-        return "vessel"
     if "jingl" in text:
         return "jingle"
+    if any(term in text for term in HUMAN_TERMS):
+        return "human"
+    if (any(term in text for term in HUM_TERMS) or HUM_WORD_PATTERN.search(text)) and not no_hum:
+        return "hum"
+    if any(term in text for term in VESSEL_TERMS) and not no_vessel:
+        return "vessel"
     if any(term in text for term in OTHER_TERMS):
         return "other"
     if "water" in text:

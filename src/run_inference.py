@@ -44,8 +44,8 @@ from model_revisions import LATEST_PODSAI_MODEL_REVISION, PODSAI_WAV2VEC2_MODEL_
 
 # Preserve the existing exported constant name for compatibility.
 PODSAI_MODEL_REVISION = LATEST_PODSAI_MODEL_REVISION
-PROPOSED_DESCRIPTION_EXTRA_CLASSES = {"vessel", "human", "jingle", "bird"}
-NEGATIVE_LABELS = {"abiotic", "other", "water", "vessel", "jingle", "human", "bird"}
+PROPOSED_DESCRIPTION_EXTRA_CLASSES = {"vessel", "human", "jingle", "bird", "hum"}
+NEGATIVE_LABELS = {"abiotic", "other", "water", "vessel", "jingle", "human", "bird", "hum"}
 
 
 def parse_utc_start_timestamp(timestamp_str: str) -> datetime:
@@ -505,7 +505,7 @@ def main() -> int:
         default="podsai",
         help=(
             "Model type to use (default: podsai). "
-            "podsai: 8-class model (water, resident, transient, humpback, vessel, jingle, human, bird). "
+            "podsai: 9-class model (water, resident, transient, humpback, vessel, jingle, human, bird, hum). "
             "fastai: 2-class model (other, resident). "
             "orcahello: 2-class SRKW detector (other, resident) using the OrcaHello ResNet50 model."
         ),

@@ -78,6 +78,23 @@ that whale category.  Thus, if 2 out of 20 non-whale samples were mis-predicted 
 the F1 for the individual 3-second periods may be 90% but the 60-second sample would still
 result in a false positive.
 
+### Hum-category comparison
+
+The eight- and nine-class models were evaluated on the same 834 60-second clips:
+147 main testing clips and 687 DCLDE clips.
+
+| Metric | Eight-class model | Nine-class model with hum |
+|---|---:|---:|
+| Evaluated 60-second clips | 834 | 834 |
+| Category accuracy | 91.0% | 91.8% |
+| Whale macro F1 | 0.749 | 0.747 |
+| Resident F1 | 0.819 | 0.824 |
+| Transient F1 | 0.737 | 0.648 |
+| Humpback F1 | 0.692 | 0.769 |
+| Resident false alerts | 32 | 28 |
+| Missed resident clips | 52 | 53 |
+| Transient false alerts | 7 | 19 |
+
 ## Getting Started
 
 1. Install Python 3.12
@@ -229,7 +246,7 @@ The active scripts in `src` include:
   to Azure Blob Storage and Cosmos DB.
 - [**compare_models.py**](docs/compare-models.md): Evaluates and compares fastai, orcahello, podsai (latest), and oldpodsai (deployed) models
   on the test set loaded from `output/csv/testing_60s_samples.csv` and downloaded by `download_wavs.py`.
-  Abiotic samples accept water, vessel, and jingle predictions as correct.
+  Abiotic samples accept water, vessel, jingle, and hum predictions as correct.
   Reports correct identifications, false positives, false negatives, and average prediction time for each model.
 
 ## Data Flow Architecture
