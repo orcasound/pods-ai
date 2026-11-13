@@ -1189,6 +1189,131 @@ class TestMainCLI:
             result = main()
         assert result == 1
 
+    # test orcahello aggregation options reach the loader
+    @pytest.mark.parametrize(
+        ("aggregation", "top_k"),
+        [
+            ("mean_thresholded", None),
+            ("mean_top_k", 3),
+        ],
+    )
+    def test_orcahello_aggregation_config(self, tmp_path, aggregation, top_k):
+        """main() passes aggregation settings to the OrcaHello loader."""
+        from compare_models import ModelResult, main
+
+        wav_dir = tmp_path / "testing-wav"
+        _make_wav(wav_dir, "resident")
+
+        test_args = [
+            "compare_models.py",
+            "--wav-dir", str(wav_dir),
+            "--models", "orcahello",
+            "--orcahello-aggregation", aggregation,
+            "--max-samples", "1",
+        ]
+
+        if top_k is not None:
+            test_args.extend(["--orcahello-top-k", str(top_k)])
+
+        model = type(
+            "Model",
+            (),
+            {"predict": lambda self, _: {}},
+        )()
+
+        with patch.object(sys, "argv", test_args), \
+            patch(
+                "compare_models.get_model_inference",
+                return_value=model,
+            ) as load_model, \
+            patch(
+                "compare_models.evaluate_model",
+                return_value=ModelResult("orcahello"),
+            ):
+            assert main() == 0
+
+            expected_config = {
+                "global_prediction": {
+                    "aggregation_strategy": aggregation,
+                }
+            }
+
+            if top_k is not None:
+                expected_config["global_prediction"]["mean_top_k"] = top_k
+
+            load_model.assert_called_once_with(
+                model_type="orcahello",
+                model_path="orcasound/orcahello-srkw-detector-v1",
+                model_revision=None,
+                config=expected_config,
+            )
+
+    # Test that top-K requires mean_top_k
+    def test_orcahello_top_k_requires_mean_top_k(self, tmp_path):
+        """--orcahello-top-k requires --orcahello-aggregation mean_top_k."""
+        from compare_models import main
+
+        test_args = [
+            "compare_models.py",
+            "--models", "orcahello",
+            "--orcahello-top-k", "3",
+        ]
+
+        with patch.object(sys, "argv", test_args):
+                assert main() == 1
+
+    # Test that top-K must be positive
+    @pytest.mark.parametrize("top_k", ["0", "-1"])
+    def test_orcahello_top_k_must_be_positive(self, top_k):
+        from compare_models import main
+
+        test_args = [
+            "compare_models.py",
+            "--models", "orcahello",
+            "--orcahello-aggregation", "mean_top_k",
+            "--orcahello-top-k", top_k,
+        ]
+
+        with patch.object(sys, "argv", test_args):
+                assert main() == 1
+
+    # Test that no config override is passed to orcahello if aggregation parameter is not specified
+    def test_orcahello_aggregation_defaults(self, tmp_path):
+        from compare_models import ModelResult, main
+
+        wav_dir = tmp_path / "testing-wav"
+        _make_wav(wav_dir, "resident")
+
+        test_args = [
+            "compare_models.py",
+            "--wav-dir", str(wav_dir),
+            "--models", "orcahello",
+            "--max-samples", "1",
+        ]
+
+        model = type(
+            "Model",
+            (),
+            {"predict": lambda self, _: {}},
+        )()
+
+        with patch.object(sys, "argv", test_args), \
+            patch(
+                "compare_models.get_model_inference",
+                return_value=model,
+            ) as load_model, \
+            patch(
+                "compare_models.evaluate_model",
+                return_value=ModelResult("orcahello"),
+            ):
+            assert main() == 0
+
+        load_model.assert_called_once_with(
+            model_type="orcahello",
+            model_path="orcasound/orcahello-srkw-detector-v1",
+            model_revision=None,
+        )
+
 
 # ---------------------------------------------------------------------------
 # Tests for ModelResult confusion_matrix tracking

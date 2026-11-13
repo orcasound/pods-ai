@@ -676,6 +676,25 @@ def main() -> int:
         ),
     )
     parser.add_argument(
+        "--orcahello-aggregation",
+        choices=["mean_thresholded", "mean_top_k"],
+        default=None,
+        help=(
+            "OrcaHello aggregation strategy. "
+            "Choices: mean_thresholded, mean_top_k. "
+            "Defaults to mean_top_k."
+        ),
+    )
+    parser.add_argument(
+        "--orcahello-top-k",
+        type=int,
+        default=None,
+        help=(
+            "Number of top segments to average when using mean_top_k. "
+            "Defaults to 2."
+        ),
+    )
+    parser.add_argument(
         "--podsai-model-path",
         default=PODSAI_MODEL_ID,
         help=(
@@ -719,6 +738,19 @@ def main() -> int:
     )
 
     args = parser.parse_args()
+
+    if args.orcahello_top_k is not None and args.orcahello_top_k < 1:
+        print(
+            "Error: --orcahello-top-k must be a positive integer.",
+            file=sys.stderr,
+        )
+        return 1
+
+    if (args.orcahello_top_k is not None and args.orcahello_aggregation != "mean_top_k"):
+        print(
+            "Error: --orcahello-top-k requires --orcahello-aggregation mean_top_k"
+        )
+        return 1
 
     wav_dir = Path(args.wav_dir)
     if not wav_dir.exists():
@@ -825,6 +857,7 @@ def main() -> int:
             # ONNX inference uses the PODS-AI feature extractor/configuration.
             kwargs = {}
             kwargs["model_revision"] = effective_revision
+
             if is_onnx_format:
                 # Prefer an explicit extractor, then the configured PODS-AI model,
                 # unless that path is itself an ONNX file.
@@ -833,6 +866,25 @@ def main() -> int:
                     fe = None
                 fe = fe or PODSAI_MODEL_ID
                 kwargs['feature_extractor'] = fe
+
+            # Configure OrcaHello aggregation with parameters
+            # These settings apply only to OrcaHello, not PODS-AI.
+            if model_type == "orcahello":
+                orcahello_config = {}
+
+                if args.orcahello_aggregation is not None:
+                    orcahello_config["global_prediction"] = {
+                        "aggregation_strategy": args.orcahello_aggregation,
+                    }
+
+                if args.orcahello_top_k is not None:
+                    orcahello_config.setdefault("global_prediction", {})[
+                        "mean_top_k"
+                    ] = args.orcahello_top_k
+
+                if orcahello_config:
+                    kwargs["config"] = orcahello_config
+
             inference_model = get_model_inference(
                 model_type=inference_model_type,
                 model_path=effective_model_path,
