@@ -543,6 +543,40 @@ class TestAddSamples:
             "https://live.orcasound.net/bouts/new/test?time=2025-01-01T07%3A59%3A58.000Z"
         )
 
+    def test_uri_download_uses_orcasite_end_time_and_keeps_corrected_timestamp(self, tmp_path):
+        corrected_timestamp = "2025_01_01_00_00_02_PST"
+        segment_path = tmp_path / f"rpi-test_{corrected_timestamp}.wav"
+        segment_path.write_bytes(b"")
+        mock_model = MagicMock()
+        mock_model.predict.return_value = {
+            "global_prediction_label": "water",
+            "global_confidence": 0.92,
+        }
+
+        with patch("add_samples.get_node_name_from_slug", return_value="rpi_test"), patch(
+            "add_samples.download_60s_audio", return_value="fake.wav"
+        ) as mock_download, patch(
+            "add_samples.split_wav_into_segments",
+            return_value=[(segment_path, corrected_timestamp)],
+        ), patch("add_samples.lookup_detection_in_csv", return_value=None), patch(
+            "add_samples.get_node_slug", return_value="test"
+        ):
+            rows = add_training_3s_samples(
+                uri=(
+                    "https://live.orcasound.net/bouts/new/test?"
+                    "time=2025-01-01T08%3A00%3A00.000Z"
+                ),
+                output_dir=str(tmp_path),
+                model=mock_model,
+            )
+
+        mock_download.assert_called_once()
+        assert mock_download.call_args.kwargs["node_name"] == "rpi_test"
+        assert mock_download.call_args.kwargs["min_end_timestamp_pst_str"] == (
+            "2025_01_01_00_01_00_PST"
+        )
+        assert rows[0]["StartTimestamp"] == corrected_timestamp
+
     def test_default_model_path_is_used(self, tmp_path):
         """add_samples should use DEFAULT_MODEL_PATH when model_path is not provided."""
         fake_segments = self._fake_split(tmp_path)

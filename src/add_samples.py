@@ -538,7 +538,11 @@ def add_training_3s_samples(
 
         # Download the 60-second WAV file.
         temp_dir = TemporaryDirectory()
-        min_end_timestamp_pst_str=format_timestamp_pacific(parse_timestamp_pacific(start_timestamp) + timedelta(seconds=60))
+        orcasite_start = (
+            parse_timestamp_pacific(start_timestamp).astimezone(UTC_TZ)
+            - timedelta(seconds=ORCASITE_OFFSET_SECONDS)
+        )
+        min_end_timestamp_pst_str = format_timestamp_pacific(orcasite_start + timedelta(seconds=60))
         wav_path = download_60s_audio(
             node_name=node_name,
             min_end_timestamp_pst_str=min_end_timestamp_pst_str,
