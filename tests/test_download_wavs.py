@@ -130,7 +130,7 @@ class TestOverlapValidation:
             CSVRow("resident", "rpi_andrews_bay", "2025_01_01_01_00_03_PST", "", "", "", ""),
         ]
         testing_rows = [
-            CSVRow("resident", "rpi_andrews_bay", "2025_01_01_00_59_00_PST", "", "", "tp_human_only", ""),
+            CSVRow("resident", "rpi_andrews_bay", "2025_01_01_00_58_58_PST", "", "", "tp_human_only", ""),
             CSVRow("resident", "rpi_andrews_bay", "2025_01_01_01_01_06_PST", "", "", "tp_human_only", ""),
         ]
         validate_no_overlaps(training_rows, testing_rows)
@@ -562,6 +562,39 @@ class TestUriTimestampValidation:
 
         validate_uri_timestamps(rows)
 
+    def test_validate_training_uri_is_two_seconds_behind_start_timestamp(self):
+        rows = [
+            CSVRow(
+                "resident",
+                "rpi_andrews_bay",
+                "2025_01_01_01_01_08_PST",
+                "https://live.orcasound.net/bouts/new/andrews-bay?time=2025-01-01T09%3A01%3A06.000Z",
+                "desc",
+                "tp_human_only",
+                "100",
+            ),
+        ]
+
+        validate_uri_timestamps(rows, orcasite_offset_seconds=2)
+        with pytest.raises(ValueError, match="Timestamp mismatch"):
+            validate_uri_timestamps(rows)
+
+
+def test_download_audio_segment_uses_orcasite_time_for_hls_lookup(tmp_path):
+    folder_time = int(datetime(2025, 1, 1, 9, 0, 0, tzinfo=timezone.utc).timestamp())
+    row_timestamp = "2025_01_01_01_00_02_PST"
+    stream = Mock(segments=[])
+
+    with patch("audio_utils.get_cached_folders", return_value=[str(folder_time)]), patch(
+        "audio_utils.get_folders_between_timestamp", return_value=[folder_time]
+    ) as get_folders, patch("audio_utils.load_m3u8_with_retry", return_value=stream):
+        download_wavs.download_audio_segment(
+            "resident", "rpi_andrews_bay", row_timestamp, tmp_path
+        )
+
+    expected_start = int(datetime(2025, 1, 1, 9, 0, 0, tzinfo=timezone.utc).timestamp())
+    assert get_folders.call_args.args[1:] == (expected_start, expected_start + 3)
+
 
 class TestValidateOnly:
     def test_run_download_wavs_validate_only_skips_download_processing(self):
@@ -571,7 +604,7 @@ class TestValidateOnly:
             csv_dir.mkdir(parents=True, exist_ok=True)
             (csv_dir / "training_3s_samples.csv").write_text(
                 "category,node_name,timestamp_pst,uri,description,notes,confidence\n"
-                "resident,rpi_andrews_bay,2025_01_01_01_00_00_PST,https://live.orcasound.net/bouts/new/andrews-bay?time=2025-01-01T09%3A00%3A00.000Z,desc,note,100\n",
+                "resident,rpi_andrews_bay,2025_01_01_01_00_02_PST,https://live.orcasound.net/bouts/new/andrews-bay?time=2025-01-01T09%3A00%3A00.000Z,desc,note,100\n",
                 encoding="utf-8",
             )
             (csv_dir / "testing_60s_samples.csv").write_text(

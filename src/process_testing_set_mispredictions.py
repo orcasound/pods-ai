@@ -14,6 +14,7 @@ from urllib.parse import parse_qs, quote, urlencode, urlparse, urlunparse
 from audio_utils import format_timestamp_pacific, parse_timestamp_pacific
 
 TARGET_LABELS = ("resident", "transient", "humpback")
+ORCASITE_OFFSET_SECONDS = 2
 TRAINING_COLUMNS = [
     "Category",
     "NodeName",
@@ -150,15 +151,22 @@ def build_training_row(
     hop_duration: float,
 ) -> dict[str, str]:
     """Compose a training_3s_samples-style row for one segment proposal."""
-    clip_start = parse_timestamp_pacific((testing_row.get("StartTimestamp") or "").strip())
+    clip_start = (
+        parse_timestamp_pacific((testing_row.get("StartTimestamp") or "").strip()).astimezone(timezone.utc)
+        + timedelta(seconds=ORCASITE_OFFSET_SECONDS)
+    )
     segment_timestamp = format_timestamp_pacific(
         clip_start + timedelta(seconds=segment_index * float(hop_duration))
+    )
+    orcasite_timestamp = format_timestamp_pacific(
+        parse_timestamp_pacific(segment_timestamp).astimezone(timezone.utc)
+        - timedelta(seconds=ORCASITE_OFFSET_SECONDS)
     )
     return {
         "Category": (testing_row.get("Category") or "").strip(),
         "NodeName": (testing_row.get("NodeName") or "").strip(),
         "StartTimestamp": segment_timestamp,
-        "URI": build_segment_uri((testing_row.get("URI") or "").strip(), segment_timestamp),
+        "URI": build_segment_uri((testing_row.get("URI") or "").strip(), orcasite_timestamp),
         "Description": (testing_row.get("Description") or "").strip(),
         "Notes": (testing_row.get("Notes") or "").strip(),
         "Confidence": f"{float(segment_confidence) * 100:.1f}",

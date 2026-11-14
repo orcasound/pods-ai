@@ -441,7 +441,7 @@ class TestProcessFalsePositives:
         assert summary["duplicates"] == 1
         assert mock_model.predict.call_count == 1
         assert mock_add_samples.call_args.kwargs["model"] is mock_model
-        assert mock_add_samples.call_args.kwargs["start_timestamp"] == "2025_01_01_03_59_58_PST"
+        assert mock_add_samples.call_args.kwargs["start_timestamp"] == "2025_01_01_04_00_00_PST"
         assert mock_add_samples.call_args.kwargs["corrected_class"] == "vessel"
         assert mock_add_samples.call_args.kwargs["fallback_description"] == detection.comments
         assert mock_add_samples.call_args.kwargs["fallback_notes"] == "fp_machine"

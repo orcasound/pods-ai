@@ -431,7 +431,7 @@ class TestProcessFalseNegatives:
         assert podsai_model.predict.call_count == 2
         assert orcahello_model.predict.call_count == 1
         assert mock_add_samples.call_count == 1
-        assert mock_add_samples.call_args.kwargs["start_timestamp"] == "2025_01_01_04_04_58_PST"
+        assert mock_add_samples.call_args.kwargs["start_timestamp"] == "2025_01_01_04_05_00_PST"
 
     def test_testing_set_appends_60_second_false_negative(self, tmp_path):
         """Testing mode adds a resident 60-second row without segment inference."""

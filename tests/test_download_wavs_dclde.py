@@ -103,7 +103,7 @@ def test_shared_root_skips_cleanup_when_testing_manifest_unavailable(
     csv_dir.mkdir(parents=True, exist_ok=True)
     (csv_dir / "training_3s_samples.csv").write_text(
         CSV_HEADER
-        + "resident,rpi_orcasound_lab,2025_01_01_00_00_30_PST,https://live.orcasound.net/bouts/new/andrews-bay?time=2025-01-01T08%3A00%3A30.000Z,train,note,100\n",
+        + "resident,rpi_orcasound_lab,2025_01_01_00_00_32_PST,https://live.orcasound.net/bouts/new/andrews-bay?time=2025-01-01T08%3A00%3A30.000Z,train,note,100\n",
         encoding="utf-8",
     )
     if testing_manifest_present:
