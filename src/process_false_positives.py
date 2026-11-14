@@ -197,9 +197,10 @@ def process_false_positives(
             if end_time is not None and detection.timestamp > end_time:
                 continue
 
-            timestamp_str_pst = format_timestamp_pacific(
-                detection.timestamp - timedelta(seconds=AUDIO_OFFSET_SECONDS)
-            )
+            sample_timestamp = detection.timestamp
+            if not for_training:
+                sample_timestamp -= timedelta(seconds=AUDIO_OFFSET_SECONDS)
+            timestamp_str_pst = format_timestamp_pacific(sample_timestamp)
             summary["rejected"] += 1
             corrected_class = get_corrected_class(detection.comments, detection.tags)
             if corrected_class is None:

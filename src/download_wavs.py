@@ -108,12 +108,11 @@ def _training_window(row: CSVRow) -> tuple[datetime, datetime]:
 
 def _testing_window(row: CSVRow) -> tuple[datetime, datetime]:
     """
-    Return the full-recording interval represented by a testing row.
-    The row is assumed to already be aligned with the OrcaHello
-    detection timestamp, so the interval is simply the 60-second
-    window starting at the row's timestamp.
+    Return the full-recording interval represented by a testing row in corrected time.
     """
-    start = parse_timestamp_pacific(row.timestamp_pst)
+    start = PACIFIC_TZ.normalize(
+        parse_timestamp_pacific(row.timestamp_pst) + timedelta(seconds=AUDIO_OFFSET_SECONDS)
+    )
     return start, start + timedelta(seconds=TESTING_WINDOW_SECONDS)
 
 
@@ -670,11 +669,12 @@ def validate_aligned_entries(testing_rows: list[CSVRow]) -> None:
         raise ValueError("\n".join(mismatches))
 
 
-def validate_uri_timestamps(rows: list[CSVRow]) -> None:
-    """Verify that the timestamp encoded in each row URI matches the CSV StartTimestamp.
+def validate_uri_timestamps(rows: list[CSVRow], orcasite_offset_seconds: int = 0) -> None:
+    """Verify that the timestamp encoded in each row URI matches its Orcasite time.
 
     Args:
         rows: Parsed CSV rows to validate.
+        orcasite_offset_seconds: Number of seconds between the CSV timestamp and its URI.
 
     Raises:
         ValueError: If any row's URI timestamp does not match the CSV timestamp or the URI cannot be parsed.
@@ -692,7 +692,10 @@ def validate_uri_timestamps(rows: list[CSVRow]) -> None:
             )
             continue
 
-        if parse_timestamp_pacific(uri_timestamp_pst) != parse_timestamp_pacific(row.timestamp_pst):
+        expected_uri_timestamp = PACIFIC_TZ.normalize(
+            parse_timestamp_pacific(row.timestamp_pst) - timedelta(seconds=orcasite_offset_seconds)
+        )
+        if parse_timestamp_pacific(uri_timestamp_pst) != expected_uri_timestamp:
             mismatches.append(
                 "Timestamp mismatch between CSV and URI:\n"
                 f"  csv: {row.node_name} {row.timestamp_pst}\n"
@@ -817,8 +820,8 @@ def download_audio_segment(
     folder_name = tokens[1]
     prefix = folder_name + "/hls/"
 
-    # Convert timestamps to unix time.
-    start_time = timestamp_pst
+    # Orcasite's HLS timeline is two seconds behind the corrected CSV timestamp.
+    start_time = PACIFIC_TZ.normalize(timestamp_pst - timedelta(seconds=AUDIO_OFFSET_SECONDS))
     end_time = start_time + timedelta(seconds=N_SECONDS)
     start_unix_time = int(start_time.timestamp())
     end_unix_time = int(end_time.timestamp())
@@ -1195,7 +1198,8 @@ def run_download_wavs(
     # TODO(issue #550): Verify whether dclde_rows have the correct timestamp or need correction first.
     validate_no_overlaps(training_rows, testing_rows, dclde_rows)
 
-    validate_uri_timestamps(training_rows + testing_rows)
+    validate_uri_timestamps(training_rows, orcasite_offset_seconds=AUDIO_OFFSET_SECONDS)
+    validate_uri_timestamps(testing_rows)
 
     validate_node_slug_in_uri(testing_rows + dclde_rows)
 

@@ -28,6 +28,7 @@ from add_samples import (
     lookup_detection_in_csv,
     main as add_samples_main,
     parse_node_and_timestamp_from_filename,
+    parse_uri,
     split_wav_into_segments,
 )
 
@@ -114,6 +115,45 @@ class TestFormatTimestampPacific:
         )
 
         assert result is None
+
+
+def test_parse_uri_returns_correct_timestamp():
+    """URI timestamps are converted to corrected local time."""
+    with patch("add_samples.get_node_name_from_slug", return_value="rpi_test"):
+        node_name, timestamp = parse_uri(
+            "https://live.orcasound.net/bouts/new/test?time=2025-01-01T08%3A00%3A00.000Z"
+        )
+
+    assert node_name == "rpi_test"
+    assert timestamp == "2025_01_01_00_00_02_PST"
+
+
+def test_corrected_training_timestamp_matches_orcasite_manifest_time(tmp_path):
+    detections_csv = tmp_path / "detections.csv"
+    with detections_csv.open("w", newline="", encoding="utf-8") as csv_file:
+        writer = csv.DictWriter(
+            csv_file,
+            fieldnames=["NodeName", "StartTimestamp", "URI", "Description", "Notes", "Tags"],
+        )
+        writer.writeheader()
+        writer.writerow({
+            "NodeName": "rpi_sunset_bay",
+            "StartTimestamp": "2025_01_15_12_30_00_PST",
+            "URI": "https://example.com/orcasite-time",
+            "Description": "Existing detection",
+            "Notes": "fp_machine_only",
+            "Tags": "vessel",
+        })
+
+    result = lookup_detection_in_csv(
+        "rpi_sunset_bay",
+        "2025_01_15_12_30_02_PST",
+        str(detections_csv),
+        orcasite_offset_seconds=2,
+    )
+
+    assert result is not None
+    assert result.uri == "https://example.com/orcasite-time"
 
 
 # ---------------------------------------------------------------------------
@@ -474,6 +514,34 @@ class TestAddSamples:
             assert row["Description"] == ""
             assert row["Notes"] == "manual"
             assert row["Confidence"] == "92.0"  # Confidence is percentage string (0.92 * 100 = 92.0)
+
+    def test_training_timestamp_is_two_seconds_after_uri_time(self, tmp_path):
+        segment_path = tmp_path / "rpi-test_2025_01_01_00_00_00_PST.wav"
+        segment_path.write_bytes(b"")
+        mock_model = MagicMock()
+        mock_model.predict.return_value = {
+            "global_prediction_label": "water",
+            "global_confidence": 0.92,
+        }
+
+        with patch(
+            "add_samples.split_wav_into_segments",
+            return_value=[(segment_path, "2025_01_01_00_00_00_PST")],
+        ), patch("add_samples.lookup_detection_in_csv", return_value=None), patch(
+            "add_samples.get_node_slug", return_value="test"
+        ):
+            rows = add_training_3s_samples(
+                wav_file="fake.wav",
+                node_name="rpi_test",
+                start_timestamp="2025_01_01_00_00_00_PST",
+                output_dir=str(tmp_path),
+                model=mock_model,
+            )
+
+        assert rows[0]["StartTimestamp"] == "2025_01_01_00_00_00_PST"
+        assert rows[0]["URI"] == (
+            "https://live.orcasound.net/bouts/new/test?time=2025-01-01T07%3A59%3A58.000Z"
+        )
 
     def test_default_model_path_is_used(self, tmp_path):
         """add_samples should use DEFAULT_MODEL_PATH when model_path is not provided."""

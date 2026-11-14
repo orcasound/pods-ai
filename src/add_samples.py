@@ -35,7 +35,8 @@ corrected class are omitted from the printed output.
 
 URI/Description/Notes Lookup:
 - The script looks up the detection in detections.csv (default: output/csv/testing_60s_samples.csv)
-  by matching NodeName and StartTimestamp, and uses the URI, Description, and Notes from that row
+  by matching NodeName and the Orcasite-time equivalent of StartTimestamp, then uses the URI,
+  Description, and Notes from that row
 - If not found in detections.csv, generates a URI from the timestamp and uses
   fallback_description when provided (otherwise empty Description), with Notes="manual"
 
@@ -71,6 +72,7 @@ from audio_utils import (
 
 SEGMENT_DURATION = 3  # Duration of each segment in seconds.
 HOP_DURATION = 2  # Hop size between segments in seconds.
+ORCASITE_OFFSET_SECONDS = 2
 DEFAULT_OUTPUT_DIR = "new"  # Default output directory for segments.
 DEFAULT_MODEL_PATH = "davethaler/whale-call-detector"  # Default HuggingFace model ID.
 from model_revisions import LATEST_PODSAI_MODEL_REVISION
@@ -237,7 +239,7 @@ def parse_uri(uri: str) -> tuple[str, str]:
 
     time_str = query_params['time'][0]
 
-    # Parse UTC time and convert to PST.
+    # Parse Orcasite time and convert it to the correct recording time.
     # Format: 2024-07-04T18:05:59.000Z
     try:
         utc_dt = datetime.strptime(time_str, "%Y-%m-%dT%H:%M:%S.%fZ")
@@ -246,7 +248,7 @@ def parse_uri(uri: str) -> tuple[str, str]:
         utc_dt = datetime.strptime(time_str, "%Y-%m-%dT%H:%M:%SZ")
 
     utc_dt = UTC_TZ.localize(utc_dt)
-    pst_dt = utc_dt.astimezone(PACIFIC_TZ)
+    pst_dt = (utc_dt + timedelta(seconds=ORCASITE_OFFSET_SECONDS)).astimezone(PACIFIC_TZ)
     timestamp_str = format_timestamp_pacific(pst_dt)
 
     return node_name, timestamp_str
@@ -282,14 +284,20 @@ def generate_uri(node_name: str, timestamp_str: str) -> str:
     return f"https://live.orcasound.net/bouts/new/{slug}?time={time_encoded}"
 
 
-def lookup_detection_in_csv(node_name: str, timestamp_str: str, detections_csv: str) -> Optional[DetectionInfo]:
+def lookup_detection_in_csv(
+    node_name: str,
+    timestamp_str: str,
+    detections_csv: str,
+    orcasite_offset_seconds: int = 0,
+) -> Optional[DetectionInfo]:
     """
-    Look up detection info in detections.csv by matching NodeName and StartTimestamp.
+    Look up detection info in detections.csv by node and the equivalent Orcasite timestamp.
 
     Args:
         node_name: Hydrophone node name (e.g., "rpi_orcasound_lab").
         timestamp_str: PST timestamp string (e.g., "2023_10_28_07_33_52_PST").
         detections_csv: Path to detections.csv file.
+        orcasite_offset_seconds: Seconds to subtract from the requested timestamp before matching.
 
     Returns:
         DetectionInfo with uri, description, notes, and tags if found, None otherwise.
@@ -300,7 +308,11 @@ def lookup_detection_in_csv(node_name: str, timestamp_str: str, detections_csv: 
         return None
 
     try:
-        requested_timestamp = timestamp_str.strip().upper()
+        requested_timestamp = format_timestamp_pacific(
+            PACIFIC_TZ.normalize(
+                parse_timestamp_pacific(timestamp_str) - timedelta(seconds=orcasite_offset_seconds)
+            )
+        ).upper()
         with open(detections_path, 'r', encoding='utf-8') as f:
             reader = csv.DictReader(f)
             for row in reader:
@@ -550,7 +562,12 @@ def add_training_3s_samples(
     out_dir = Path(output_dir)
 
     # Try to look up detection info in detections.csv.
-    detection_info = lookup_detection_in_csv(node_name, start_timestamp, detections_csv)
+    detection_info = lookup_detection_in_csv(
+        node_name,
+        start_timestamp,
+        detections_csv,
+        orcasite_offset_seconds=ORCASITE_OFFSET_SECONDS,
+    )
     if detection_info:
         # Use Description and Notes from detections.csv.
         shared_description = detection_info.description
@@ -591,8 +608,12 @@ def add_training_3s_samples(
         # Convert confidence from 0.0-1.0 to 0.0-100.0.
         confidence_pct = confidence * 100
 
-        # Generate URI matching this segment's timestamp.
-        segment_uri = generate_uri(node_name, timestamp_str)
+        # Keep the URI on Orcasite time while storing the corrected sample time.
+        orcasite_timestamp = format_timestamp_pacific(
+            parse_timestamp_pacific(timestamp_str).astimezone(UTC_TZ)
+            - timedelta(seconds=ORCASITE_OFFSET_SECONDS)
+        )
+        segment_uri = generate_uri(node_name, orcasite_timestamp)
 
         # Create row dict matching manual_samples.csv format.
         row = {

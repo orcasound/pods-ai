@@ -135,9 +135,10 @@ def process_false_negatives(
                 continue
 
             summary["confirmed"] += 1
-            timestamp_str = format_timestamp_pacific(
-                detection.timestamp - timedelta(seconds=AUDIO_OFFSET_SECONDS)
-            )
+            sample_timestamp = detection.timestamp
+            if not for_training:
+                sample_timestamp -= timedelta(seconds=AUDIO_OFFSET_SECONDS)
+            timestamp_str = format_timestamp_pacific(sample_timestamp)
             print(f"Checking confirmed SRKW detection at {timestamp_str} by model {model_id}")
 
             with TemporaryDirectory() as temp_dir:
