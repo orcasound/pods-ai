@@ -30,6 +30,7 @@ Every new source file must start with a copyright notice and SPDX license identi
 
 - Comments must end in punctuation (typically a period).
 - **DON'T** include commented-out code. Remove dead code rather than commenting it out.
+- All functions should have function-level comments at the top of the function.
 
 ### Naming
 
