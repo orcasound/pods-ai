@@ -124,6 +124,7 @@ class TestTimestampHelpers:
 
 
 def test_training_sample_download_uses_shared_audio_downloader(tmp_path):
+    """Download a training sample through the shared audio utility."""
     wav_dir = tmp_path / "training-wav"
     source_path = tmp_path / "source.wav"
     source_path.write_bytes(b"wav")

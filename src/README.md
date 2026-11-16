@@ -11,8 +11,7 @@
   to the training set.
 
 Key dependencies:
-- `orca-hls-utils` (submodule): Shared Orcasound S3 and HLS audio access. Initialize with
-  `git submodule update --init external/orca-hls-utils`.
+- `orca-hls-utils` (submodule): Shared Orcasound S3 and HLS audio access.
 - `boto3`, `m3u8`, and `beautifulsoup4`: Runtime dependencies of the shared HLS utility
 - `ffmpeg-python`: For audio processing
 - `librosa>=0.10.0`: For audio analysis

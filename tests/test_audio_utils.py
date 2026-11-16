@@ -36,6 +36,7 @@ def test_difference_between_times_across_dst_transition(monkeypatch):
 
 
 def test_s3_folder_listing_delegates_to_orca_hls_utils():
+    """Delegate S3 folder enumeration to the shared utility."""
     with patch(
         "audio_utils.s3_utils.get_all_folders",
         return_value=["1700000000"],
@@ -49,6 +50,7 @@ def test_s3_folder_listing_delegates_to_orca_hls_utils():
 
 
 def test_download_audio_uses_orca_hls_utils_and_crops_requested_interval(tmp_path):
+    """Select shared HLS segments and crop the requested audio interval."""
     start = datetime(2025, 1, 1, 0, 0, tzinfo=timezone.utc)
     segment = Mock(
         start=start.timestamp() - 10,
@@ -58,6 +60,7 @@ def test_download_audio_uses_orca_hls_utils_and_crops_requested_interval(tmp_pat
     archive = Mock(segments=[segment])
 
     def download_segment(url, directory):
+        """Create a local stand-in for a downloaded HLS segment."""
         (tmp_path / url.rsplit("/", 1)[-1]).write_bytes(b"segment")
 
     with (

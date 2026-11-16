@@ -1,6 +1,6 @@
 # Copyright (c) PODS-AI contributors
 # SPDX-License-Identifier: MIT
-"""Load the vendored Orca HLS utilities."""
+"""Load Orca HLS utilities."""
 
 import sys
 from pathlib import Path
