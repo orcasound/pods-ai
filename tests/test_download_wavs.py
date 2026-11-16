@@ -123,6 +123,37 @@ class TestTimestampHelpers:
         assert add_seconds_to_timestamp_pst("2025_01_01_00_00_03_PST", 60) == "2025_01_01_00_01_03_PST"
 
 
+def test_training_sample_download_uses_shared_audio_downloader(tmp_path):
+    wav_dir = tmp_path / "training-wav"
+    source_path = tmp_path / "source.wav"
+    source_path.write_bytes(b"wav")
+    row_timestamp = "2025_01_01_00_00_03_PST"
+
+    with patch(
+        "download_wavs.download_audio_from_start_utc",
+        return_value=str(source_path),
+    ) as download:
+        download_wavs.download_audio_segment(
+            "resident",
+            "rpi_orcasound_lab",
+            row_timestamp,
+            wav_dir,
+        )
+
+    download.assert_called_once_with(
+        node_name="rpi_orcasound_lab",
+        start_time_utc=datetime(2025, 1, 1, 8, 0, 3, tzinfo=timezone.utc),
+        tmp_dir=ANY,
+        duration_seconds=3,
+    )
+    expected = (
+        wav_dir
+        / "resident"
+        / "rpi-orcasound-lab_2025_01_01_00_00_03_PST.wav"
+    )
+    assert expected.read_bytes() == b"wav"
+
+
 class TestOverlapValidation:
     def test_validate_no_overlaps_allows_non_overlapping_rows(self):
         training_rows = [

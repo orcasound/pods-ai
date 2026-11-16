@@ -16,6 +16,7 @@ on:
       - src/add_samples.py
       - src/audio_utils.py
       - src/model_revisions.py
+      - external/orca-hls-utils
   workflow_dispatch:
 
 concurrency:
@@ -72,6 +73,10 @@ jobs:
             should_run=true
           fi
           echo "should_run=$should_run" >> "$GITHUB_OUTPUT"
+
+      - name: Initialize Orca HLS utilities
+        if: steps.detect.outputs.should_run == 'true'
+        run: git submodule update --init external/orca-hls-utils
 
       - id: cache_ref
         name: Determine WAV cache source ref

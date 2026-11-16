@@ -133,27 +133,26 @@ class TestMCPServer(unittest.TestCase):
         _, kwargs = mock_get.call_args
         self.assertIn("feed_123", kwargs["params"]["filter[feed_id]"])
 
-    @patch("boto3.client")
-    def test_list_s3_recordings(self, mock_boto):
-        mock_s3 = MagicMock()
-        mock_boto.return_value = mock_s3
-        
-        # Mock paginator.
-        mock_paginator = MagicMock()
-        mock_s3.get_paginator.return_value = mock_paginator
-        mock_paginator.paginate.return_value = [
-            {
-                "CommonPrefixes": [
-                    {"Prefix": "node_1/hls/1700000000/"},
-                    {"Prefix": "node_1/hls/1700000060/"}
-                ]
-            }
-        ]
-        
+    @patch("mcp_server.s3_utils.get_all_folders")
+    def test_list_s3_recordings(self, mock_get_all_folders):
+        mock_get_all_folders.return_value = ["1700000000", "1700000060"]
         result = list_s3_recordings("node_1")
         self.assertEqual(result["node_name"], "node_1")
         self.assertEqual(result["total_found"], 2)
         self.assertIn("1700000000", result["timestamps"])
+        mock_get_all_folders.assert_called_once_with(
+            "audio-orcasound-net", "node_1/hls/"
+        )
+
+    @patch("mcp_server.s3_utils.get_all_folders")
+    def test_list_s3_recordings_supports_date_prefix(self, mock_get_all_folders):
+        mock_get_all_folders.return_value = ["1700000000", "1740000000"]
+        result = list_s3_recordings("node_1", date_prefix="174")
+
+        self.assertEqual(result["timestamps"], ["1740000000"])
+        mock_get_all_folders.assert_called_once_with(
+            "audio-orcasound-net", "node_1/hls/174"
+        )
 
     @patch("mcp_server._read_csv")
     @patch("mcp_server.Path.exists")

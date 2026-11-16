@@ -100,6 +100,12 @@ choco install ffmpeg -y
 pip install -r requirements.txt
 ```
 
+Initialize the Orca HLS utilities submodule used to access Orcasound S3 audio:
+
+```
+git submodule update --init external/orca-hls-utils
+```
+
 Optional: ONNX support
 
 If you plan to export a model to ONNX or use an ONNX inference backend with `compare_models.py` or `run_inference.py`, install the ONNX dependencies:
