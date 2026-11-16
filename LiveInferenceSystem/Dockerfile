@@ -28,6 +28,7 @@ RUN uv python install 3.12 && uv sync --no-dev
 COPY ./src/model_revisions.py ./model_revisions.py
 ENV HF_HOME=/usr/src/hf_cache
 ENV TRANSFORMERS_CACHE=/usr/src/hf_cache
+
 RUN <<'EOF'
 /usr/src/venv/bin/python - <<'PYCODE'
 from huggingface_hub import snapshot_download
@@ -38,7 +39,9 @@ snapshot_download(
     local_dir="/usr/src/hf_cache",
     local_dir_use_symlinks=False,
     revision=LATEST_PODSAI_MODEL_REVISION,
-    allow_patterns="*"
+    ignore_patterns=[
+        "checkpoint-*",
+    ],
 )
 PYCODE
 EOF
