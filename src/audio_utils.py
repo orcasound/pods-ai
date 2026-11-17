@@ -9,13 +9,17 @@ other scripts to avoid code duplication.
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+import http.client
 from pathlib import Path
 from typing import List, Optional
 import os
 import shutil
+import time
+import urllib.error
 
 from azure.cosmos import CosmosClient
 import ffmpeg
+import requests
 try:
     from orcasite_feeds import OrcasiteFeed
 except ImportError:  # pragma: no cover
@@ -78,32 +82,6 @@ def get_cached_folders(bucket: str, prefix: str) -> List[str]:
     return _FOLDERS_CACHE[key]
 
 
-def get_folders_between_timestamp(bucket_list: List[str], start_time: int, end_time: int) -> List[int]:
-    """
-    Filter bucket list to only include folders between start_time and end_time.
-    
-    Parameters:
-        bucket_list (List[str]): List of folder names (as strings).
-        start_time (int): Start unix timestamp.
-        end_time (int): End unix timestamp.
-    
-    Returns:
-        List[int]: Filtered list of folder names as integers.
-    """
-    bucket_list = [int(bucket) for bucket in bucket_list]
-    start_index = 0
-    end_index = len(bucket_list) - 1
-
-    while start_index < len(bucket_list) and bucket_list[start_index] < start_time:
-        start_index += 1
-
-    while end_index >= 0 and bucket_list[end_index] > end_time:
-        end_index -= 1
-
-    # Include the folder before start_time to ensure we have data.
-    return bucket_list[max(0, start_index - 1) : end_index + 1]
-
-
 def get_difference_between_times_in_seconds(later_unix_time: int, earlier_unix_time: int) -> float:
     """
     Calculate the difference between two unix timestamps in seconds.
@@ -119,8 +97,23 @@ def get_difference_between_times_in_seconds(later_unix_time: int, earlier_unix_t
 
 
 def download_from_url(dl_url: str, dl_dir: str):
-    """Download a URL into a directory using the shared HLS utility."""
-    return scraper.download_from_url(dl_url, dl_dir)
+    """Download a URL with retries for transient network failures."""
+    for attempt in range(3):
+        try:
+            return scraper.download_from_url(dl_url, dl_dir)
+        except (
+            requests.exceptions.ConnectionError,
+            requests.exceptions.ChunkedEncodingError,
+            urllib.error.URLError,
+            http.client.IncompleteRead,
+        ) as error:
+            if attempt == 2 or (
+                isinstance(error, urllib.error.HTTPError)
+                and error.code < 500
+                and error.code != 429
+            ):
+                raise
+            time.sleep(1)
 
 
 def format_timestamp_pacific(dt: datetime) -> str:
@@ -278,10 +271,10 @@ def download_audio_from_start_utc(
             "https://s3-us-west-2.amazonaws.com/"
             f"audio-orcasound-net/{node_name}"
         )
-        valid_folders = get_folders_between_timestamp(
+        valid_folders = s3_utils.get_folders_between_timestamp(
             get_cached_folders("audio-orcasound-net", f"{node_name}/hls/"),
-            int(start_timestamp),
-            int(end_timestamp),
+            str(int(start_timestamp)),
+            str(int(end_timestamp)),
         )
         if not valid_folders:
             print(f"  Warning: No audio found for {start_time_utc}")
@@ -340,7 +333,7 @@ def download_audio_from_start_utc(
 
         downloaded_segments = []
         for segment in selected_segments:
-            scraper.download_from_url(segment.url, tmp_dir)
+            download_from_url(segment.url, tmp_dir)
             downloaded_segments.append(
                 Path(tmp_dir) / segment.url.rsplit("/", 1)[-1]
             )

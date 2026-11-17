@@ -3,10 +3,12 @@
 
 import os
 import time
+import urllib.error
 from datetime import datetime, timezone
 from unittest.mock import Mock, patch
 
 import pytest
+import requests
 
 import audio_utils
 from audio_utils import (
@@ -52,12 +54,17 @@ def test_s3_folder_listing_delegates_to_orca_hls_utils():
 def test_download_audio_uses_orca_hls_utils_and_crops_requested_interval(tmp_path):
     """Select shared HLS segments and crop the requested audio interval."""
     start = datetime(2025, 1, 1, 0, 0, tzinfo=timezone.utc)
+    folder_start = int(start.timestamp()) - 3 * 60 * 60
     segment = Mock(
         start=start.timestamp() - 10,
         duration=10,
         url="https://example.org/hls/live000.ts",
     )
     archive = Mock(segments=[segment])
+
+    def load_archive_and_live(_, folder):
+        """Only the long-running session folder contains the requested audio."""
+        return (archive, None) if folder == folder_start else (None, None)
 
     def download_segment(url, directory):
         """Create a local stand-in for a downloaded HLS segment."""
@@ -66,11 +73,16 @@ def test_download_audio_uses_orca_hls_utils_and_crops_requested_interval(tmp_pat
     with (
         patch(
             "audio_utils.get_cached_folders",
-            return_value=["1735689600"],
+            return_value=[
+                str(int(start.timestamp()) - 2 * 60 * 60),
+                str(folder_start),
+                str(int(start.timestamp()) - 60 * 60),
+                str(int(start.timestamp())),
+            ],
         ) as get_cached_folders,
         patch(
             "audio_utils.playlist_utils.load_archive_and_live",
-            return_value=(archive, None),
+            side_effect=load_archive_and_live,
         ) as load_playlists,
         patch(
             "audio_utils.playlist_utils.get_playlist_timeline",
@@ -102,7 +114,7 @@ def test_download_audio_uses_orca_hls_utils_and_crops_requested_interval(tmp_pat
     load_playlists.assert_called_once_with(
         "https://s3-us-west-2.amazonaws.com/"
         "audio-orcasound-net/rpi_orcasound_lab",
-        1735689600,
+        folder_start,
     )
     fill_timeline.assert_called_once_with(
         [segment],
@@ -127,3 +139,54 @@ def test_download_audio_uses_orca_hls_utils_and_crops_requested_interval(tmp_pat
     assert result == str(
         tmp_path / "temp_3s_rpi_orcasound_lab_2024_12_31_16_00_00_PST.wav"
     )
+
+
+def test_download_from_url_retries_transient_network_failures(tmp_path):
+    """Retry shared downloads after transient connection errors."""
+    with (
+        patch(
+            "audio_utils.scraper.download_from_url",
+            side_effect=[
+                requests.exceptions.ConnectionError(),
+                requests.exceptions.ChunkedEncodingError(),
+                None,
+            ],
+        ) as download_from_url,
+        patch("audio_utils.time.sleep") as sleep,
+    ):
+        audio_utils.download_from_url("https://example.org/audio.ts", str(tmp_path))
+
+    assert download_from_url.call_count == 3
+    assert sleep.call_count == 2
+
+
+def test_download_from_url_raises_after_three_transient_failures(tmp_path):
+    """Raise the final transient failure after exhausting download retries."""
+    failure = requests.exceptions.ConnectionError()
+    with (
+        patch(
+            "audio_utils.scraper.download_from_url",
+            side_effect=failure,
+        ) as download_from_url,
+        patch("audio_utils.time.sleep") as sleep,
+        pytest.raises(requests.exceptions.ConnectionError),
+    ):
+        audio_utils.download_from_url("https://example.org/audio.ts", str(tmp_path))
+
+    assert download_from_url.call_count == 3
+    assert sleep.call_count == 2
+
+
+def test_download_from_url_retries_urlretrieve_network_failures(tmp_path):
+    """Retry URL errors raised by the shared urlretrieve-based downloader."""
+    with (
+        patch(
+            "audio_utils.scraper.download_from_url",
+            side_effect=[urllib.error.URLError("temporary failure"), None],
+        ) as download_from_url,
+        patch("audio_utils.time.sleep") as sleep,
+    ):
+        audio_utils.download_from_url("https://example.org/audio.ts", str(tmp_path))
+
+    assert download_from_url.call_count == 2
+    sleep.assert_called_once_with(1)
