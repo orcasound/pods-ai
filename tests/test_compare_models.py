@@ -1191,13 +1191,35 @@ class TestMainCLI:
 
     # test orcahello aggregation options reach the loader
     @pytest.mark.parametrize(
-        ("aggregation", "top_k"),
+        ("variant", "expected_name", "expected_config"),
         [
-            ("mean_thresholded", None),
-            ("mean_top_k", 3),
+            (
+                "default",
+                "default",
+                None,
+            ),
+            (
+                "thresholded=mean_thresholded",
+                "thresholded",
+                {
+                    "global_prediction": {
+                        "aggregation_strategy": "mean_thresholded",
+                    }
+                },
+            ),
+            (
+                "top3=mean_top_k:3",
+                "top3",
+                {
+                    "global_prediction": {
+                        "aggregation_strategy": "mean_top_k",
+                        "mean_top_k": 3,
+                    }
+                },
+            ),
         ],
     )
-    def test_orcahello_aggregation_config(self, tmp_path, aggregation, top_k):
+    def test_orcahello_variant_config(self, tmp_path, variant, expected_name, expected_config):
         """main() passes aggregation settings to the OrcaHello loader."""
         from compare_models import ModelResult, main
 
@@ -1208,12 +1230,9 @@ class TestMainCLI:
             "compare_models.py",
             "--wav-dir", str(wav_dir),
             "--models", "orcahello",
-            "--orcahello-aggregation", aggregation,
+            "--orcahello-variant", variant,
             "--max-samples", "1",
         ]
-
-        if top_k is not None:
-            test_args.extend(["--orcahello-top-k", str(top_k)])
 
         model = type(
             "Model",
@@ -1229,55 +1248,119 @@ class TestMainCLI:
             patch(
                 "compare_models.evaluate_model",
                 return_value=ModelResult("orcahello"),
-            ):
+            ) as evaluate:
+
             assert main() == 0
 
-            expected_config = {
-                "global_prediction": {
-                    "aggregation_strategy": aggregation,
-                }
+            expected_loader_args = {
+                "model_type": "orcahello",
+                "model_path": "orcasound/orcahello-srkw-detector-v1",
+                "model_revision": None,
             }
 
-            if top_k is not None:
-                expected_config["global_prediction"]["mean_top_k"] = top_k
+            if expected_config is not None:
+                expected_loader_args["config"] = expected_config
 
-            load_model.assert_called_once_with(
-                model_type="orcahello",
-                model_path="orcasound/orcahello-srkw-detector-v1",
-                model_revision=None,
-                config=expected_config,
-            )
+            load_model.assert_called_once_with(**expected_loader_args)
+            assert evaluate.call_args.kwargs["variant"] == expected_name
 
-    # Test that top-K requires mean_top_k
-    def test_orcahello_top_k_requires_mean_top_k(self, tmp_path):
-        """--orcahello-top-k requires --orcahello-aggregation mean_top_k."""
-        from compare_models import main
+    def test_orcahello_multiple_variants(self, tmp_path):
+        """main() evaluates multiple OrcaHello variants independently."""
+        from compare_models import ModelResult, main
+        from unittest.mock import call
 
-        test_args = [
-            "compare_models.py",
-            "--models", "orcahello",
-            "--orcahello-top-k", "3",
-        ]
-
-        with patch.object(sys, "argv", test_args):
-                assert main() == 1
-
-    # Test that top-K must be positive
-    @pytest.mark.parametrize("top_k", ["0", "-1"])
-    def test_orcahello_top_k_must_be_positive(self, top_k):
-        from compare_models import main
+        wav_dir = tmp_path / "testing-wav"
+        _make_wav(wav_dir, "resident")
 
         test_args = [
             "compare_models.py",
+            "--wav-dir", str(wav_dir),
             "--models", "orcahello",
-            "--orcahello-aggregation", "mean_top_k",
-            "--orcahello-top-k", top_k,
+            "--orcahello-variant", "default",
+            "--orcahello-variant", "thresholded=mean_thresholded",
+            "--orcahello-variant", "top3=mean_top_k:3",
+            "--max-samples", "1",
         ]
 
-        with patch.object(sys, "argv", test_args):
-                assert main() == 1
+        model = type(
+            "Model",
+            (),
+            {"predict": lambda self, _: {}},
+        )()
 
-    # Test that no config override is passed to orcahello if aggregation parameter is not specified
+        with patch.object(sys, "argv", test_args), \
+            patch(
+                "compare_models.get_model_inference",
+                return_value=model,
+            ) as load_model, \
+            patch(
+                "compare_models.evaluate_model",
+                return_value=ModelResult("orcahello"),
+            ) as evaluate:
+
+            assert main() == 0
+
+        assert load_model.call_count == 3
+        assert evaluate.call_count == 3
+
+        expected_common_args = {
+            "model_type": "orcahello",
+            "model_path": "orcasound/orcahello-srkw-detector-v1",
+            "model_revision": None,
+        }
+
+        load_model.assert_has_calls([
+            call(**expected_common_args),
+            call(
+                **expected_common_args,
+                config={
+                    "global_prediction": {
+                        "aggregation_strategy": "mean_thresholded",
+                    }
+                },
+            ),
+            call(
+                **expected_common_args,
+                config={
+                    "global_prediction": {
+                        "aggregation_strategy": "mean_top_k",
+                        "mean_top_k": 3,
+                    }
+                },
+            ),
+        ])
+
+        evaluated_names = [
+            call.kwargs["variant"]
+            for call in evaluate.call_args_list
+        ]
+
+        assert evaluated_names == [
+            "default",
+            "thresholded",
+            "top3",
+        ]
+
+    @pytest.mark.parametrize(
+        "variant",
+        [
+            "top3=mean_top_k",          # Missing top_k
+            "top3=mean_thresholded:3",  # top_k not allowed for mean_thresholded
+            "top3=invalid_strategy:3",  # Unsupported strategy
+            "top0=mean_top_k:0",
+            "top_negative=mean_top_k:-1",
+            "top_float=mean_top_k:2.5",
+            "top_invalid=mean_top_k:abc",
+        ],
+    )
+    def test_orcahello_variant_invalid(self, variant):
+        """Invalid aggregation strategies and missing top_k are rejected."""
+        from compare_models import parse_orcahello_variant
+
+        with pytest.raises(ValueError):
+            parse_orcahello_variant(variant)
+
+    # Test that if the user doesn't specify any variants, the original behavior is preserved
     def test_orcahello_aggregation_defaults(self, tmp_path):
         from compare_models import ModelResult, main
 
