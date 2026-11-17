@@ -123,12 +123,18 @@ class TestTimestampHelpers:
         assert add_seconds_to_timestamp_pst("2025_01_01_00_00_03_PST", 60) == "2025_01_01_00_01_03_PST"
 
 
-def test_training_sample_download_uses_shared_audio_downloader(tmp_path):
+@pytest.mark.parametrize(
+    ("row_timestamp", "expected_start"),
+    [
+        ("2025_01_01_00_00_03_PST", datetime(2025, 1, 1, 8, 0, 3, tzinfo=timezone.utc)),
+        ("2025_07_01_00_00_03_PDT", datetime(2025, 7, 1, 7, 0, 3, tzinfo=timezone.utc)),
+    ],
+)
+def test_training_sample_download_uses_shared_audio_downloader(tmp_path, row_timestamp, expected_start):
     """Download a training sample through the shared audio utility."""
     wav_dir = tmp_path / "training-wav"
     source_path = tmp_path / "source.wav"
     source_path.write_bytes(b"wav")
-    row_timestamp = "2025_01_01_00_00_03_PST"
 
     with patch(
         "download_wavs.download_audio_from_start_utc",
@@ -143,14 +149,15 @@ def test_training_sample_download_uses_shared_audio_downloader(tmp_path):
 
     download.assert_called_once_with(
         node_name="rpi_orcasound_lab",
-        start_time_utc=datetime(2025, 1, 1, 8, 0, 3, tzinfo=timezone.utc),
+        start_time_utc=expected_start,
         tmp_dir=ANY,
         duration_seconds=3,
     )
+    assert download.call_args.kwargs["start_time_utc"].tzinfo is timezone.utc
     expected = (
         wav_dir
         / "resident"
-        / "rpi-orcasound-lab_2025_01_01_00_00_03_PST.wav"
+        / f"rpi-orcasound-lab_{row_timestamp}.wav"
     )
     assert expected.read_bytes() == b"wav"
 

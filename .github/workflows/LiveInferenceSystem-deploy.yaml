@@ -41,10 +41,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           ref: ${{ github.event.inputs.ref || github.ref }}
-          submodules: 'false'
-
-      - name: Initialize orcahello submodule
-        run: git submodule update --init external/orcahello
+          submodules: 'recursive'
 
       - name: Resolve release tag suffix
         run: |

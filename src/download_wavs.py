@@ -804,7 +804,7 @@ def download_audio_segment(
         with TemporaryDirectory() as tmp_path:
             wav_path = download_audio_from_start_utc(
                 node_name=node_name,
-                start_time_utc=timestamp_pst,
+                start_time_utc=timestamp_pst.astimezone(dt_timezone.utc),
                 tmp_dir=tmp_path,
                 duration_seconds=N_SECONDS,
             )

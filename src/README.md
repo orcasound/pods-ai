@@ -12,7 +12,7 @@
 
 Key dependencies:
 - `orca-hls-utils` (submodule): Shared Orcasound S3 and HLS audio access.
-- `boto3`, `m3u8`, and `beautifulsoup4`: Runtime dependencies of the shared HLS utility
+- `boto3`, `m3u8`, `beautifulsoup4`, and `tqdm`: Runtime dependencies of the shared HLS utility
 - `ffmpeg-python`: For audio processing
 - `librosa>=0.10.0`: For audio analysis
 - `pytz`: For timezone handling
