@@ -4,7 +4,7 @@
 import os
 import time
 import urllib.error
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock, patch
 
 import pytest
@@ -57,7 +57,7 @@ def test_download_audio_uses_orca_hls_utils_and_crops_requested_interval(tmp_pat
     folder_start = int(start.timestamp()) - 3 * 60 * 60
     segment = Mock(
         start=start.timestamp() - 10,
-        duration=10,
+        duration=20,
         url="https://example.org/hls/live000.ts",
     )
     archive = Mock(segments=[segment])
@@ -118,13 +118,13 @@ def test_download_audio_uses_orca_hls_utils_and_crops_requested_interval(tmp_pat
     )
     fill_timeline.assert_called_once_with(
         [segment],
-        start.timestamp() - 10,
+        start.timestamp() - 20,
         start.timestamp() + 3,
         audio_utils.playlist_utils.url_exists,
         extrapolate_start=True,
     )
     select_segments.assert_called_once_with(
-        [segment], start.timestamp() - 10, 13
+        [segment], start.timestamp() - 20, 13
     )
     download_from_url.assert_called_once_with(
         "https://example.org/hls/live000.ts", str(tmp_path)
@@ -139,6 +139,107 @@ def test_download_audio_uses_orca_hls_utils_and_crops_requested_interval(tmp_pat
     assert result == str(
         tmp_path / "temp_3s_rpi_orcasound_lab_2024_12_31_16_00_00_PST.wav"
     )
+
+
+def test_download_audio_does_not_require_segments_after_requested_end(tmp_path):
+    """Select an available segment when padding would extend beyond the playlist."""
+    start = datetime(2025, 1, 1, 0, 0, tzinfo=timezone.utc) + timedelta(seconds=15)
+    folder_start = int(start.timestamp()) - 3 * 60 * 60
+    segment = Mock(
+        start=start.timestamp() - 5,
+        duration=10,
+        sequence=0,
+        url="https://example.org/hls/live000.ts",
+    )
+    archive = Mock(segments=[segment])
+
+    def download_segment(url, directory):
+        """Create a local stand-in for a downloaded HLS segment."""
+        (tmp_path / url.rsplit("/", 1)[-1]).write_bytes(b"segment")
+
+    with (
+        patch(
+            "audio_utils.get_cached_folders",
+            return_value=[str(folder_start)],
+        ),
+        patch(
+            "audio_utils.playlist_utils.load_archive_and_live",
+            return_value=(archive, None),
+        ),
+        patch(
+            "audio_utils.playlist_utils.get_playlist_timeline",
+            return_value=[segment],
+        ),
+        patch(
+            "audio_utils.playlist_utils.fill_timeline_gaps",
+            return_value=[segment],
+        ),
+        patch(
+            "audio_utils.scraper.download_from_url",
+            side_effect=download_segment,
+        ),
+        patch("audio_utils.ffmpeg.input", return_value="input"),
+        patch("audio_utils.ffmpeg.output", return_value="output"),
+        patch("audio_utils.ffmpeg.run"),
+    ):
+        result = download_audio_from_start_utc(
+            "rpi_orcasound_lab", start, str(tmp_path), 3
+        )
+
+    assert result is not None
+
+
+def test_download_audio_rejects_selected_segments_with_timestamp_gaps(tmp_path):
+    """Do not concatenate segments that omit audio within the requested interval."""
+    start = datetime(2025, 1, 1, 0, 0, tzinfo=timezone.utc) + timedelta(seconds=8)
+    folder_start = int(start.timestamp()) - 3 * 60 * 60
+    segments = [
+        Mock(
+            start=start.timestamp() - 8,
+            duration=10,
+            sequence=0,
+            url="https://example.org/hls/live000.ts",
+        ),
+        Mock(
+            start=start.timestamp() + 12,
+            duration=10,
+            sequence=1,
+            url="https://example.org/hls/live001.ts",
+        ),
+        Mock(
+            start=start.timestamp() + 22,
+            duration=10,
+            sequence=2,
+            url="https://example.org/hls/live002.ts",
+        ),
+    ]
+    archive = Mock(segments=segments)
+
+    with (
+        patch(
+            "audio_utils.get_cached_folders",
+            return_value=[str(folder_start)],
+        ),
+        patch(
+            "audio_utils.playlist_utils.load_archive_and_live",
+            return_value=(archive, None),
+        ),
+        patch(
+            "audio_utils.playlist_utils.get_playlist_timeline",
+            return_value=segments,
+        ),
+        patch(
+            "audio_utils.playlist_utils.fill_timeline_gaps",
+            return_value=segments,
+        ),
+        patch("audio_utils.scraper.download_from_url") as download_segment,
+    ):
+        result = download_audio_from_start_utc(
+            "rpi_orcasound_lab", start, str(tmp_path), 15
+        )
+
+    assert result is None
+    download_segment.assert_not_called()
 
 
 def test_download_from_url_retries_transient_network_failures(tmp_path):
@@ -190,3 +291,31 @@ def test_download_from_url_retries_urlretrieve_network_failures(tmp_path):
 
     assert download_from_url.call_count == 2
     sleep.assert_called_once_with(1)
+
+
+def test_download_from_url_removes_partial_file_before_retry(tmp_path):
+    """Remove a failed partial file so retry does not treat it as complete."""
+    destination = tmp_path / "audio.ts"
+    attempts = 0
+
+    def fail_once_then_complete(url, directory):
+        """Simulate urlretrieve leaving a partial destination before retry."""
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            destination.write_bytes(b"partial")
+            raise urllib.error.ContentTooShortError("incomplete", b"partial")
+        assert not destination.exists()
+        destination.write_bytes(b"complete")
+
+    with (
+        patch(
+            "audio_utils.scraper.download_from_url",
+            side_effect=fail_once_then_complete,
+        ) as download_from_url,
+        patch("audio_utils.time.sleep"),
+    ):
+        audio_utils.download_from_url("https://example.org/audio.ts", str(tmp_path))
+
+    assert download_from_url.call_count == 2
+    assert destination.read_bytes() == b"complete"

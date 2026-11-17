@@ -155,6 +155,25 @@ class TestMCPServer(unittest.TestCase):
         )
 
     @patch("mcp_server.s3_utils.get_all_folders")
+    def test_empty_s3_listing_keeps_message_off_stdout(self, mock_get_all_folders):
+        """Keep shared S3 diagnostics off the MCP JSON-RPC output stream."""
+        def print_empty_listing(*args):
+            """Match the shared utility's empty-list diagnostic behavior."""
+            print("No content returned")
+            return []
+
+        mock_get_all_folders.side_effect = print_empty_listing
+        with (
+            patch("sys.stdout", new_callable=io.StringIO) as stdout,
+            patch("sys.stderr", new_callable=io.StringIO) as stderr,
+        ):
+            result = list_s3_recordings("node_1")
+
+        self.assertEqual(result["timestamps"], [])
+        self.assertEqual(stdout.getvalue(), "")
+        self.assertIn("No content returned", stderr.getvalue())
+
+    @patch("mcp_server.s3_utils.get_all_folders")
     def test_list_s3_recordings_supports_date_prefix(self, mock_get_all_folders):
         """Filter S3 recording folders by the requested timestamp prefix."""
         mock_get_all_folders.return_value = ["1700000000", "1740000000"]

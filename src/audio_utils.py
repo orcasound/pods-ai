@@ -107,6 +107,7 @@ def download_from_url(dl_url: str, dl_dir: str):
             urllib.error.URLError,
             http.client.IncompleteRead,
         ) as error:
+            (Path(dl_dir) / os.path.basename(dl_url)).unlink(missing_ok=True)
             if attempt == 2 or (
                 isinstance(error, urllib.error.HTTPError)
                 and error.code < 500
@@ -251,6 +252,21 @@ def format_utc_iso_z(dt: datetime) -> str:
     return dt.astimezone(UTC_TZ).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def _segments_cover_interval(segments, start_time: float, end_time: float) -> bool:
+    """Return whether segment timestamps continuously cover the requested interval."""
+    covered_until = start_time
+    for segment in segments:
+        segment_end = segment.start + segment.duration
+        if segment_end <= covered_until:
+            continue
+        if segment.start > covered_until + 1e-6:
+            return False
+        covered_until = segment_end
+        if covered_until >= end_time - 1e-6:
+            return True
+    return False
+
+
 def download_audio_from_start_utc(
     node_name: str,
     start_time_utc: datetime,
@@ -320,10 +336,22 @@ def download_audio_from_start_utc(
                     timeline[0].start - request_start <= 180
                 ),
             )
-            selected_segments = playlist_utils.select_segments_from_start(
-                timeline, request_start, duration_seconds + padding_seconds
+            selection_start = next(
+                (
+                    segment.start
+                    for segment in timeline
+                    if segment.start >= request_start - 1e-6
+                ),
+                None,
             )
-            if selected_segments and selected_segments[0].start <= start_timestamp:
+            if selection_start is None or selection_start >= end_timestamp:
+                continue
+            selected_segments = playlist_utils.select_segments_from_start(
+                timeline, request_start, end_timestamp - selection_start
+            )
+            if _segments_cover_interval(
+                selected_segments, start_timestamp, end_timestamp
+            ):
                 break
             selected_segments = None
 

@@ -13,6 +13,7 @@ Tools — all usable without AKS access:
 8. export_unlabeled_to_csv — extract unlabeled remote data and save directly to disk.
 """
 
+import contextlib
 import csv
 import json
 import sys
@@ -203,7 +204,8 @@ def list_s3_recordings(
     logger.info("list_s3_recordings", node_name=node_name, date_prefix=date_prefix)
 
     prefix = f"{node_name}/hls/{date_prefix or ''}"
-    timestamps = s3_utils.get_all_folders(S3_BUCKET, prefix)
+    with contextlib.redirect_stdout(sys.stderr):
+        timestamps = s3_utils.get_all_folders(S3_BUCKET, prefix)
     if date_prefix:
         timestamps = [timestamp for timestamp in timestamps if timestamp.startswith(date_prefix)]
     timestamps = sorted(timestamps)[-max_results:]
