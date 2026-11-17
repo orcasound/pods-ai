@@ -698,11 +698,7 @@ def validate_uri_timestamps(rows: list[CSVRow]) -> None:
         difference = row_timestamp.astimezone(dt_timezone.utc) - uri_timestamp.astimezone(
             dt_timezone.utc
         )
-        allowed_differences = {
-            timedelta(0),
-            timedelta(seconds=AUDIO_OFFSET_SECONDS),
-        }
-        if difference not in allowed_differences:
+        if difference != timedelta(seconds=AUDIO_OFFSET_SECONDS):
             mismatches.append(
                 "Timestamp mismatch between CSV and URI:\n"
                 f"  csv: {row.node_name} {row.timestamp_pst}\n"

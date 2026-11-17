@@ -622,7 +622,7 @@ class TestUriTimestampValidation:
             CSVRow(
                 "resident",
                 "rpi_andrews_bay",
-                "2025_01_01_01_01_06_PST",
+                "2025_01_01_01_01_08_PST",
                 "https://live.orcasound.net/bouts/new/andrews-bay?time=2025-01-01T09%3A01%3A06.000Z",
                 "desc",
                 "tp_human_only",
@@ -638,7 +638,7 @@ class TestUriTimestampValidation:
             CSVRow(
                 "resident",
                 "rpi_sunset_bay",
-                "2024_07_19_12_50_08_PST",
+                "2024_07_19_12_50_10_PDT",
                 "https://live.orcasound.net/bouts/new/sunset-bay?time=2024-07-19T19%3A50%3A08.000Z",
                 "desc",
                 "tp_human_only",
@@ -648,8 +648,8 @@ class TestUriTimestampValidation:
 
         validate_uri_timestamps(rows)
 
-    def test_validate_uri_timestamps_allows_two_second_offset_for_training(self):
-        """Accept the documented corrected training timestamp difference."""
+    def test_validate_uri_timestamps_requires_two_second_offset_for_training(self):
+        """Accept the required corrected training timestamp difference."""
         rows = [
             CSVRow(
                 "resident",
@@ -665,7 +665,7 @@ class TestUriTimestampValidation:
         validate_uri_timestamps(rows)
 
     def test_validate_uri_timestamps_rejects_unrelated_training_offset(self):
-        """Reject training timestamp differences other than zero or two seconds."""
+        """Reject training timestamp differences other than two seconds."""
         rows = [
             CSVRow(
                 "resident",
@@ -681,8 +681,8 @@ class TestUriTimestampValidation:
         with pytest.raises(ValueError, match="Timestamp mismatch"):
             validate_uri_timestamps(rows)
 
-    def test_validate_uri_timestamps_allows_two_second_offset_for_testing(self):
-        """Accept the documented corrected testing timestamp difference."""
+    def test_validate_uri_timestamps_requires_two_second_offset_for_testing(self):
+        """Accept the required corrected testing timestamp difference."""
         rows = [
             CSVRow(
                 "resident",
@@ -697,6 +697,22 @@ class TestUriTimestampValidation:
 
         validate_uri_timestamps(rows)
 
+    def test_validate_uri_timestamps_rejects_zero_offset(self):
+        rows = [
+            CSVRow(
+                "resident",
+                "rpi_andrews_bay",
+                "2025_01_01_01_01_06_PST",
+                "https://live.orcasound.net/bouts/new/andrews-bay?time=2025-01-01T09%3A01%3A06.000Z",
+                "desc",
+                "tp_human_only",
+                "100",
+            ),
+        ]
+
+        with pytest.raises(ValueError, match="Timestamp mismatch"):
+            validate_uri_timestamps(rows)
+
 
 class TestValidateOnly:
     def test_run_download_wavs_validate_only_skips_download_processing(self):
@@ -706,12 +722,12 @@ class TestValidateOnly:
             csv_dir.mkdir(parents=True, exist_ok=True)
             (csv_dir / "training_3s_samples.csv").write_text(
                 "category,node_name,timestamp_pst,uri,description,notes,confidence\n"
-                "resident,rpi_andrews_bay,2025_01_01_01_00_00_PST,https://live.orcasound.net/bouts/new/andrews-bay?time=2025-01-01T09%3A00%3A00.000Z,desc,note,100\n",
+                "resident,rpi_andrews_bay,2025_01_01_01_00_02_PST,https://live.orcasound.net/bouts/new/andrews-bay?time=2025-01-01T09%3A00%3A00.000Z,desc,note,100\n",
                 encoding="utf-8",
             )
             (csv_dir / "testing_60s_samples.csv").write_text(
                 "category,node_name,timestamp_pst,uri,description,notes,confidence\n"
-                "resident,rpi_andrews_bay,2025_01_01_01_01_06_PST,https://live.orcasound.net/bouts/new/andrews-bay?time=2025-01-01T09%3A01%3A06.000Z,desc,tp_human_only,100\n",
+                "resident,rpi_andrews_bay,2025_01_01_01_01_08_PST,https://live.orcasound.net/bouts/new/andrews-bay?time=2025-01-01T09%3A01%3A06.000Z,desc,tp_human_only,100\n",
                 encoding="utf-8",
             )
 
