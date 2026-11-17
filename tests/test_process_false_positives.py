@@ -6,6 +6,8 @@ import csv
 from datetime import datetime, timezone
 from unittest.mock import patch
 
+import pytest
+
 from audio_utils import OrcaHelloDetection
 from orcasite_feeds import OrcasiteFeed
 from process_false_positives import (
@@ -89,9 +91,76 @@ class TestGetCorrectedClass:
         """If tags contain no known classes, return 'water'."""
         assert get_corrected_class("Boat noise", "unknown;maybe") == "water"
 
-    def test_tags_first_match_returned(self):
-        """First matching tag should be returned when multiple known tags present."""
-        assert get_corrected_class("", "resident;vessel") == "resident"
+    def test_tags_first_match_returned_within_same_tier(self):
+        """First matching tag should be returned when competing tags are in the same priority tier."""
+        assert get_corrected_class("", "vessel;water") == "vessel"
+        assert get_corrected_class("", "ship;60Hz;hum") == "vessel"
+        assert get_corrected_class("", "hum;ship") == "hum"
+        assert get_corrected_class("", "boat;hum") == "vessel"
+        assert get_corrected_class("", "hum;train") == "hum"
+
+    @pytest.mark.parametrize(
+        ("tags", "expected_class"),
+        [
+            ("vessel;jingle", "jingle"),
+            ("water;bird", "bird"),
+            ("hum;jingle", "jingle"),
+            ("vessel;resident", "resident"),
+            ("hum;transient;orca;whale", "transient"),
+        ],
+    )
+    def test_tags_class_priority(self, tags, expected_class):
+        """Whale tags precede sporadic-event tags, which precede background tags."""
+        assert get_corrected_class("", tags) == expected_class
+
+    @pytest.mark.parametrize(
+        ("tags", "expected_class"),
+        [
+            ("hum", "hum"),
+            ("60Hz", "hum"),
+            ("60 Hz", "hum"),
+            ("60-Hz", "hum"),
+            ("  ShIp  ; other", "vessel"),
+            ("  BoAt  ; other", "vessel"),
+            ("  TrAiN  ; other", "vessel"),
+        ],
+    )
+    def test_tags_normalize_aliases(self, tags, expected_class):
+        """Hum and vessel aliases resolve after trimming and case normalization."""
+        assert get_corrected_class("", tags) == expected_class
+
+    @pytest.mark.parametrize(
+        ("comments", "expected_class"),
+        [
+            ("Loud hum in background.", "hum"),
+            ("Electrical noise, nothing else.", "hum"),
+            ("Electric buzz, nothing else.", "hum"),
+            ("60 Hz interference, nothing else.", "hum"),
+            ("60-Hz interference, nothing else.", "hum"),
+            ("Constant humming in background.", "hum"),
+            ("Humpback calls amid electrical hum.", "humpback"),
+            ("Human voices, electrical noise.", "human"),
+        ],
+    )
+    def test_comments_hum_keywords_and_priority(self, comments, expected_class):
+        """Hum keywords are recognized without overriding whale or human labels."""
+        assert get_corrected_class(comments, None) == expected_class
+
+    @pytest.mark.parametrize(
+        ("comments", "expected_class"),
+        [
+            ("No hum. Boat noise.", "vessel"),
+            ("No hum. Nothing else.", "water"),
+            ("Not 60hz, just vessel noise.", "vessel"),
+            ("No electrical hum, just vessel noise.", "vessel"),
+            ("Not a hum, that's clearly a boat.", "vessel"),
+            ("No humpback. Electrical hum present.", "hum"),
+            ("Electrical noise. No humpback nor vessel.", "hum"),
+        ],
+    )
+    def test_comments_negation_respects_other_signals(self, comments, expected_class):
+        """Negated terms do not suppress unrelated positive signals."""
+        assert get_corrected_class(comments, None) == expected_class
 
 
 class TestAppendManualSamples:
