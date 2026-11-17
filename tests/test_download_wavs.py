@@ -649,7 +649,7 @@ class TestUriTimestampValidation:
         validate_uri_timestamps(rows)
 
     def test_validate_uri_timestamps_allows_two_second_offset_for_training(self):
-        """Accept only the documented corrected training timestamp difference."""
+        """Accept the documented corrected training timestamp difference."""
         rows = [
             CSVRow(
                 "resident",
@@ -662,7 +662,7 @@ class TestUriTimestampValidation:
             ),
         ]
 
-        validate_uri_timestamps(rows, allow_two_second_offset=True)
+        validate_uri_timestamps(rows)
 
     def test_validate_uri_timestamps_rejects_unrelated_training_offset(self):
         """Reject training timestamp differences other than zero or two seconds."""
@@ -679,10 +679,10 @@ class TestUriTimestampValidation:
         ]
 
         with pytest.raises(ValueError, match="Timestamp mismatch"):
-            validate_uri_timestamps(rows, allow_two_second_offset=True)
+            validate_uri_timestamps(rows)
 
-    def test_validate_uri_timestamps_keeps_testing_offset_strict(self):
-        """Continue rejecting corrected timestamps in the strict testing validation."""
+    def test_validate_uri_timestamps_allows_two_second_offset_for_testing(self):
+        """Accept the documented corrected testing timestamp difference."""
         rows = [
             CSVRow(
                 "resident",
@@ -695,8 +695,7 @@ class TestUriTimestampValidation:
             ),
         ]
 
-        with pytest.raises(ValueError, match="Timestamp mismatch"):
-            validate_uri_timestamps(rows)
+        validate_uri_timestamps(rows)
 
 
 class TestValidateOnly:
