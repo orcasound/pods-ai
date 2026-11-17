@@ -775,6 +775,7 @@ def download_audio_segment(
     timestamp_str: str,
     output_root: Path,
     cache_root: Path | None = None,
+    uri: str = "",
 ):
     """
     Download a 3-second audio segment for a detection and save it to the appropriate label directory.
@@ -786,10 +787,21 @@ def download_audio_segment(
         node_name (str): The node name (e.g., "rpi_sunset_bay").
         timestamp_str (str): The detection timestamp in Pacific time.
         output_root (Path): Root directory where label subdirectories and audio files will be saved.
+        uri (str): Orcasite URI used to distinguish legacy from corrected timestamps.
     """
     label_dir = output_root / category
     label_dir.mkdir(parents=True, exist_ok=True)
     timestamp_pst = parse_timestamp_pacific(timestamp_str)
+    start_time_utc = timestamp_pst.astimezone(dt_timezone.utc)
+    if uri:
+        try:
+            uri_timestamp = parse_timestamp_pacific(
+                _parse_uri_timestamp_pst(uri)
+            )
+        except ValueError:
+            uri_timestamp = None
+        if uri_timestamp == timestamp_pst:
+            start_time_utc += timedelta(seconds=AUDIO_OFFSET_SECONDS)
 
     # Check if the file already exists.
     wav_filename = _get_wav_filename(node_name, timestamp_str)
@@ -804,7 +816,7 @@ def download_audio_segment(
         with TemporaryDirectory() as tmp_path:
             wav_path = download_audio_from_start_utc(
                 node_name=node_name,
-                start_time_utc=timestamp_pst.astimezone(dt_timezone.utc),
+                start_time_utc=start_time_utc,
                 tmp_dir=tmp_path,
                 duration_seconds=N_SECONDS,
             )
@@ -838,6 +850,7 @@ def process_csv(csv_path: Path, output_root: Path, cache_root: Path | None = Non
             row.timestamp_pst,
             output_root,
             cache_root=cache_root,
+            uri=row.uri,
         )
 
     delete_stale_wavs(output_root, expected_relative_paths)

@@ -298,11 +298,17 @@ def download_audio_from_start_utc(
 
         selected_segments = None
         for folder in valid_folders:
-            try:
-                archive, live = playlist_utils.load_archive_and_live(
-                    stream_base, folder
-                )
-            except Exception:
+            archive = live = None
+            for attempt in range(3):
+                try:
+                    archive, live = playlist_utils.load_archive_and_live(
+                        stream_base, folder
+                    )
+                    break
+                except Exception:
+                    if attempt < 2:
+                        time.sleep(1)
+            if archive is None and live is None:
                 continue
             playlist = (
                 archive
@@ -347,7 +353,7 @@ def download_audio_from_start_utc(
             if selection_start is None or selection_start >= end_timestamp:
                 continue
             selected_segments = playlist_utils.select_segments_from_start(
-                timeline, request_start, end_timestamp - selection_start
+                timeline, selection_start, end_timestamp - selection_start
             )
             if _segments_cover_interval(
                 selected_segments, start_timestamp, end_timestamp

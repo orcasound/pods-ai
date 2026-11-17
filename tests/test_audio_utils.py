@@ -5,6 +5,7 @@ import os
 import time
 import urllib.error
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 import pytest
@@ -124,7 +125,7 @@ def test_download_audio_uses_orca_hls_utils_and_crops_requested_interval(tmp_pat
         extrapolate_start=True,
     )
     select_segments.assert_called_once_with(
-        [segment], start.timestamp() - 20, 13
+        [segment], start.timestamp() - 10, 13
     )
     download_from_url.assert_called_once_with(
         "https://example.org/hls/live000.ts", str(tmp_path)
@@ -187,6 +188,118 @@ def test_download_audio_does_not_require_segments_after_requested_end(tmp_path):
         )
 
     assert result is not None
+
+
+@pytest.mark.parametrize("has_pdt", [False, True])
+def test_download_audio_selects_nonzero_sequence_segments_with_or_without_pdt(
+    tmp_path, has_pdt
+):
+    """Select available sequence-numbered audio for PDT and estimated timelines."""
+    start = datetime(2025, 1, 1, 0, 0, tzinfo=timezone.utc) + timedelta(seconds=20)
+    folder_start = int(start.timestamp()) - 15
+    segment = SimpleNamespace(
+        duration=10,
+        uri="live001.ts",
+        base_uri="https://example.org/hls/",
+        program_date_time=(
+            start - timedelta(seconds=5) if has_pdt else None
+        ),
+        current_program_date_time=None,
+    )
+    playlist = SimpleNamespace(segments=[segment], media_sequence=1)
+
+    def download_segment(url, directory):
+        """Create a local stand-in for a downloaded HLS segment."""
+        (tmp_path / url.rsplit("/", 1)[-1]).write_bytes(b"segment")
+
+    with (
+        patch(
+            "audio_utils.get_cached_folders",
+            return_value=[folder_start],
+        ),
+        patch(
+            "audio_utils.s3_utils.get_folders_between_timestamp",
+            return_value=[folder_start],
+        ),
+        patch(
+            "audio_utils.playlist_utils.load_archive_and_live",
+            return_value=(playlist, None),
+        ),
+        patch(
+            "audio_utils.playlist_utils.fill_timeline_gaps",
+            side_effect=lambda timeline, *_args, **_kwargs: timeline,
+        ),
+        patch(
+            "audio_utils.scraper.download_from_url",
+            side_effect=download_segment,
+        ),
+        patch("audio_utils.ffmpeg.input", return_value="input"),
+        patch("audio_utils.ffmpeg.output", return_value="output"),
+        patch("audio_utils.ffmpeg.run"),
+    ):
+        result = download_audio_from_start_utc(
+            "rpi_orcasound_lab", start, str(tmp_path), 3
+        )
+
+    assert result is not None
+
+
+def test_download_audio_retries_manifest_load_after_transient_failure(tmp_path):
+    """Retry a manifest load once after a transient failure."""
+    start = datetime(2025, 1, 1, 0, 0, tzinfo=timezone.utc)
+    folder_start = int(start.timestamp()) - 3 * 60 * 60
+    segment = Mock(
+        start=start.timestamp() - 10,
+        duration=20,
+        sequence=0,
+        url="https://example.org/hls/live000.ts",
+    )
+    archive = Mock(segments=[segment])
+
+    def download_segment(url, directory):
+        """Create a local stand-in for a downloaded HLS segment."""
+        (tmp_path / url.rsplit("/", 1)[-1]).write_bytes(b"segment")
+
+    with (
+        patch(
+            "audio_utils.get_cached_folders",
+            return_value=[str(folder_start)],
+        ),
+        patch(
+            "audio_utils.playlist_utils.load_archive_and_live",
+            side_effect=[
+                requests.exceptions.ConnectionError("temporary failure"),
+                (archive, None),
+            ],
+        ) as load_playlists,
+        patch(
+            "audio_utils.playlist_utils.get_playlist_timeline",
+            return_value=[segment],
+        ),
+        patch(
+            "audio_utils.playlist_utils.fill_timeline_gaps",
+            return_value=[segment],
+        ),
+        patch(
+            "audio_utils.playlist_utils.select_segments_from_start",
+            return_value=[segment],
+        ),
+        patch(
+            "audio_utils.scraper.download_from_url",
+            side_effect=download_segment,
+        ),
+        patch("audio_utils.time.sleep") as sleep,
+        patch("audio_utils.ffmpeg.input", return_value="input"),
+        patch("audio_utils.ffmpeg.output", return_value="output"),
+        patch("audio_utils.ffmpeg.run"),
+    ):
+        result = download_audio_from_start_utc(
+            "rpi_orcasound_lab", start, str(tmp_path), 3
+        )
+
+    assert result is not None
+    assert load_playlists.call_count == 2
+    sleep.assert_called_once_with(1)
 
 
 def test_download_audio_rejects_selected_segments_with_timestamp_gaps(tmp_path):

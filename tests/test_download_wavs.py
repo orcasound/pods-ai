@@ -124,14 +124,39 @@ class TestTimestampHelpers:
 
 
 @pytest.mark.parametrize(
-    ("row_timestamp", "expected_start"),
+    ("row_timestamp", "uri_timestamp", "expected_start"),
     [
-        ("2025_01_01_00_00_03_PST", datetime(2025, 1, 1, 8, 0, 3, tzinfo=timezone.utc)),
-        ("2025_07_01_00_00_03_PDT", datetime(2025, 7, 1, 7, 0, 3, tzinfo=timezone.utc)),
+        (
+            "2025_01_01_00_00_03_PST",
+            "2025-01-01T08:00:03Z",
+            datetime(2025, 1, 1, 8, 0, 5, tzinfo=timezone.utc),
+        ),
+        (
+            "2025_07_01_00_00_03_PDT",
+            "2025-07-01T07:00:03Z",
+            datetime(2025, 7, 1, 7, 0, 5, tzinfo=timezone.utc),
+        ),
+        (
+            "2025_01_01_00_00_05_PST",
+            "2025-01-01T08:00:03Z",
+            datetime(2025, 1, 1, 8, 0, 5, tzinfo=timezone.utc),
+        ),
+        (
+            "2025_07_01_00_00_05_PDT",
+            "2025-07-01T07:00:03Z",
+            datetime(2025, 7, 1, 7, 0, 5, tzinfo=timezone.utc),
+        ),
+        (
+            "2025_03_09_01_59_59_PST",
+            "2025-03-09T09:59:59Z",
+            datetime(2025, 3, 9, 10, 0, 1, tzinfo=timezone.utc),
+        ),
     ],
 )
-def test_training_sample_download_uses_shared_audio_downloader(tmp_path, row_timestamp, expected_start):
-    """Download a training sample through the shared audio utility."""
+def test_training_sample_download_uses_uri_to_apply_legacy_offset(
+    tmp_path, row_timestamp, uri_timestamp, expected_start
+):
+    """Apply the legacy offset only when the training time matches its URI."""
     wav_dir = tmp_path / "training-wav"
     source_path = tmp_path / "source.wav"
     source_path.write_bytes(b"wav")
@@ -145,6 +170,7 @@ def test_training_sample_download_uses_shared_audio_downloader(tmp_path, row_tim
             "rpi_orcasound_lab",
             row_timestamp,
             wav_dir,
+            uri=f"https://live.orcasound.net/bouts/new/orcasound-lab?time={uri_timestamp}",
         )
 
     download.assert_called_once_with(
@@ -160,6 +186,27 @@ def test_training_sample_download_uses_shared_audio_downloader(tmp_path, row_tim
         / f"rpi-orcasound-lab_{row_timestamp}.wav"
     )
     assert expected.read_bytes() == b"wav"
+
+
+def test_training_sample_without_uri_does_not_apply_global_timestamp_offset(
+    tmp_path,
+):
+    """Do not shift training timestamps when their URI convention is unknown."""
+    timestamp = "2025_01_01_00_00_03_PST"
+    source_path = tmp_path / "source.wav"
+    source_path.write_bytes(b"wav")
+
+    with patch(
+        "download_wavs.download_audio_from_start_utc",
+        return_value=str(source_path),
+    ) as download:
+        download_wavs.download_audio_segment(
+            "resident", "rpi_orcasound_lab", timestamp, tmp_path
+        )
+
+    assert download.call_args.kwargs["start_time_utc"] == datetime(
+        2025, 1, 1, 8, 0, 3, tzinfo=timezone.utc
+    )
 
 
 class TestOverlapValidation:
