@@ -671,11 +671,14 @@ def validate_aligned_entries(testing_rows: list[CSVRow]) -> None:
         raise ValueError("\n".join(mismatches))
 
 
-def validate_uri_timestamps(rows: list[CSVRow]) -> None:
+def validate_uri_timestamps(
+    rows: list[CSVRow], allow_two_second_offset: bool = False
+) -> None:
     """Verify that the timestamp encoded in each row URI matches the CSV StartTimestamp.
 
     Args:
         rows: Parsed CSV rows to validate.
+        allow_two_second_offset: Also allow training timestamps two seconds after the URI time.
 
     Raises:
         ValueError: If any row's URI timestamp does not match the CSV timestamp or the URI cannot be parsed.
@@ -693,7 +696,15 @@ def validate_uri_timestamps(rows: list[CSVRow]) -> None:
             )
             continue
 
-        if parse_timestamp_pacific(uri_timestamp_pst) != parse_timestamp_pacific(row.timestamp_pst):
+        uri_timestamp = parse_timestamp_pacific(uri_timestamp_pst)
+        row_timestamp = parse_timestamp_pacific(row.timestamp_pst)
+        difference = row_timestamp.astimezone(dt_timezone.utc) - uri_timestamp.astimezone(
+            dt_timezone.utc
+        )
+        allowed_differences = {timedelta(0)}
+        if allow_two_second_offset:
+            allowed_differences.add(timedelta(seconds=AUDIO_OFFSET_SECONDS))
+        if difference not in allowed_differences:
             mismatches.append(
                 "Timestamp mismatch between CSV and URI:\n"
                 f"  csv: {row.node_name} {row.timestamp_pst}\n"
@@ -1085,7 +1096,8 @@ def run_download_wavs(
     # TODO(issue #550): Verify whether dclde_rows have the correct timestamp or need correction first.
     validate_no_overlaps(training_rows, testing_rows, dclde_rows)
 
-    validate_uri_timestamps(training_rows + testing_rows)
+    validate_uri_timestamps(training_rows, allow_two_second_offset=True)
+    validate_uri_timestamps(testing_rows)
 
     validate_node_slug_in_uri(testing_rows + dclde_rows)
 

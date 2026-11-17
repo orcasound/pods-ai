@@ -648,6 +648,56 @@ class TestUriTimestampValidation:
 
         validate_uri_timestamps(rows)
 
+    def test_validate_uri_timestamps_allows_two_second_offset_for_training(self):
+        """Accept only the documented corrected training timestamp difference."""
+        rows = [
+            CSVRow(
+                "resident",
+                "rpi_andrews_bay",
+                "2025_01_01_01_01_08_PST",
+                "https://live.orcasound.net/bouts/new/andrews-bay?time=2025-01-01T09%3A01%3A06.000Z",
+                "desc",
+                "note",
+                "100",
+            ),
+        ]
+
+        validate_uri_timestamps(rows, allow_two_second_offset=True)
+
+    def test_validate_uri_timestamps_rejects_unrelated_training_offset(self):
+        """Reject training timestamp differences other than zero or two seconds."""
+        rows = [
+            CSVRow(
+                "resident",
+                "rpi_andrews_bay",
+                "2025_01_01_01_01_09_PST",
+                "https://live.orcasound.net/bouts/new/andrews-bay?time=2025-01-01T09%3A01%3A06.000Z",
+                "desc",
+                "note",
+                "100",
+            ),
+        ]
+
+        with pytest.raises(ValueError, match="Timestamp mismatch"):
+            validate_uri_timestamps(rows, allow_two_second_offset=True)
+
+    def test_validate_uri_timestamps_keeps_testing_offset_strict(self):
+        """Continue rejecting corrected timestamps in the strict testing validation."""
+        rows = [
+            CSVRow(
+                "resident",
+                "rpi_andrews_bay",
+                "2025_01_01_01_01_08_PST",
+                "https://live.orcasound.net/bouts/new/andrews-bay?time=2025-01-01T09%3A01%3A06.000Z",
+                "desc",
+                "tp_human_only",
+                "100",
+            ),
+        ]
+
+        with pytest.raises(ValueError, match="Timestamp mismatch"):
+            validate_uri_timestamps(rows)
+
 
 class TestValidateOnly:
     def test_run_download_wavs_validate_only_skips_download_processing(self):
@@ -678,6 +728,40 @@ class TestValidateOnly:
                 mock_validate_aligned_entries.assert_called_once()
             finally:
                 os.chdir(original_cwd)
+
+    def test_run_download_wavs_processes_training_rows_with_corrected_uri_time(self):
+        """Pass corrected training rows through validation into process_csv."""
+        with TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            csv_dir = tmp_path / "output" / "csv"
+            csv_dir.mkdir(parents=True, exist_ok=True)
+            training_csv = csv_dir / "training_3s_samples.csv"
+            training_csv.write_text(
+                "category,node_name,timestamp_pst,uri,description,notes,confidence\n"
+                "resident,rpi_andrews_bay,2025_01_01_01_00_02_PST,"
+                "https://live.orcasound.net/bouts/new/andrews-bay?time=2025-01-01T09%3A00%3A00.000Z,"
+                "desc,note,100\n",
+                encoding="utf-8",
+            )
+            original_cwd = Path.cwd()
+            try:
+                os.chdir(tmp_path)
+                with (
+                    patch("download_wavs.validate_no_overlaps"),
+                    patch("download_wavs.validate_aligned_entries"),
+                    patch("download_wavs.validate_node_slug_in_uri"),
+                    patch("download_wavs.process_csv") as process_training,
+                ):
+                    run_download_wavs(
+                        training_csv_path=training_csv,
+                        testing_csv_path=tmp_path / "missing-testing.csv",
+                    )
+            finally:
+                os.chdir(original_cwd)
+
+            process_training.assert_called_once_with(
+                training_csv, Path("output/wav"), cache_root=None
+            )
 
     def test_parse_args_custom_training_and_testing_paths_are_forwarded(self, monkeypatch, tmp_path):
         custom_dir = tmp_path / "custom"
