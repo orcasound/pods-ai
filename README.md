@@ -16,14 +16,14 @@ Model Comparison Summary
 ================================================================================================================
 Model           Evaluated   Correct  Accuracy      F1    RFP%    RFN%    TFP%    TFN%    HFP%    HFN%   Avg Time
 ----------------------------------------------------------------------------------------------------------------
-orcahello             830       710     85.5%   0.261   16.3%    9.9%    0.0%  100.0%    0.0%  100.0%      5.42s
-oldpodsai             830       766     92.3%   0.746    8.8%   16.5%    0.0%   39.3%    0.2%   42.9%     10.82s
-podsai                830       761     91.7%   0.777    5.4%   21.5%    0.9%   17.9%    0.2%   35.7%     10.75s
+orcahello             832       711     85.5%   0.261   16.4%    9.9%    0.0%  100.0%    0.0%  100.0%      6.40s
+oldpodsai             832       759     91.2%   0.749    5.4%   21.5%    0.9%   27.6%    0.2%   40.0%      7.48s
+podsai                832       773     92.9%   0.770    5.1%   17.4%    2.4%   20.7%    0.1%   26.7%     11.72s
 ================================================================================================================
 
 Definitions:
   Accuracy     = Correct / Evaluated
-  Correct      = fastai/orcahello: resident vs other; wav2vec2/oldpodsai/podsai/custom: category in prediction set
+  Correct      = orcahello: resident vs other; oldpodsai/podsai/custom: category in prediction set
                  abiotic also accepts water, vessel, or jingle
   F1           = macro F1 over humpback, resident, and transient classes that are present
   [R|T|H]FP%   = among non-[R|T|H] samples, fraction predicted as that class
@@ -36,36 +36,36 @@ Confusion Matrix for orcahello (rows=actual, cols=predicted):
     abiotic       486        10       496
        bird         0        10        10
       human         0         9         9
-   humpback         4        10        14
+   humpback         5        10        15
      jingle         0        14        14
    resident        24       218       242
-  transient         1        27        28
+  transient         1        28        29
      vessel         0         6         6
       water         1        10        11
 
 Confusion Matrix for oldpodsai (rows=actual, cols=predicted):
-                 human   humpback     jingle   resident  transient     vessel      water      total
-    abiotic          0          1        242         13          0        220         20        496
-       bird          0          0          2          6          0          2          0         10
-      human          8          0          1          0          0          0          0          9
-   humpback          0          6          3          4          0          0          1         14
-     jingle          0          0         12          2          0          0          0         14
-   resident          1          0         13        202          0         22          4        242
-  transient          0          0          0         19          8          1          0         28
-     vessel          0          0          0          0          0          6          0          6
-      water          0          0          1          0          0          5          5         11
-
-Confusion Matrix for podsai (rows=actual, cols=predicted):
                   bird      human   humpback     jingle   resident  transient     vessel      water      total
     abiotic         14          5          0         30          2          1        421         23        496
        bird          1          0          0          0          7          0          2          0         10
       human          0          7          0          2          0          0          0          0          9
-   humpback          0          0          8          1          1          0          3          1         14
+   humpback          0          0          8          1          1          0          4          1         15
      jingle          0          0          0         14          0          0          0          0         14
    resident          4          0          0          4        190          0         40          4        242
-  transient          0          0          0          0         10         16          2          0         28
+  transient          0          0          0          0         12         13          4          0         29
      vessel          0          0          0          0          0          0          6          0          6
       water          0          0          0          0          0          0          9          2         11
+
+Confusion Matrix for podsai (rows=actual, cols=predicted):
+                  bird      human   humpback     jingle   resident  transient     vessel      water      total
+    abiotic          0          0          0        276          3          0        212          5        496
+       bird          2          0          0          3          2          0          3          0         10
+      human          0          8          0          1          0          0          0          0          9
+   humpback          0          0         11          2          0          0          2          0         15
+     jingle          0          0          0         14          0          0          0          0         14
+   resident          0          1          0         18        199          2         21          1        242
+  transient          0          0          0          0         14         13          2          0         29
+     vessel          0          0          0          0          0          0          6          0          6
+      water          0          0          0          3          0          0          6          2         11
 ```
 
 NOTE 1: The results above may be biased against models, compared to what would be expected on live
@@ -172,22 +172,20 @@ To have GitHub train a new model from the latest `main` branch:
    ```
    The Docker image reads this same revision from that file.
 8. Push the changes to a separate branch in the main repository.
-9. Generate a model comparison as follows. Go to https://github.com/orcasound/pods-ai/actions/workflows/generate_model_comparison.yml in a browser, click the "Run workflow" dropdown, select the branch to use in "Use workflow from" and click "Run workflow". Results are committed to the selected branch, except that selecting `main` commits them to `update-model-comparison`. The workflow compares `orcahello`, `oldpodsai`, and `podsai` in parallel, saves `model-comparison-<model>.txt` for each model, and builds a combined README. This may take several hours to run. You could instead run it locally using `python src/compare_models.py --models podsai | tee model-comparison-podsai.txt` to verify that the F1 does not regress from the latest model as shown at the top of this README. Don't proceed further unless the F1 improves.
-10. Update `README.md.template` with any documentation changes, then run
-    `python src/build-readme.py` to regenerate `README.md`.
-11. Generate a pull request with the changes
-12. Once the pull request is merged, add another tag to the main branch such as
+9. Generate a model comparison as follows. Go to https://github.com/orcasound/pods-ai/actions/workflows/generate_model_comparison.yml in a browser, click the "Run workflow" dropdown, select the branch to use in "Use workflow from" and click "Run workflow". Results are committed to the selected branch, except that selecting `main` commits them to `update-model-comparison`. The workflow compares `orcahello`, `oldpodsai`, and `podsai` in parallel, saves `model-comparison-<model>.txt` for each model, and builds a combined `README.md`. This will take a couple of hours to run. Don't proceed further unless the F1 improves.
+10. Generate a pull request with the changes
+11. Once the pull request is merged, add another tag to the main branch such as
    `LiveInferenceSystem.v1.4.0` (bumping the version from the most recent such tag).
     This will cause the
     [LiveInferenceSystem-deploy.yaml](.github/workflows/LiveInferenceSystem-deploy.yaml)
     workflow to build a new container image and push it to the Azure Container Registry.
-13. Once that succeeds, update the `LiveInferenceSystem/deploy/<slug>.yaml` files to
+12. Once that succeeds, update the `LiveInferenceSystem/deploy/<slug>.yaml` files to
     reference the new image.  For example:
     ```
     image: orcaconservancycr.azurecr.io/pods-ai-live-inference-system:09-05-2026.v1.4.0
     ```
-14. Generate a pull request with those changes.
-15. Once that pull request merges, apply the config, e.g., `kubectl apply -f deploy/andrews-bay.yaml` from the
+13. Generate a pull request with those changes.
+14. Once that pull request merges, apply the config, e.g., `kubectl apply -f deploy/andrews-bay.yaml` from the
     `LiveInferenceSystem` directory.  See [AzurePlaybook.md](https://github.com/orcasound/orcahello/blob/main/InferenceSystem/AzurePlaybook.md) for troubleshooting guidance if needed.
 
 You can instead train a model locally:
