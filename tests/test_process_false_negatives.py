@@ -5,7 +5,7 @@
 import csv
 from datetime import datetime, timezone
 from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import ANY, Mock, patch
 
 import pytest
 
@@ -53,7 +53,7 @@ class TestAppendManualSamples:
         manual_samples_path = tmp_path / "manual_samples.csv"
         manual_samples_path.write_text(
             "Category,NodeName,StartTimestamp,URI,Description,Notes,Confidence\n"
-            "resident,rpi_test,2025_01_01_00_00_00_PST,https://example.com/existing,desc,notes,90.0\n",
+            "resident,rpi_test,2025_01_01_00_00_02_PST,https://example.com/existing,desc,notes,90.0\n",
             encoding="utf-8",
         )
         existing_uris = {"https://example.com/existing"}
@@ -61,7 +61,7 @@ class TestAppendManualSamples:
             {
                 "Category": "resident",
                 "NodeName": "rpi_test",
-                "StartTimestamp": "2025_01_01_00_00_00_PST",
+                "StartTimestamp": "2025_01_01_00_00_02_PST",
                 "URI": "https://example.com/existing",
                 "Description": "desc",
                 "Notes": "notes",
@@ -70,7 +70,7 @@ class TestAppendManualSamples:
             {
                 "Category": "resident",
                 "NodeName": "rpi_test",
-                "StartTimestamp": "2025_01_01_00_00_02_PST",
+                "StartTimestamp": "2025_01_01_00_00_04_PST",
                 "URI": "https://example.com/new",
                 "Description": "desc",
                 "Notes": "notes",
@@ -226,7 +226,7 @@ class TestProcessFalseNegatives:
         with patch("process_false_negatives.get_model_inference", side_effect=_get_model), \
              patch("process_false_negatives.get_orcasite_feeds_with_retry", return_value=[feed]), \
              patch("process_false_negatives.get_machine_detections", return_value=[detection]), \
-             patch("process_false_negatives.download_60s_audio", return_value=str(wav_path)), \
+             patch("process_false_negatives.download_60s_audio_from_start", return_value=str(wav_path)), \
              patch("process_false_negatives.add_training_3s_samples", return_value=segment_rows) as mock_add_samples:
             summary = process_false_negatives(
                 manual_samples_path=manual_samples_path,
@@ -244,6 +244,9 @@ class TestProcessFalseNegatives:
         assert mock_add_samples.call_args.kwargs["corrected_class"] == "resident"
         assert mock_add_samples.call_args.kwargs["fallback_description"] == detection.comments
         assert mock_add_samples.call_args.kwargs["fallback_notes"] == "tp_machine"
+        assert mock_add_samples.call_args.kwargs["source_id"] == (
+            f"orcasite:{feed.node_name}:{detection.timestamp.isoformat()}"
+        )
 
         with open(manual_samples_path, "r", encoding="utf-8") as handle:
             rows = list(csv.DictReader(handle))
@@ -277,7 +280,7 @@ class TestProcessFalseNegatives:
         wav_path.write_bytes(b"wav")
         segment_dir = tmp_path / "segments"
         segment_dir.mkdir()
-        segment_timestamp = "2025_01_01_03_59_58_PST"
+        segment_timestamp = "2025_01_01_04_00_00_PST"
         (segment_dir / f"rpi-test_{segment_timestamp}.wav").write_bytes(b"segment")
         testing_path = tmp_path / "testing_60s_samples.csv"
         with open(testing_path, "w", newline="", encoding="utf-8") as handle:
@@ -286,7 +289,7 @@ class TestProcessFalseNegatives:
             writer.writerow({
                 "Category": "vessel",
                 "NodeName": "rpi_test",
-                "StartTimestamp": "2025_01_01_03_59_00_PST",
+                "StartTimestamp": "2025_01_01_03_59_02_PST",
                 "URI": "https://example.com/testing",
             })
         segment = {
@@ -307,7 +310,7 @@ class TestProcessFalseNegatives:
              patch("process_false_negatives.get_model_inference", side_effect=get_model), \
              patch("process_false_negatives.get_orcasite_feeds_with_retry", return_value=[feed]), \
              patch("process_false_negatives.get_machine_detections", return_value=[detection]), \
-             patch("process_false_negatives.download_60s_audio", return_value=str(wav_path)), \
+             patch("process_false_negatives.download_60s_audio_from_start", return_value=str(wav_path)), \
              patch("process_false_negatives.add_training_3s_samples", return_value=[segment]):
             summary = process_false_negatives(
                 manual_samples_path=tmp_path / "manual.csv",
@@ -343,7 +346,7 @@ class TestProcessFalseNegatives:
         with patch("process_false_negatives.get_model_inference", side_effect=_get_model), \
              patch("process_false_negatives.get_orcasite_feeds_with_retry", return_value=[feed]), \
              patch("process_false_negatives.get_machine_detections", return_value=[detection]), \
-             patch("process_false_negatives.download_60s_audio", return_value=str(wav_path)), \
+             patch("process_false_negatives.download_60s_audio_from_start", return_value=str(wav_path)), \
              patch("process_false_negatives.add_training_3s_samples") as mock_add_samples:
             summary = process_false_negatives(
                 manual_samples_path=tmp_path / "manual_samples.csv",
@@ -404,7 +407,7 @@ class TestProcessFalseNegatives:
                  "process_false_negatives.get_machine_detections",
                  return_value=[matching_detection, non_matching_detection],
              ), \
-             patch("process_false_negatives.download_60s_audio", return_value=str(wav_path)), \
+             patch("process_false_negatives.download_60s_audio_from_start", return_value=str(wav_path)), \
              patch(
                  "process_false_negatives.add_training_3s_samples",
                  return_value=[
@@ -431,7 +434,7 @@ class TestProcessFalseNegatives:
         assert podsai_model.predict.call_count == 2
         assert orcahello_model.predict.call_count == 1
         assert mock_add_samples.call_count == 1
-        assert mock_add_samples.call_args.kwargs["start_timestamp"] == "2025_01_01_04_04_58_PST"
+        assert mock_add_samples.call_args.kwargs["start_timestamp"] == "2025_01_01_04_05_00_PST"
 
     def test_testing_set_appends_60_second_false_negative(self, tmp_path):
         """Testing mode adds a resident 60-second row without segment inference."""
@@ -439,7 +442,7 @@ class TestProcessFalseNegatives:
         detection = OrcaHelloDetection(
             id="det_1",
             feed=feed,
-            timestamp=datetime(2025, 1, 1, 12, 0, 0, tzinfo=timezone.utc),
+            timestamp=datetime(2025, 1, 1, 12, 0, 1, tzinfo=timezone.utc),
             status="confirmed",
             comments="confirmed resident",
             tags="resident",
@@ -451,7 +454,7 @@ class TestProcessFalseNegatives:
         testing_row = {
             "Category": "resident",
             "NodeName": "rpi_test",
-            "StartTimestamp": "2025_01_01_03_59_58_PST",
+            "StartTimestamp": "2025_01_01_04_00_01_PST",
             "URI": "https://example.com/testing",
             "Tags": "resident",
         }
@@ -461,7 +464,7 @@ class TestProcessFalseNegatives:
              patch("process_false_negatives.get_model_inference") as get_model, \
              patch("process_false_negatives.get_orcasite_feeds_with_retry", return_value=[feed]), \
              patch("process_false_negatives.get_machine_detections", return_value=[detection]), \
-             patch("process_false_negatives.download_60s_audio", return_value=str(wav_path)), \
+             patch("process_false_negatives.download_60s_audio_from_start", return_value=str(wav_path)) as mock_download, \
              patch(
                  "process_false_negatives.add_testing_60s_sample",
                  return_value=testing_row,
@@ -477,9 +480,14 @@ class TestProcessFalseNegatives:
             )
 
         assert summary["appended"] == 1
+        mock_download.assert_called_once_with(
+            node_name="rpi_test",
+            start_timestamp_pst_str="2025_01_01_04_00_01_PST",
+            tmp_dir=ANY,
+        )
         add_testing.assert_called_once_with(
             node_name="rpi_test",
-            start_timestamp="2025_01_01_03_59_58_PST",
+            start_timestamp="2025_01_01_04_00_01_PST",
             detections_csv=false_negatives_module.DEFAULT_DETECTIONS_CSV,
             corrected_class="resident",
             fallback_description="confirmed resident",
@@ -528,8 +536,8 @@ class TestProcessFalseNegatives:
             return_value=[detection],
         ), patch(
             "process_false_negatives.get_model_inference",
-        ) as mock_get_model, patch(
-            "process_false_negatives.download_60s_audio",
+        ), patch(
+            "process_false_negatives.download_60s_audio_from_start",
         ) as mock_download:
 
             summary = process_false_negatives(

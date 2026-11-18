@@ -36,11 +36,12 @@ when it exists would avoid the discrepancy for such audio, but if the discrepanc
 time, then the bouts interface will be inconsistent in that it would show the correct time for some audio
 and the incorrect time for other audio.
 
-The URIs in the csv files in this repository go to the Orcasite bouts interface and so are
-intentionally off by 2 seconds. `run_download_wavs()` requires the `StartTimestamp` values in
-both training and testing manifests to be exactly 2 seconds later than their URI timestamps.
-`download_audio_segment()` still handles legacy training timestamps that match URI timestamps by
-adding the 2-second offset; timestamps already 2 seconds later are used unchanged.
+The URIs in the csv files in this repository go to the Orcasite bouts interface and so
+are intentionally off by 2 seconds.  That is, the URIs do not use the detection time, they show "Orcasite" time.
+The `StartTimestamp` column in `training_3s_samples.csv` and `testing_60s_samples.csv` uses the corrected
+start time. It is 2 seconds later than the timestamp in its Orcasite URI. The `dclde_60s_samples.csv`
+manifest retains its source timestamps and URI semantics. In this repository, `download_audio_segment()`
+in `download_wavs.py` accounts for the HLS audio-start offset when locating the audio to download.
 
 ## OrcaHello database
 

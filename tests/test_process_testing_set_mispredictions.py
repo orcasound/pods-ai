@@ -29,7 +29,7 @@ def test_build_training_row_updates_timestamp_uri_and_confidence():
     testing_row = {
         "Category": "bird",
         "NodeName": "rpi_test",
-        "StartTimestamp": "2026_01_01_00_00_00_PST",
+        "StartTimestamp": "2026_01_01_00_00_02_PST",
         "URI": "https://live.orcasound.net/bouts/new/test-slug?time=2026-01-01T08%3A00%3A00.000Z",
         "Description": "desc",
         "Notes": "fp_machine_only",
@@ -44,7 +44,7 @@ def test_build_training_row_updates_timestamp_uri_and_confidence():
     )
 
     assert row["Category"] == "bird"
-    assert row["StartTimestamp"] == "2026_01_01_00_00_04_PST"
+    assert row["StartTimestamp"] == "2026_01_01_00_00_06_PST"
     assert "time=2026-01-01T08%3A00%3A04.000Z" in row["URI"]
     assert row["Confidence"] == "92.3"
 
@@ -75,7 +75,7 @@ def test_triage_proposes_training_rows_and_testing_removal(tmp_path):
             {
                 "Category": "bird",
                 "NodeName": "rpi_test",
-                "StartTimestamp": "2026_02_02_01_02_03_PST",
+                "StartTimestamp": "2026_02_02_01_02_05_PST",
                 "URI": "https://live.orcasound.net/bouts/new/test-slug?time=2026-02-02T09%3A02%3A03.000Z",
                 "Description": "desc",
                 "Notes": "fp_machine_only",
@@ -83,7 +83,7 @@ def test_triage_proposes_training_rows_and_testing_removal(tmp_path):
             }
         )
 
-    wav_path = category_dir / "rpi-test_2026_02_02_01_02_03_PST.wav"
+    wav_path = category_dir / "rpi-test_2026_02_02_01_02_05_PST.wav"
     wav_path.write_bytes(b"wav")
 
     mock_model = Mock()
@@ -106,8 +106,8 @@ def test_triage_proposes_training_rows_and_testing_removal(tmp_path):
     assert len(training_rows) == 2
     assert all(row["Category"] == "bird" for row in training_rows)
     assert {row["StartTimestamp"] for row in training_rows} == {
-        "2026_02_02_01_02_07_PST",
-        "2026_02_02_01_02_03_PST",
+        "2026_02_02_01_02_09_PST",
+        "2026_02_02_01_02_05_PST",
     }
     assert len(testing_rows_to_remove) == 1
     assert testing_rows_to_remove[0]["Category"] == "bird"
@@ -141,7 +141,7 @@ def test_triage_skips_row_on_inference_exception(tmp_path, capsys):
             {
                 "Category": "bird",
                 "NodeName": "rpi_test",
-                "StartTimestamp": "2026_02_02_01_02_03_PST",
+                "StartTimestamp": "2026_02_02_01_02_05_PST",
                 "URI": "https://live.orcasound.net/bouts/new/test-slug?time=2026-02-02T09%3A02%3A03.000Z",
                 "Description": "desc",
                 "Notes": "fp_machine_only",
@@ -149,7 +149,7 @@ def test_triage_skips_row_on_inference_exception(tmp_path, capsys):
             }
         )
 
-    wav_path = category_dir / "rpi-test_2026_02_02_01_02_03_PST.wav"
+    wav_path = category_dir / "rpi-test_2026_02_02_01_02_05_PST.wav"
     wav_path.write_bytes(b"wav")
 
     mock_model = Mock()
@@ -197,7 +197,7 @@ def test_triage_skips_row_on_mismatched_inference_lengths(tmp_path, capsys):
             {
                 "Category": "bird",
                 "NodeName": "rpi_test",
-                "StartTimestamp": "2026_02_02_01_02_03_PST",
+                "StartTimestamp": "2026_02_02_01_02_05_PST",
                 "URI": "https://live.orcasound.net/bouts/new/test-slug?time=2026-02-02T09%3A02%3A03.000Z",
                 "Description": "desc",
                 "Notes": "fp_machine_only",
@@ -205,7 +205,7 @@ def test_triage_skips_row_on_mismatched_inference_lengths(tmp_path, capsys):
             }
         )
 
-    wav_path = category_dir / "rpi-test_2026_02_02_01_02_03_PST.wav"
+    wav_path = category_dir / "rpi-test_2026_02_02_01_02_05_PST.wav"
     wav_path.write_bytes(b"wav")
 
     mock_model = Mock()

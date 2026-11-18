@@ -13,16 +13,12 @@ from importlib.machinery import ModuleSpec
 from pathlib import Path
 from unittest.mock import MagicMock
 
-# Ensure src/ is on the path before any test module is imported.
+# Ensure src/ and bootstrap/src are on the path before any test module is imported.
+sys.path.insert(0, str(Path(__file__).parent.parent / 'bootstrap' / 'src'))
 sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
 
-# Packages that are either heavy (torch/fastai) or optional (numpy/pandas) in
-# this environment.  Each is stubbed out only when it cannot be genuinely
-# imported; CI (which runs pip install -r requirements.txt) will use the real
-# packages.
-#
-# NOTE: Unit tests that need to mock AudioList use @patch() explicitly. When the
-# legacy fastai_audio package is unavailable, its import target is stubbed below.
+# Packages that are either heavy (torch/fastai) or optional in this
+# environment. Each is stubbed out only when it cannot be genuinely imported.
 _OPTIONAL_DEPS = [
     'azure',
     'azure.cosmos',
@@ -41,8 +37,6 @@ _OPTIONAL_DEPS = [
     'torchvision',
     'torchaudio',
     'torchaudio.transforms',
-    'audio',
-    'audio.data',
     'fastai',
     'fastai.basic_train',
     'pydub',
@@ -53,29 +47,45 @@ _OPTIONAL_DEPS = [
     'scipy.signal',
     'huggingface_hub',
     'yaml',
+    'audio',
+    'audio.data',
 ]
-# Mark a stub as a package when another optional dependency imports one of its
-# submodules. This keeps imports such as ``audio.data`` valid when the optional
-# package is not installed.
-_PACKAGE_DEPS = {
-    _candidate
-    for _candidate in _OPTIONAL_DEPS
-    if any(_other.startswith(f"{_candidate}.") for _other in _OPTIONAL_DEPS)
+_OPTIONAL_PACKAGE_DEPS = {
+    'audio',
+    'audio.data',
+    'azure',
+    'azure.cosmos',
+    'azure.storage.blob',
+    'dotenv',
+    'fastai',
+    'huggingface_hub',
+    'librosa',
+    'numpy',
+    'opencensus',
+    'pandas',
+    'pydub',
+    'pytz',
+    'scipy',
+    'scipy.signal',
+    'structlog',
+    'torch',
+    'torchaudio',
+    'torchvision',
+    'yaml',
 }
 for _dep in _OPTIONAL_DEPS:
     if _dep not in sys.modules:
         try:
             __import__(_dep)
         except ImportError:
-            # Transformers probes optional packages with importlib.util.find_spec().
-            # A MagicMock without __spec__ makes that probe raise ValueError during
-            # collection, so provide the minimal metadata for an importable stub.
-            stub = MagicMock()
-            is_package = _dep in _PACKAGE_DEPS
-            stub.__spec__ = ModuleSpec(_dep, loader=None, is_package=is_package)
-            if is_package:
-                stub.__path__ = []
-                stub.__spec__.submodule_search_locations = []
+            _is_package = _dep in _OPTIONAL_PACKAGE_DEPS or any(
+                name.startswith(f"{_dep}.") for name in _OPTIONAL_DEPS
+            )
+            _stub = MagicMock()
+            _stub.__spec__ = ModuleSpec(_dep, loader=None, is_package=_is_package)
+            if _is_package:
+                _stub.__spec__.submodule_search_locations = []
+                _stub.__path__ = []
             if _dep == 'torchaudio':
                 def _stub_fbank(waveform, sample_frequency, frame_shift, num_mel_bins,
                                 **_kwargs):
@@ -87,11 +97,11 @@ for _dep in _OPTIONAL_DEPS:
                     )
                     return torch.zeros((frame_count, num_mel_bins), dtype=torch.float32)
 
-                stub.compliance.kaldi.fbank = _stub_fbank
+                _stub.compliance.kaldi.fbank = _stub_fbank
             elif _dep == 'audio.data':
-                stub.AudioList = MagicMock()
-                stub.AudioConfig = MagicMock()
-                stub.SpectrogramConfig = MagicMock()
+                _stub.AudioList = MagicMock()
+                _stub.AudioConfig = MagicMock()
+                _stub.SpectrogramConfig = MagicMock()
             elif _dep == 'pydub':
                 class _StubAudioSegment:
                     """Small PCM WAV segment used when pydub cannot import."""
@@ -135,8 +145,8 @@ for _dep in _OPTIONAL_DEPS:
                             self.frame_rate,
                         )
 
-                stub.AudioSegment = _StubAudioSegment
-            sys.modules[_dep] = stub
+                _stub.AudioSegment = _StubAudioSegment
+            sys.modules[_dep] = _stub
 
 # Special handling for mcp modules: requires a proper FastMCP mock so that
 # @mcp.tool() decorators preserve the original functions rather than wrapping

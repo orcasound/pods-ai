@@ -133,7 +133,7 @@ def _find_overlaps(rows: list[CSVRow], window_fn, label: str) -> list[str]:
 
     for node_name, windows in by_node.items():
         windows.sort(key=lambda item: item[0])
-        prev_start, prev_end, prev_row = windows[0]
+        _, prev_end, prev_row = windows[0]
         for curr_start, curr_end, curr_row in windows[1:]:
             if curr_start < prev_end:
                 overlaps.append(
@@ -141,7 +141,7 @@ def _find_overlaps(rows: list[CSVRow], window_fn, label: str) -> list[str]:
                     f"{prev_row.timestamp_pst} overlaps {curr_row.timestamp_pst}"
                 )
             if curr_end > prev_end:
-                prev_start, prev_end, prev_row = curr_start, curr_end, curr_row
+                prev_end, prev_row = curr_end, curr_row
     return overlaps
 
 
@@ -194,6 +194,40 @@ def _get_relative_wav_path(row: CSVRow) -> Path:
     return Path(row.category) / _get_wav_filename(row.node_name, row.timestamp_pst)
 
 
+def _audio_start_marker_path(wav_path: Path) -> Path:
+    return wav_path.with_name(f"{wav_path.name}.audio-start")
+
+
+def _has_audio_start_marker(wav_path: Path, audio_start: datetime) -> bool:
+    marker_path = _audio_start_marker_path(wav_path)
+    if not marker_path.is_file():
+        return False
+    try:
+        return marker_path.read_text(encoding="utf-8").strip() == format_timestamp_pacific(audio_start)
+    except OSError:
+        return False
+
+
+def _write_audio_start_marker(wav_path: Path, audio_start: datetime) -> None:
+    _audio_start_marker_path(wav_path).write_text(
+        format_timestamp_pacific(audio_start), encoding="utf-8"
+    )
+
+
+def _preserve_unverified_wav(wav_path: Path) -> None:
+    """Move an unverified WAV aside so it cannot be mistaken for the requested clip."""
+    preserved_path = wav_path.with_name(f"{wav_path.name}.unverified")
+    suffix = 1
+    while preserved_path.exists():
+        preserved_path = wav_path.with_name(f"{wav_path.name}.unverified.{suffix}")
+        suffix += 1
+    os.replace(wav_path, preserved_path)
+
+    marker_path = _audio_start_marker_path(wav_path)
+    if marker_path.exists():
+        os.replace(marker_path, _audio_start_marker_path(preserved_path))
+
+
 HUMPBACK_SIGNAL_WAV_PREFIX = "signals-humpback_"
 
 
@@ -207,7 +241,12 @@ def is_external_humpback_training_wav(relative_path: Path) -> bool:
     )
 
 
-def _copy_wav_from_cache_if_exists(expected_path: Path, output_root: Path, cache_root: Path | None) -> bool:
+def _copy_wav_from_cache_if_exists(
+    expected_path: Path,
+    output_root: Path,
+    cache_root: Path | None,
+    audio_start: datetime | None = None,
+) -> bool:
     """
     Copy a WAV file from cache_root into output_root if it exists there.
 
@@ -221,6 +260,8 @@ def _copy_wav_from_cache_if_exists(expected_path: Path, output_root: Path, cache
         return False
     source_path = cache_root / relative_path
     if not source_path.exists():
+        return False
+    if audio_start is not None and not _has_audio_start_marker(source_path, audio_start):
         return False
     expected_path.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(source_path, expected_path)
@@ -241,8 +282,18 @@ def delete_stale_wavs(output_root: Path, expected_relative_paths: set[Path]) -> 
         if is_external_humpback_training_wav(relative_path):
             continue
         wav_path.unlink()
+        marker_path = _audio_start_marker_path(wav_path)
+        if marker_path.exists():
+            marker_path.unlink()
         print(f"Deleted stale wav: {wav_path}")
         deleted_count += 1
+
+    expected_marker_paths = {
+        Path(f"{relative_path}.audio-start") for relative_path in expected_relative_paths
+    }
+    for marker_path in output_root.rglob("*.wav.audio-start"):
+        if marker_path.relative_to(output_root) not in expected_marker_paths:
+            marker_path.unlink()
 
     for directory in sorted((path for path in output_root.rglob("*") if path.is_dir()), reverse=True):
         if directory == output_root:
@@ -358,7 +409,10 @@ def _generate_testing_uri(row: CSVRow, timestamp_pst: str) -> str:
     else:
         node_slug = _default_slug_from_node_name(row.node_name)
         base_uri = f"https://live.orcasound.net/bouts/new/{node_slug}"
-    timestamp_utc = parse_timestamp_pacific(timestamp_pst).astimezone(dt_timezone.utc)
+    timestamp_utc = (
+        parse_timestamp_pacific(timestamp_pst).astimezone(dt_timezone.utc)
+        - timedelta(seconds=AUDIO_OFFSET_SECONDS)
+    )
     encoded_time = quote(timestamp_utc.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z", safe="")
     return f"{base_uri}?time={encoded_time}"
 
@@ -557,13 +611,13 @@ def _get_corrected_detection_timestamp(node_name: str, detection_timestamp: date
 
 
 def _find_matching_detection(row: CSVRow) -> tuple[dict, str]:
-    """Find the best matching false-positive detection and return it plus the Orcasite-aligned timestamp.
+    """Find the best matching false-positive detection and return its corrected timestamp.
 
     Args:
         row: False-positive testing CSV row being validated.
 
     Returns:
-        Tuple of ``(detection, orcasite_timestamp_pst)`` for the matching 60-second detection.
+        Tuple of ``(detection, corrected_timestamp_pst)`` for the matching 60-second detection.
     """
     row_timestamp = parse_timestamp_pacific(row.timestamp_pst)
     normalized_description = _normalize_text(row.description)
@@ -571,7 +625,7 @@ def _find_matching_detection(row: CSVRow) -> tuple[dict, str]:
     last_candidate_count = 0
     last_start_date = row_timestamp
     last_end_date = row_timestamp
-    closest_orcasite_timestamp_pst = None
+    closest_corrected_timestamp_pst = None
     closest_reviewed_comments = None
     closest_reviewed_delta_seconds = None
 
@@ -598,31 +652,30 @@ def _find_matching_detection(row: CSVRow) -> tuple[dict, str]:
                 continue
 
             corrected_timestamp = _get_corrected_detection_timestamp(row.node_name, detection_timestamp)
-            orcasite_timestamp = corrected_timestamp - timedelta(seconds=AUDIO_OFFSET_SECONDS)
-            orcasite_end_timestamp = orcasite_timestamp + timedelta(seconds=ORCAHELLO_ORCASITE_WINDOW_SECONDS)
+            corrected_end_timestamp = corrected_timestamp + timedelta(seconds=ORCAHELLO_ORCASITE_WINDOW_SECONDS)
             delta_seconds = min(
-                abs((row_timestamp - orcasite_timestamp).total_seconds()),
-                abs((row_timestamp - orcasite_end_timestamp).total_seconds()),
+                abs((row_timestamp - corrected_timestamp).total_seconds()),
+                abs((row_timestamp - corrected_end_timestamp).total_seconds()),
             )
             if closest_reviewed_delta_seconds is None or delta_seconds < closest_reviewed_delta_seconds:
                 closest_reviewed_delta_seconds = delta_seconds
-                closest_orcasite_timestamp_pst = format_timestamp_pacific(orcasite_timestamp)
+                closest_corrected_timestamp_pst = format_timestamp_pacific(corrected_timestamp)
                 closest_reviewed_comments = comments
 
-            if orcasite_timestamp <= row_timestamp <= orcasite_end_timestamp:
-                seconds_from_start = (row_timestamp - orcasite_timestamp).total_seconds()
-                candidates.append((seconds_from_start, orcasite_timestamp, detection))
+            if corrected_timestamp <= row_timestamp <= corrected_end_timestamp:
+                seconds_from_start = (row_timestamp - corrected_timestamp).total_seconds()
+                candidates.append((seconds_from_start, corrected_timestamp, detection))
 
         last_candidate_count = len(candidates)
         if candidates:
-            _, orcasite_timestamp, detection = min(candidates, key=lambda item: item[0])
-            return detection, format_timestamp_pacific(orcasite_timestamp)
+            _, corrected_timestamp, detection = min(candidates, key=lambda item: item[0])
+            return detection, format_timestamp_pacific(corrected_timestamp)
 
     raise ValueError(
         f"Could not find matching OrcaHello false-positive detection for testing row {row!r} "
         f"(timestamp={row.timestamp_pst}, description={row.description!r}, "
         f"search_window={last_start_date.strftime('%m/%d/%Y')}..{last_end_date.strftime('%m/%d/%Y')}, "
-        f"candidates={last_candidate_count}, closest_orcasite_timestamp={closest_orcasite_timestamp_pst!r}, "
+        f"candidates={last_candidate_count}, closest_corrected_timestamp={closest_corrected_timestamp_pst!r}, "
         f"closest_comments={closest_reviewed_comments!r})."
     )
 
@@ -672,11 +725,10 @@ def validate_aligned_entries(testing_rows: list[CSVRow]) -> None:
 
 
 def validate_uri_timestamps(rows: list[CSVRow]) -> None:
-    """Verify that the timestamp encoded in each row URI matches the CSV StartTimestamp.
+    """Verify that the timestamp encoded in each row URI matches its Orcasite time.
 
     Args:
         rows: Parsed CSV rows to validate.
-
     Raises:
         ValueError: If any row's URI timestamp does not match the CSV timestamp or the URI cannot be parsed.
     """
@@ -792,31 +844,26 @@ def download_audio_segment(
         node_name (str): The node name (e.g., "rpi_sunset_bay").
         timestamp_str (str): The detection timestamp in Pacific time.
         output_root (Path): Root directory where label subdirectories and audio files will be saved.
-        uri (str): Orcasite URI used to distinguish legacy from corrected timestamps.
+        uri (str): Orcasite URI associated with the manifest row.
     """
     label_dir = output_root / category
     label_dir.mkdir(parents=True, exist_ok=True)
     timestamp_pst = parse_timestamp_pacific(timestamp_str)
-    start_time_utc = timestamp_pst.astimezone(dt_timezone.utc)
-    if uri:
-        try:
-            uri_timestamp = parse_timestamp_pacific(
-                _parse_uri_timestamp_pst(uri)
-            )
-        except ValueError:
-            uri_timestamp = None
-        if uri_timestamp == timestamp_pst:
-            start_time_utc += timedelta(seconds=AUDIO_OFFSET_SECONDS)
+    start_time = PACIFIC_TZ.normalize(timestamp_pst - timedelta(seconds=AUDIO_OFFSET_SECONDS))
 
     # Check if the file already exists.
     wav_filename = _get_wav_filename(node_name, timestamp_str)
     expected_path = label_dir / wav_filename
     if expected_path.exists():
-        print(f"Skipping (already exists): {expected_path}")
-        return
-    if _copy_wav_from_cache_if_exists(expected_path, output_root, cache_root):
+        if _has_audio_start_marker(expected_path, start_time):
+            print(f"Skipping (already exists): {expected_path}")
+            return
+        _preserve_unverified_wav(expected_path)
+    if _copy_wav_from_cache_if_exists(expected_path, output_root, cache_root, audio_start=start_time):
+        _write_audio_start_marker(expected_path, start_time)
         return
 
+    start_time_utc = start_time.astimezone(dt_timezone.utc)
     try:
         with TemporaryDirectory() as tmp_path:
             wav_path = download_audio_from_start_utc(
@@ -827,9 +874,10 @@ def download_audio_segment(
             )
             if wav_path:
                 shutil.copy2(wav_path, expected_path)
+                _write_audio_start_marker(expected_path, start_time)
                 print(f"Downloaded: {expected_path}")
     except Exception as e:
-        print(f"\nWarning: Unable to retrieve audio clip.")
+        print("\nWarning: Unable to retrieve audio clip.")
         print(f"Error details: {type(e).__name__}: {str(e)}")
         print(f"Hydrophone: {node_name}")
 
@@ -883,17 +931,25 @@ def download_testing_sample(row: CSVRow, output_root: Path, cache_root: Path | N
 
 
 def download_testing_file(expected_path: Path, output_root: Path, cache_root: Path | None = None):
-    if expected_path.exists():
-        print(f"  Skipping (already exists): {expected_path}")
-        return
-    if _copy_wav_from_cache_if_exists(expected_path, output_root, cache_root):
-        return
-
     from add_samples import parse_node_and_timestamp_from_filename
 
     node_name, timestamp_pst = parse_node_and_timestamp_from_filename(expected_path)
+    audio_start = parse_timestamp_pacific(timestamp_pst)
+    start_time_utc = audio_start.astimezone(dt_timezone.utc) - timedelta(
+        seconds=AUDIO_OFFSET_SECONDS
+    )
+    requested_audio_start = start_time_utc.astimezone(PACIFIC_TZ)
+    if expected_path.exists():
+        if _has_audio_start_marker(expected_path, requested_audio_start):
+            print(f"  Skipping (already exists): {expected_path}")
+            return
+        _preserve_unverified_wav(expected_path)
+    if _copy_wav_from_cache_if_exists(
+        expected_path, output_root, cache_root, audio_start=requested_audio_start
+    ):
+        _write_audio_start_marker(expected_path, requested_audio_start)
+        return
 
-    start_time_utc = parse_timestamp_pacific(timestamp_pst).astimezone(dt_timezone.utc)
     print(f"  Downloading {TESTING_WINDOW_SECONDS}-second audio from {timestamp_pst}...")
 
     with TemporaryDirectory() as tmp_dir:
@@ -912,6 +968,7 @@ def download_testing_file(expected_path: Path, output_root: Path, cache_root: Pa
         expected_path.parent.mkdir(parents=True, exist_ok=True)
 
         shutil.move(wav_path, expected_path)
+        _write_audio_start_marker(expected_path, requested_audio_start)
         print(f"  Downloaded: {expected_path}")
 
 
@@ -1090,7 +1147,8 @@ def run_download_wavs(
     # TODO(issue #550): Verify whether dclde_rows have the correct timestamp or need correction first.
     validate_no_overlaps(training_rows, testing_rows, dclde_rows)
 
-    validate_uri_timestamps(training_rows + testing_rows)
+    validate_uri_timestamps(training_rows)
+    validate_uri_timestamps(testing_rows)
 
     validate_node_slug_in_uri(testing_rows + dclde_rows)
 

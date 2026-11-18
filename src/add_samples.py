@@ -35,7 +35,8 @@ corrected class are omitted from the printed output.
 
 URI/Description/Notes Lookup:
 - The script looks up the detection in detections.csv (default: output/csv/testing_60s_samples.csv)
-  by matching NodeName and StartTimestamp, and uses the URI, Description, and Notes from that row
+  by matching NodeName and the corrected StartTimestamp, then uses the URI,
+  Description, and Notes from that row
 - If not found in detections.csv, generates a URI from the timestamp and uses
   fallback_description when provided (otherwise empty Description), with Notes="manual"
 
@@ -49,14 +50,17 @@ node_name=rpi_orcasound_lab and timestamp=2025_12_17_22_34_03_PST.
 
 import argparse
 import csv
+import json
+import os
 import re
+import shutil
 import sys
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Optional
-from urllib.parse import quote, unquote, urlparse, parse_qs
+from urllib.parse import quote, urlparse, parse_qs
 
 import ffmpeg
 from pytz import timezone
@@ -64,16 +68,17 @@ from pytz import timezone
 from model_inference import get_model_inference
 from orcasite_feeds import get_orcasite_feeds, OrcasiteFeed
 from audio_utils import (
-    download_60s_audio,
+    download_60s_audio_from_start,
     format_timestamp_pacific,
     parse_timestamp_pacific,
 )
+from model_revisions import LATEST_PODSAI_MODEL_REVISION
 
 SEGMENT_DURATION = 3  # Duration of each segment in seconds.
 HOP_DURATION = 2  # Hop size between segments in seconds.
+ORCASITE_OFFSET_SECONDS = 2
 DEFAULT_OUTPUT_DIR = "new"  # Default output directory for segments.
 DEFAULT_MODEL_PATH = "davethaler/whale-call-detector"  # Default HuggingFace model ID.
-from model_revisions import LATEST_PODSAI_MODEL_REVISION
 DEFAULT_DETECTIONS_CSV = "output/csv/testing_60s_samples.csv"  # Default path to detections csv.
 PACIFIC_TZ = timezone("America/Los_Angeles")  # Pacific timezone for timestamp formatting.
 UTC_TZ = timezone("UTC")  # UTC timezone for URI generation.
@@ -237,7 +242,7 @@ def parse_uri(uri: str) -> tuple[str, str]:
 
     time_str = query_params['time'][0]
 
-    # Parse UTC time and convert to PST.
+    # Parse Orcasite time and convert it to the correct recording time.
     # Format: 2024-07-04T18:05:59.000Z
     try:
         utc_dt = datetime.strptime(time_str, "%Y-%m-%dT%H:%M:%S.%fZ")
@@ -246,7 +251,7 @@ def parse_uri(uri: str) -> tuple[str, str]:
         utc_dt = datetime.strptime(time_str, "%Y-%m-%dT%H:%M:%SZ")
 
     utc_dt = UTC_TZ.localize(utc_dt)
-    pst_dt = utc_dt.astimezone(PACIFIC_TZ)
+    pst_dt = (utc_dt + timedelta(seconds=ORCASITE_OFFSET_SECONDS)).astimezone(PACIFIC_TZ)
     timestamp_str = format_timestamp_pacific(pst_dt)
 
     return node_name, timestamp_str
@@ -282,15 +287,18 @@ def generate_uri(node_name: str, timestamp_str: str) -> str:
     return f"https://live.orcasound.net/bouts/new/{slug}?time={time_encoded}"
 
 
-def lookup_detection_in_csv(node_name: str, timestamp_str: str, detections_csv: str) -> Optional[DetectionInfo]:
+def lookup_detection_in_csv(
+    node_name: str,
+    timestamp_str: str,
+    detections_csv: str,
+) -> Optional[DetectionInfo]:
     """
-    Look up detection info in detections.csv by matching NodeName and StartTimestamp.
+    Look up detection info in detections.csv by node and corrected timestamp.
 
     Args:
         node_name: Hydrophone node name (e.g., "rpi_orcasound_lab").
         timestamp_str: PST timestamp string (e.g., "2023_10_28_07_33_52_PST").
         detections_csv: Path to detections.csv file.
-
     Returns:
         DetectionInfo with uri, description, notes, and tags if found, None otherwise.
     """
@@ -300,7 +308,7 @@ def lookup_detection_in_csv(node_name: str, timestamp_str: str, detections_csv: 
         return None
 
     try:
-        requested_timestamp = timestamp_str.strip().upper()
+        requested_timestamp = format_timestamp_pacific(parse_timestamp_pacific(timestamp_str)).upper()
         with open(detections_path, 'r', encoding='utf-8') as f:
             reader = csv.DictReader(f)
             for row in reader:
@@ -314,7 +322,7 @@ def lookup_detection_in_csv(node_name: str, timestamp_str: str, detections_csv: 
                 tags = row.get('Tags', '').strip()
 
                 if uri:
-                    print(f"Found detection in detections.csv:")
+                    print("Found detection in detections.csv:")
                     print(f"  URI: {uri}")
                     print(f"  Description: {description if description else '(empty)'}")
                     print(f"  Notes: {notes if notes else '(empty)'}")
@@ -334,6 +342,8 @@ def split_wav_into_segments(
     output_dir: Path,
     segment_duration: int = SEGMENT_DURATION,
     hop_duration: int = HOP_DURATION,
+    source_uri: Optional[str] = None,
+    source_id: Optional[str] = None,
 ) -> list[tuple[Path, str]]:
     """
     Split a 60-second audio sample into fixed-duration segments with a hop and save to output_dir.
@@ -350,11 +360,43 @@ def split_wav_into_segments(
         output_dir: Directory to save the segment WAV files.
         segment_duration: Duration of each segment in seconds (default: 3).
         hop_duration: Hop size between segment start times in seconds (default: 2).
+        source_uri: Stable source identifier for downloaded audio, when available.
+        source_id: Stable cache identity for audio whose local path is temporary.
 
     Returns:
         List of (segment_path, timestamp_str) tuples for each saved segment,
         in order of increasing start time.
     """
+    source_path = Path(wav_file)
+    resolved_source_path = source_path.resolve()
+    resolved_output_dir = output_dir.resolve()
+    filename_prefix = f"{node_name.replace('_', '-')}_"
+    if (
+        resolved_source_path.exists()
+        and resolved_source_path.parent == resolved_output_dir
+        and resolved_source_path.stem.startswith(filename_prefix)
+        and hop_duration > 0
+    ):
+        candidate_timestamp = resolved_source_path.stem[len(filename_prefix):]
+        try:
+            candidate_time = parse_timestamp_pacific(candidate_timestamp)
+            start_time = parse_timestamp_pacific(start_timestamp)
+        except ValueError:
+            pass
+        else:
+            offset_seconds = (
+                candidate_time.astimezone(UTC_TZ) - start_time.astimezone(UTC_TZ)
+            ).total_seconds()
+            if offset_seconds >= 0 and offset_seconds % hop_duration == 0:
+                expected_output = resolved_output_dir / (
+                    f"{filename_prefix}"
+                    f"{format_timestamp_pacific(start_time + timedelta(seconds=offset_seconds))}.wav"
+                )
+                if resolved_source_path == expected_output.resolve():
+                    raise ValueError(
+                        f"Input WAV path collides with an output segment path: {source_path}"
+                    )
+
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # Probe the audio file to get duration.
@@ -376,38 +418,112 @@ def split_wav_into_segments(
     start_time = parse_timestamp_pacific(start_timestamp)
     # Replace underscores with hyphens in the node name (matches download_wavs.py convention).
     node_name_in_filename = node_name.replace("_", "-")
+    source_metadata: dict[str, object]
+    if source_id is not None:
+        source_metadata = {"source_id": source_id}
+    elif source_uri is not None:
+        source_metadata = {"uri": source_uri}
+    else:
+        source_path = Path(wav_file)
+        try:
+            source_stat = source_path.stat()
+        except OSError:
+            source_metadata = {"path": str(source_path.resolve())}
+        else:
+            source_metadata = {
+                "path": str(source_path.resolve()),
+                "size": source_stat.st_size,
+                "mtime_ns": source_stat.st_mtime_ns,
+            }
 
-    segments: list[tuple[Path, str]] = []
+    segment_jobs: list[tuple[int, str, Path, Path, dict[str, object]]] = []
     for pos_idx in range(num_positions):
         start_offset = pos_idx * hop_duration
         seg_time = start_time + timedelta(seconds=start_offset)
         timestamp_str = format_timestamp_pacific(seg_time)
         filename = f"{node_name_in_filename}_{timestamp_str}.wav"
         out_path = output_dir / filename
+        metadata_path = out_path.with_name(f"{out_path.name}.metadata.json")
+        segment_metadata = {
+            "source": source_metadata,
+            "input_start_timestamp": start_timestamp,
+            "start_offset_seconds": start_offset,
+            "segment_duration_seconds": segment_duration,
+            "hop_duration_seconds": hop_duration,
+        }
+        segment_jobs.append(
+            (start_offset, timestamp_str, out_path, metadata_path, segment_metadata)
+        )
 
-        if out_path.exists():
-            print(f"Skipping (already exists): {out_path}")
-            segments.append((out_path, timestamp_str))
-            continue
+    extraction_source = wav_file
+    source_copy_dir = None
+    segments: list[tuple[Path, str]] = []
+    try:
+        for _, _, out_path, _, _ in segment_jobs:
+            try:
+                same_file = (
+                    source_path.exists()
+                    and out_path.exists()
+                    and os.path.samefile(source_path, out_path)
+                )
+            except OSError:
+                same_file = False
+            if same_file or source_path.resolve() == out_path.resolve():
+                source_copy_dir = TemporaryDirectory(prefix="add-samples-source-")
+                source_copy = Path(source_copy_dir.name) / source_path.name
+                shutil.copy2(source_path, source_copy)
+                extraction_source = str(source_copy)
+                break
 
-        try:
-            stream = ffmpeg.input(wav_file, ss=start_offset)
-            stream = ffmpeg.output(
-                stream,
-                str(out_path),
-                t=segment_duration,
-                acodec="pcm_s16le",
-                ar=44100,
-                ac=1,
-            )
-            ffmpeg.run(stream, overwrite_output=True, quiet=True)
-            print(f"Saved: {out_path}")
-            segments.append((out_path, timestamp_str))
-        except Exception as e:
-            print(
-                f"Warning: Failed to extract segment at offset {start_offset}s: {e}",
-                file=sys.stderr,
-            )
+        for start_offset, timestamp_str, out_path, metadata_path, segment_metadata in segment_jobs:
+            if out_path.exists():
+                try:
+                    cached_metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+                except (OSError, UnicodeError, json.JSONDecodeError):
+                    cached_metadata = None
+                if cached_metadata == segment_metadata:
+                    print(f"Skipping (already exists): {out_path}")
+                    segments.append((out_path, timestamp_str))
+                    continue
+
+                preserved_path = out_path.with_name(f"{out_path.name}.unverified")
+                suffix = 1
+                while preserved_path.exists():
+                    preserved_path = out_path.with_name(f"{out_path.name}.unverified.{suffix}")
+                    suffix += 1
+                os.replace(out_path, preserved_path)
+                if metadata_path.exists():
+                    preserved_metadata_path = preserved_path.with_name(
+                        f"{preserved_path.name}.metadata.json"
+                    )
+                    os.replace(metadata_path, preserved_metadata_path)
+
+            try:
+                stream = ffmpeg.input(extraction_source, ss=start_offset)
+                stream = ffmpeg.output(
+                    stream,
+                    str(out_path),
+                    t=segment_duration,
+                    acodec="pcm_s16le",
+                    ar=44100,
+                    ac=1,
+                )
+                ffmpeg.run(stream, overwrite_output=True, quiet=True)
+                metadata_path.write_text(
+                    json.dumps(segment_metadata, sort_keys=True), encoding="utf-8"
+                )
+                print(f"Saved: {out_path}")
+                segments.append((out_path, timestamp_str))
+            except Exception as e:
+                out_path.unlink(missing_ok=True)
+                metadata_path.unlink(missing_ok=True)
+                print(
+                    f"Warning: Failed to extract segment at offset {start_offset}s: {e}",
+                    file=sys.stderr,
+                )
+    finally:
+        if source_copy_dir is not None:
+            source_copy_dir.cleanup()
 
     return segments
 
@@ -451,7 +567,8 @@ def add_training_3s_samples(
     corrected_class: Optional[str] = None,
     fallback_description: Optional[str] = None,
     fallback_notes: Optional[str] = None,
-    fallback_tags: Optional[str] = None
+    fallback_tags: Optional[str] = None,
+    source_id: Optional[str] = None,
 ) -> list[dict]:
     """
     Split a 60-second audio sample into 3-second segments, save them, and run inference on each.
@@ -494,6 +611,7 @@ def add_training_3s_samples(
             in detections.csv. Defaults to "manual" when not provided.
         fallback_tags: Optional tags to use when the detection is not found
             in detections.csv. Defaults to None when not provided.
+        source_id: Stable cache identity for temporary source WAV files.
 
     Returns:
         List of dictionaries with keys matching manual_samples.csv format:
@@ -520,16 +638,15 @@ def add_training_3s_samples(
             if start_timestamp is None:
                 start_timestamp = inferred_ts
 
-        print(f"Downloading 60-second audio from URI...")
+        print("Downloading 60-second audio from URI...")
         print(f"  Node: {node_name}")
         print(f"  StartTimestamp: {start_timestamp}")
 
         # Download the 60-second WAV file.
         temp_dir = TemporaryDirectory()
-        min_end_timestamp_pst_str=format_timestamp_pacific(parse_timestamp_pacific(start_timestamp) + timedelta(seconds=60))
-        wav_path = download_60s_audio(
+        wav_path = download_60s_audio_from_start(
             node_name=node_name,
-            min_end_timestamp_pst_str=min_end_timestamp_pst_str,
+            start_timestamp_pst_str=start_timestamp,
             tmp_dir=temp_dir.name)
 
         if wav_path is None:
@@ -550,7 +667,11 @@ def add_training_3s_samples(
     out_dir = Path(output_dir)
 
     # Try to look up detection info in detections.csv.
-    detection_info = lookup_detection_in_csv(node_name, start_timestamp, detections_csv)
+    detection_info = lookup_detection_in_csv(
+        node_name,
+        start_timestamp,
+        detections_csv,
+    )
     if detection_info:
         # Use Description and Notes from detections.csv.
         shared_description = detection_info.description
@@ -563,7 +684,14 @@ def add_training_3s_samples(
         shared_tags = (fallback_tags or "").strip()
 
     # Split the WAV and save segments.
-    segments = split_wav_into_segments(wav_file, node_name, start_timestamp, out_dir)
+    segments = split_wav_into_segments(
+        wav_file,
+        node_name,
+        start_timestamp,
+        out_dir,
+        source_uri=uri,
+        source_id=source_id,
+    )
 
     # Clean up temporary directory if we downloaded the file.
     if temp_dir is not None:
@@ -591,8 +719,12 @@ def add_training_3s_samples(
         # Convert confidence from 0.0-1.0 to 0.0-100.0.
         confidence_pct = confidence * 100
 
-        # Generate URI matching this segment's timestamp.
-        segment_uri = generate_uri(node_name, timestamp_str)
+        # Keep the URI on Orcasite time while storing the corrected sample time.
+        orcasite_timestamp = format_timestamp_pacific(
+            parse_timestamp_pacific(timestamp_str).astimezone(UTC_TZ)
+            - timedelta(seconds=ORCASITE_OFFSET_SECONDS)
+        )
+        segment_uri = generate_uri(node_name, orcasite_timestamp)
 
         # Create row dict matching manual_samples.csv format.
         row = {
@@ -677,8 +809,12 @@ def add_testing_60s_sample(
         shared_notes = candidate_notes if candidate_notes else "manual"
         shared_tags = (fallback_tags or "").strip()
 
-    # Generate URI matching this segment's timestamp.
-    segment_uri = generate_uri(node_name, start_timestamp)
+    # Manifests use corrected time; Orcasite URIs use the time two seconds earlier.
+    orcasite_timestamp = format_timestamp_pacific(
+        parse_timestamp_pacific(start_timestamp).astimezone(UTC_TZ)
+        - timedelta(seconds=ORCASITE_OFFSET_SECONDS)
+    )
+    segment_uri = generate_uri(node_name, orcasite_timestamp)
 
     # Create row dict matching manual_samples.csv format.
     row = {
