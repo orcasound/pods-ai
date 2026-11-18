@@ -804,8 +804,8 @@ class TestPrintSummary:
         captured = capsys.readouterr().out
         orcahello_line = next(line for line in captured.splitlines() if line.strip().startswith("orcahello"))
         columns = orcahello_line.split()
-        assert columns[7:9] == ["0.0%", "100.0%"]
-        assert columns[9:11] == ["0.0%", "100.0%"]
+        assert columns[8:10] == ["0.0%", "100.0%"]
+        assert columns[10:12] == ["0.0%", "100.0%"]
 
 
 # ---------------------------------------------------------------------------
@@ -1262,7 +1262,7 @@ class TestMainCLI:
                 expected_loader_args["config"] = expected_config
 
             load_model.assert_called_once_with(**expected_loader_args)
-            assert evaluate.call_args.kwargs["variant"] == expected_name
+            assert evaluate.call_args.kwargs["model_variant"] == expected_name
 
     def test_orcahello_multiple_variants(self, tmp_path):
         """main() evaluates multiple OrcaHello variants independently."""
@@ -1331,7 +1331,7 @@ class TestMainCLI:
         ])
 
         evaluated_names = [
-            call.kwargs["variant"]
+            call.kwargs["model_variant"]
             for call in evaluate.call_args_list
         ]
 

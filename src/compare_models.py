@@ -468,13 +468,13 @@ def _labels_seen_in_confusion_matrix(confusion_matrix: dict[str, dict[str, int]]
 
 def evaluate_model(
     model_type: str,
-    variant: Optional[str],
     model_path: Optional[str],
     wav_paths: list[Path],
     wav_dir: Path,
     model_revision: Optional[str] = None,
     result_model_type: Optional[str] = None,
     inference_model: Optional[Any] = None,
+    model_variant: Optional[str] = None,
 ) -> ModelResult:
     """
     Run a model against all test samples and accumulate results.
@@ -490,12 +490,13 @@ def evaluate_model(
         result_model_type: Optional display name to store in ModelResult.model_type.
                            If omitted, model_type is used.
         inference_model: Optional preloaded model inference instance to reuse.
+        model_variant: Optional model configuration to overrite the default
 
     Returns:
         ModelResult with counts of correct, false positive, and false negative predictions,
         plus timing information for predict() calls.
     """
-    result = ModelResult(model_type=result_model_type or model_type, variant = variant, total=len(wav_paths))
+    result = ModelResult(model_type=result_model_type or model_type, variant = model_variant, total=len(wav_paths))
     display_model_type = result.model_type
 
     for wav_path in wav_paths:
@@ -970,13 +971,13 @@ def main() -> int:
             
             model_result = evaluate_model(
                 model_type=inference_model_type,
-                variant=variant_name,
                 model_path=effective_model_path,
                 wav_paths=wav_paths,
                 wav_dir=wav_dir,
                 model_revision=effective_revision,
                 result_model_type=model_type,
                 inference_model=inference_model,
+                model_variant=variant_name,
             )
             results.append(model_result)
         print()
