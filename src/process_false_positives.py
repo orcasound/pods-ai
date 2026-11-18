@@ -20,15 +20,21 @@ import csv
 import io
 import sys
 from contextlib import redirect_stdout
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Optional
 
-from add_samples import DEFAULT_DETECTIONS_CSV, DEFAULT_MODEL_PATH, DEFAULT_OUTPUT_DIR, add_training_3s_samples, add_testing_60s_sample
+from add_samples import (
+    DEFAULT_DETECTIONS_CSV,
+    DEFAULT_MODEL_PATH,
+    DEFAULT_OUTPUT_DIR,
+    add_training_3s_samples,
+    add_testing_60s_sample,
+)
 from audio_utils import (
     SKIP_TERMS,
-    download_60s_audio,
+    download_60s_audio_from_start,
     format_timestamp_pacific,
     get_machine_detections,
     parse_timestamp_pacific,
@@ -47,7 +53,6 @@ DEFAULT_TRAINING_SAMPLES_CSV = "output/csv/training_3s_samples.csv"
 DEFAULT_TESTING_SAMPLES_CSV = "output/csv/testing_60s_samples.csv"
 TRAINING_SAMPLE_DURATION_SECONDS = 3
 TESTING_SAMPLE_DURATION_SECONDS = 60
-AUDIO_OFFSET_SECONDS = 2
 BIRD_TERMS = ("bird", "pigu", "keir")
 RESIDENT_TERMS = ("resident", "pod")
 TRANSIENT_TERMS = ("bigg", "transient")
@@ -197,9 +202,8 @@ def process_false_positives(
             if end_time is not None and detection.timestamp > end_time:
                 continue
 
-            timestamp_str_pst = format_timestamp_pacific(
-                detection.timestamp - timedelta(seconds=AUDIO_OFFSET_SECONDS)
-            )
+            sample_timestamp = detection.timestamp
+            timestamp_str_pst = format_timestamp_pacific(sample_timestamp)
             summary["rejected"] += 1
             corrected_class = get_corrected_class(detection.comments, detection.tags)
             if corrected_class is None:
@@ -216,8 +220,11 @@ def process_false_positives(
                 if not for_training:
                     print(f"Checking rejected detection at {timestamp_str_pst}")
 
-                    min_end_timestamp_pst_str = format_timestamp_pacific(detection.timestamp + timedelta(seconds=60))
-                    wav_path = download_60s_audio(node_name=feed.node_name, min_end_timestamp_pst_str=min_end_timestamp_pst_str, tmp_dir=temp_dir)
+                    wav_path = download_60s_audio_from_start(
+                        node_name=feed.node_name,
+                        start_timestamp_pst_str=timestamp_str_pst,
+                        tmp_dir=temp_dir,
+                    )
                     if wav_path is None:
                         print(f"Skipping {feed.node_name} {timestamp_str_pst}: failed to download audio.")
                         summary["download_failed"] += 1
@@ -252,8 +259,11 @@ def process_false_positives(
                 else:
                     print(f"Checking rejected detection at {timestamp_str_pst}")
 
-                    min_end_timestamp_pst_str = format_timestamp_pacific(detection.timestamp + timedelta(seconds=60))
-                    wav_path = download_60s_audio(node_name=feed.node_name, min_end_timestamp_pst_str=min_end_timestamp_pst_str, tmp_dir=temp_dir)
+                    wav_path = download_60s_audio_from_start(
+                        node_name=feed.node_name,
+                        start_timestamp_pst_str=timestamp_str_pst,
+                        tmp_dir=temp_dir,
+                    )
                     if wav_path is None:
                         print(f"Skipping {feed.node_name} {timestamp_str_pst}: failed to download audio.")
                         summary["download_failed"] += 1
@@ -285,6 +295,10 @@ def process_false_positives(
                             fallback_description=detection.comments,
                             fallback_notes="fp_machine",
                             fallback_tags=detection.tags,
+                            source_id=(
+                                f"orcasite:{feed.node_name}:"
+                                f"{detection.timestamp.isoformat()}"
+                            ),
                         )
                     except Exception as exc:
                         print(f"Skipping {feed.node_name} {timestamp_str_pst}: processing failed ({exc}).")

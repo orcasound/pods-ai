@@ -18,7 +18,7 @@ For each confirmed detection in the selected timeframe, this script:
 import argparse
 import csv
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Optional
@@ -31,7 +31,7 @@ from add_samples import (
     add_training_3s_samples,
 )
 from audio_utils import (
-    download_60s_audio,
+    download_60s_audio_from_start,
     format_timestamp_pacific,
     get_machine_detections,
     parse_timestamp_pacific,
@@ -52,7 +52,6 @@ DEFAULT_TESTING_SAMPLES_CSV = "output/csv/testing_60s_samples.csv"
 DEFAULT_ORCAHELLO_MODEL_PATH = "orcasound/orcahello-srkw-detector-v1"
 TRAINING_SAMPLE_DURATION_SECONDS = 3
 TESTING_SAMPLE_DURATION_SECONDS = 60
-AUDIO_OFFSET_SECONDS = 2
 WHALE_CLASSES = {"resident", "transient", "humpback"}
 
 
@@ -135,14 +134,16 @@ def process_false_negatives(
                 continue
 
             summary["confirmed"] += 1
-            timestamp_str = format_timestamp_pacific(
-                detection.timestamp - timedelta(seconds=AUDIO_OFFSET_SECONDS)
-            )
+            sample_timestamp = detection.timestamp
+            timestamp_str = format_timestamp_pacific(sample_timestamp)
             print(f"Checking confirmed SRKW detection at {timestamp_str} by model {model_id}")
 
             with TemporaryDirectory() as temp_dir:
-                min_end_timestamp_pst_str = format_timestamp_pacific(detection.timestamp + timedelta(seconds=60))
-                wav_path = download_60s_audio(node_name=feed.node_name, min_end_timestamp_pst_str=min_end_timestamp_pst_str, tmp_dir=temp_dir)
+                wav_path = download_60s_audio_from_start(
+                    node_name=feed.node_name,
+                    start_timestamp_pst_str=timestamp_str,
+                    tmp_dir=temp_dir,
+                )
                 if wav_path is None:
                     print(f"Skipping {feed.node_name} {timestamp_str}: failed to download audio.")
                     summary["download_failed"] += 1
@@ -192,6 +193,10 @@ def process_false_negatives(
                         fallback_description=detection.comments,
                         fallback_notes="tp_machine",
                         fallback_tags=detection.tags,
+                        source_id=(
+                            f"orcasite:{feed.node_name}:"
+                            f"{detection.timestamp.isoformat()}"
+                        ),
                     )
                 except Exception as exc:
                     print(f"Skipping {feed.node_name} {timestamp_str}: processing failed ({exc}).")

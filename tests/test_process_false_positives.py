@@ -4,7 +4,7 @@
 
 import csv
 from datetime import datetime, timezone
-from unittest.mock import patch
+from unittest.mock import ANY, patch
 
 from audio_utils import OrcaHelloDetection
 from orcasite_feeds import OrcasiteFeed
@@ -102,7 +102,7 @@ class TestAppendManualSamples:
         manual_samples_path = tmp_path / "manual_samples.csv"
         manual_samples_path.write_text(
             "Category,NodeName,StartTimestamp,URI,Description,Notes,Confidence\n"
-            "vessel,rpi_test,2025_01_01_00_00_00_PST,https://example.com/existing,desc,notes,90.0\n",
+            "vessel,rpi_test,2025_01_01_00_00_02_PST,https://example.com/existing,desc,notes,90.0\n",
             encoding="utf-8",
         )
         existing_uris = {"https://example.com/existing"}
@@ -110,7 +110,7 @@ class TestAppendManualSamples:
             {
                 "Category": "vessel",
                 "NodeName": "rpi_test",
-                "StartTimestamp": "2025_01_01_00_00_00_PST",
+                "StartTimestamp": "2025_01_01_00_00_02_PST",
                 "URI": "https://example.com/existing",
                 "Description": "desc",
                 "Notes": "notes",
@@ -119,7 +119,7 @@ class TestAppendManualSamples:
             {
                 "Category": "vessel",
                 "NodeName": "rpi_test",
-                "StartTimestamp": "2025_01_01_00_00_02_PST",
+                "StartTimestamp": "2025_01_01_00_00_04_PST",
                 "URI": "https://example.com/new",
                 "Description": "desc",
                 "Notes": "notes",
@@ -163,7 +163,7 @@ class TestProcessFalsePositives:
         detection = OrcaHelloDetection(
             id="det_1",
             feed=feed,
-            timestamp=datetime(2025, 1, 1, 12, 0, 0, tzinfo=timezone.utc),
+            timestamp=datetime(2025, 1, 1, 12, 0, 2, tzinfo=timezone.utc),
             status="rejected",
             comments="Boat noise from a nearby vessel.",
             tags="vessel",
@@ -172,7 +172,7 @@ class TestProcessFalsePositives:
         testing_row = {
             "Category": "vessel",
             "NodeName": "rpi_test",
-            "StartTimestamp": "2025_01_01_03_59_58_PST",
+            "StartTimestamp": "2025_01_01_04_00_02_PST",
             "URI": "https://example.com/testing",
             "Description": "Boat noise from a nearby vessel.",
             "Notes": "fp_machine",
@@ -190,7 +190,7 @@ class TestProcessFalsePositives:
         with patch("process_false_positives.get_model_inference") as mock_get_model, \
              patch("process_false_positives.get_orcasite_feeds_with_retry", return_value=[feed]), \
              patch("process_false_positives.get_machine_detections", return_value=[detection]), \
-             patch("process_false_positives.download_60s_audio", return_value=str(wav_path)), \
+             patch("process_false_positives.download_60s_audio_from_start", return_value=str(wav_path)) as mock_download, \
              patch("process_false_positives.add_training_3s_samples") as mock_add_training, \
              patch(
                  "process_false_positives.add_testing_60s_sample",
@@ -208,10 +208,15 @@ class TestProcessFalsePositives:
 
         mock_get_model.assert_called_once()
         mock_get_model.return_value.predict.assert_called_once_with(str(wav_path))
+        mock_download.assert_called_once_with(
+            node_name="rpi_test",
+            start_timestamp_pst_str="2025_01_01_04_00_02_PST",
+            tmp_dir=ANY,
+        )
         mock_add_training.assert_not_called()
         assert mock_add_testing.call_count == 1
         assert mock_add_testing.call_args.kwargs["corrected_class"] == "vessel"
-        assert mock_add_testing.call_args.kwargs["start_timestamp"] == "2025_01_01_03_59_58_PST"
+        assert mock_add_testing.call_args.kwargs["start_timestamp"] == "2025_01_01_04_00_02_PST"
         assert mock_add_testing.call_args.kwargs["fallback_description"] == detection.comments
         assert mock_add_testing.call_args.kwargs["fallback_notes"] == "fp_machine"
         assert mock_add_testing.call_args.kwargs["fallback_tags"] == detection.tags
@@ -249,7 +254,7 @@ class TestProcessFalsePositives:
         testing_row = {
             "Category": "vessel",
             "NodeName": "rpi_test",
-            "StartTimestamp": "2025_01_01_03_59_58_PST",
+            "StartTimestamp": "2025_01_01_04_00_00_PST",
             "URI": "https://example.com/testing",
             "Description": "Boat noise from a nearby vessel.",
             "Notes": "fp_machine",
@@ -268,7 +273,7 @@ class TestProcessFalsePositives:
         with patch("process_false_positives.get_model_inference") as mock_get_model, \
              patch("process_false_positives.get_orcasite_feeds_with_retry", return_value=[feed]), \
              patch("process_false_positives.get_machine_detections", return_value=[detection]), \
-             patch("process_false_positives.download_60s_audio", return_value=str(wav_path)), \
+             patch("process_false_positives.download_60s_audio_from_start", return_value=str(wav_path)), \
              patch("process_false_positives.add_testing_60s_sample", return_value=testing_row):
             mock_get_model.return_value.predict.return_value = {
                 "global_prediction_label": "resident",
@@ -308,7 +313,7 @@ class TestProcessFalsePositives:
         with patch("process_false_positives.get_model_inference") as mock_get_model, \
              patch("process_false_positives.get_orcasite_feeds_with_retry", return_value=[feed]), \
              patch("process_false_positives.get_machine_detections", return_value=[detection]), \
-             patch("process_false_positives.download_60s_audio", return_value=str(wav_path)), \
+             patch("process_false_positives.download_60s_audio_from_start", return_value=str(wav_path)), \
              patch("process_false_positives.add_testing_60s_sample") as mock_add_testing:
             mock_get_model.return_value.predict.return_value = {
                 "global_prediction_label": "water",
@@ -331,7 +336,7 @@ class TestProcessFalsePositives:
         detection = OrcaHelloDetection(
             id="det_1",
             feed=feed,
-            timestamp=datetime(2025, 1, 1, 12, 0, 0, tzinfo=timezone.utc),
+            timestamp=datetime(2025, 1, 1, 12, 0, 1, tzinfo=timezone.utc),
             status="rejected",
             comments="Boat noise from a nearby vessel.",
         )
@@ -344,20 +349,20 @@ class TestProcessFalsePositives:
             writer.writerow({
                 "Category": "vessel",
                 "NodeName": "rpi_test",
-                "StartTimestamp": "2025_01_01_03_59_00_PST",
+                "StartTimestamp": "2025_01_01_03_59_02_PST",
                 "URI": "https://example.com/testing",
             })
         segment = {
             "Category": "resident",
             "NodeName": "rpi_test",
-            "StartTimestamp": "2025_01_01_03_59_58_PST",
+            "StartTimestamp": "2025_01_01_04_00_00_PST",
             "URI": "https://example.com/training",
         }
         with patch("process_false_positives.DEFAULT_TESTING_SAMPLES_CSV", str(testing_path)), \
              patch("process_false_positives.get_model_inference") as get_model, \
              patch("process_false_positives.get_orcasite_feeds_with_retry", return_value=[feed]), \
              patch("process_false_positives.get_machine_detections", return_value=[detection]), \
-             patch("process_false_positives.download_60s_audio", return_value=str(wav_path)), \
+             patch("process_false_positives.download_60s_audio_from_start", return_value=str(wav_path)) as mock_download, \
              patch("process_false_positives.add_training_3s_samples", return_value=[segment]):
             get_model.return_value.predict.return_value = {"global_prediction_label": "resident"}
             summary = process_false_positives(
@@ -367,6 +372,11 @@ class TestProcessFalsePositives:
 
         assert summary["appended"] == 0
         assert summary["overlaps"] == 1
+        mock_download.assert_called_once_with(
+            node_name="rpi_test",
+            start_timestamp_pst_str="2025_01_01_04_00_01_PST",
+            tmp_dir=ANY,
+        )
 
     def test_appends_only_mismatched_whale_segments_with_corrected_class(self, tmp_path):
         """Whale-class segments should be rewritten unless they already match the corrected class."""
@@ -390,7 +400,7 @@ class TestProcessFalsePositives:
         with patch("process_false_positives.get_model_inference") as mock_get_model, \
              patch("process_false_positives.get_orcasite_feeds_with_retry", return_value=[feed]), \
              patch("process_false_positives.get_machine_detections", return_value=[detection]), \
-             patch("process_false_positives.download_60s_audio", return_value=str(wav_path)), \
+             patch("process_false_positives.download_60s_audio_from_start", return_value=str(wav_path)), \
              patch(
                  "process_false_positives.add_training_3s_samples",
                  return_value=[
@@ -441,10 +451,13 @@ class TestProcessFalsePositives:
         assert summary["duplicates"] == 1
         assert mock_model.predict.call_count == 1
         assert mock_add_samples.call_args.kwargs["model"] is mock_model
-        assert mock_add_samples.call_args.kwargs["start_timestamp"] == "2025_01_01_03_59_58_PST"
+        assert mock_add_samples.call_args.kwargs["start_timestamp"] == "2025_01_01_04_00_00_PST"
         assert mock_add_samples.call_args.kwargs["corrected_class"] == "vessel"
         assert mock_add_samples.call_args.kwargs["fallback_description"] == detection.comments
         assert mock_add_samples.call_args.kwargs["fallback_notes"] == "fp_machine"
+        assert mock_add_samples.call_args.kwargs["source_id"] == (
+            f"orcasite:{feed.node_name}:{detection.timestamp.isoformat()}"
+        )
 
         with open(manual_samples_path, "r", encoding="utf-8") as handle:
             rows = list(csv.DictReader(handle))
@@ -470,7 +483,7 @@ class TestProcessFalsePositives:
         with patch("process_false_positives.get_model_inference") as mock_get_model, \
              patch("process_false_positives.get_orcasite_feeds_with_retry", return_value=[feed]), \
              patch("process_false_positives.get_machine_detections", return_value=[detection]), \
-             patch("process_false_positives.download_60s_audio", return_value=str(wav_path)), \
+             patch("process_false_positives.download_60s_audio_from_start", return_value=str(wav_path)), \
              patch(
                  "process_false_positives.add_training_3s_samples",
                  return_value=[
@@ -532,7 +545,7 @@ class TestProcessFalsePositives:
         with patch("process_false_positives.get_model_inference") as mock_get_model, \
              patch("process_false_positives.get_orcasite_feeds_with_retry", return_value=[feed]), \
              patch("process_false_positives.get_machine_detections", return_value=[detection]), \
-             patch("process_false_positives.download_60s_audio", return_value=str(wav_path)), \
+             patch("process_false_positives.download_60s_audio_from_start", return_value=str(wav_path)), \
              patch(
                  "process_false_positives.add_training_3s_samples",
                  return_value=[
@@ -623,7 +636,7 @@ class TestProcessFalsePositives:
                  "process_false_positives.get_machine_detections",
                  return_value=[next_detection, failed_detection],
              ), \
-             patch("process_false_positives.download_60s_audio", return_value=str(wav_path)), \
+             patch("process_false_positives.download_60s_audio_from_start", return_value=str(wav_path)), \
              patch(
                  "process_false_positives.add_training_3s_samples",
                  side_effect=[
@@ -689,7 +702,7 @@ class TestProcessFalsePositives:
                  "process_false_positives.get_machine_detections",
                  return_value=[matching_detection, non_matching_detection],
              ), \
-             patch("process_false_positives.download_60s_audio", return_value=str(wav_path)), \
+             patch("process_false_positives.download_60s_audio_from_start", return_value=str(wav_path)), \
              patch(
                  "process_false_positives.add_training_3s_samples",
                  return_value=[

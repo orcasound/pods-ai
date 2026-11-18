@@ -49,7 +49,7 @@ def test_shared_cleanup_preserves_files_from_both_manifests(tmp_path):
     testing_csv = tmp_path / "testing_60s_samples.csv"
     testing_csv.write_text(
         CSV_HEADER
-        + "resident,rpi_orcasound_lab,2025_01_01_01_00_00_PST,uri,test,tp_human_only,100\n",
+        + "resident,rpi_orcasound_lab,2025_01_01_01_00_02_PST,uri,test,tp_human_only,100\n",
         encoding="utf-8",
     )
     dclde_csv = tmp_path / "dclde_60s_samples.csv"
@@ -63,7 +63,7 @@ def test_shared_cleanup_preserves_files_from_both_manifests(tmp_path):
     output_root = tmp_path / "testing-wav"
     testing_path = (
         output_root / "resident" /
-        "rpi-orcasound-lab_2025_01_01_01_00_00_PST.wav"
+        "rpi-orcasound-lab_2025_01_01_01_00_02_PST.wav"
     )
     dclde_path = (
         output_root / "abiotic" /
@@ -73,6 +73,9 @@ def test_shared_cleanup_preserves_files_from_both_manifests(tmp_path):
     for path in (testing_path, dclde_path, stale_path):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(b"wav")
+    testing_path.with_name(f"{testing_path.name}.audio-start").write_text(
+        "2025_01_01_01_00_00_PST", encoding="utf-8"
+    )
 
     combined_expected = {
         testing_path.relative_to(output_root),
@@ -103,7 +106,7 @@ def test_shared_root_skips_cleanup_when_testing_manifest_unavailable(
     csv_dir.mkdir(parents=True, exist_ok=True)
     (csv_dir / "training_3s_samples.csv").write_text(
         CSV_HEADER
-        + "resident,rpi_orcasound_lab,2025_01_01_00_00_30_PST,https://live.orcasound.net/bouts/new/andrews-bay?time=2025-01-01T08%3A00%3A30.000Z,train,note,100\n",
+        + "resident,rpi_orcasound_lab,2025_01_01_00_00_32_PST,https://live.orcasound.net/bouts/new/andrews-bay?time=2025-01-01T08%3A00%3A30.000Z,train,note,100\n",
         encoding="utf-8",
     )
     if testing_manifest_present:

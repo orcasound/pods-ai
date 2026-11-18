@@ -34,7 +34,7 @@ class TestDownloadTestingSample:
         row = CSVRow(
             category="resident",
             node_name="rpi_andrews_bay",
-            timestamp_pst="2025_01_01_00_00_00_PST",
+            timestamp_pst="2025_01_01_00_00_02_PST",
             uri="https://example.org/sample",
             description="sample",
             notes="tp_human_only",
@@ -63,12 +63,15 @@ class TestDownloadTestingSample:
 
             mock_download.assert_called_once_with(
                 node_name="rpi_andrews_bay",
-                start_time_utc=datetime(2025, 1, 1, 8, 0, tzinfo=timezone.utc),
+                start_time_utc=datetime(2025, 1, 1, 8, 0, 0, tzinfo=timezone.utc),
                 tmp_dir=ANY,
                 duration_seconds=60,
             )
-            expected = output_root / "resident" / "rpi-andrews-bay_2025_01_01_00_00_00_PST.wav"
+            expected = output_root / "resident" / "rpi-andrews-bay_2025_01_01_00_00_02_PST.wav"
             assert expected.exists()
+            assert download_wavs._has_audio_start_marker(
+                expected, download_wavs.parse_timestamp_pacific("2025_01_01_00_00_00_PST")
+            )
 
     def test_tp_machine_only_downloads_60s_clip_from_start_timestamp(self):
         """tp_machine_only rows should download from the start timestamp."""
@@ -103,12 +106,39 @@ class TestDownloadTestingSample:
 
             mock_download.assert_called_once_with(
                 node_name="rpi_orcasound_lab",
-                start_time_utc=datetime(2025, 1, 1, 8, 0, 3, tzinfo=timezone.utc),
+                start_time_utc=datetime(2025, 1, 1, 8, 0, 1, tzinfo=timezone.utc),
                 tmp_dir=ANY,
                 duration_seconds=60,
             )
             expected = output_root / "humpback" / "rpi-orcasound-lab_2025_01_01_00_00_03_PST.wav"
             assert expected.exists()
+
+    def test_subtracts_offset_in_utc_across_dst_transition(self, tmp_path):
+        timestamp = "2025_03_09_03_00_01_PDT"
+        expected = tmp_path / "resident" / f"rpi-test_{timestamp}.wav"
+        expected.parent.mkdir(parents=True)
+
+        def fake_download_audio_from_start_utc(node_name, start_time_utc, tmp_dir, duration_seconds):
+            downloaded = Path(tmp_dir) / "downloaded.wav"
+            downloaded.write_bytes(b"corrected audio")
+            return str(downloaded)
+
+        with patch(
+            "audio_utils.download_audio_from_start_utc",
+            side_effect=fake_download_audio_from_start_utc,
+        ) as download:
+            download_wavs.download_testing_file(expected, tmp_path)
+
+        download.assert_called_once_with(
+            node_name="rpi_test",
+            start_time_utc=datetime(2025, 3, 9, 9, 59, 59, tzinfo=timezone.utc),
+            tmp_dir=ANY,
+            duration_seconds=60,
+        )
+        assert download_wavs._has_audio_start_marker(
+            expected,
+            download_wavs.parse_timestamp_pacific("2025_03_09_01_59_59_PST"),
+        )
 
 
 class TestTimestampHelpers:
@@ -137,7 +167,7 @@ class TestOverlapValidation:
 
     def test_validate_no_overlaps_rejects_training_overlap(self):
         training_rows = [
-            CSVRow("resident", "rpi_andrews_bay", "2025_01_01_00_00_00_PST", "", "", "", ""),
+            CSVRow("resident", "rpi_andrews_bay", "2025_01_01_00_00_02_PST", "", "", "", ""),
             CSVRow("resident", "rpi_andrews_bay", "2025_01_01_00_00_02_PST", "", "", "", ""),
         ]
         with pytest.raises(ValueError, match="training overlap"):
@@ -145,10 +175,10 @@ class TestOverlapValidation:
 
     def test_validate_no_overlaps_rejects_cross_file_overlap(self):
         training_rows = [
-            CSVRow("resident", "rpi_andrews_bay", "2025_01_01_00_00_00_PST", "", "", "", ""),
+            CSVRow("resident", "rpi_andrews_bay", "2025_01_01_00_00_02_PST", "", "", "", ""),
         ]
         testing_rows = [
-            CSVRow("resident", "rpi_andrews_bay", "2024_12_31_23_59_58_PST", "", "", "tp_machine_only", ""),
+            CSVRow("resident", "rpi_andrews_bay", "2025_01_01_00_00_02_PST", "", "", "tp_machine_only", ""),
         ]
         with pytest.raises(ValueError, match="cross-file overlap"):
             validate_no_overlaps(training_rows, testing_rows)
@@ -179,7 +209,7 @@ class TestAlignedEntryValidation:
             CSVRow(
                 "human",
                 "rpi_sunset_bay",
-                "2025_12_01_00_00_00_PST",
+                "2025_12_01_00_00_02_PST",
                 "https://live.orcasound.net/bouts/new/sunset-bay?time=2025-12-01T08%3A00%3A00.000Z",
                 "Radio",
                 "fp_machine_only",
@@ -224,7 +254,7 @@ class TestAlignedEntryValidation:
             CSVRow(
                 "human",
                 "rpi_sunset_bay",
-                "2025_12_01_00_00_00_PST",
+                "2025_12_01_00_00_02_PST",
                 "https://live.orcasound.net/bouts/new/sunset-bay?time=2025-12-01T08%3A00%3A00.000Z",
                 "Radio",
                 "fp_machine_only",
@@ -252,7 +282,7 @@ class TestAlignedEntryValidation:
             CSVRow(
                 "human",
                 "rpi_sunset_bay",
-                "2025_12_01_00_00_48_PST",
+                "2025_12_01_00_00_50_PST",
                 "https://live.orcasound.net/bouts/new/sunset-bay?time=2025-12-01T08%3A00%3A48.000Z",
                 "Radio",
                 "fp_machine_only",
@@ -278,8 +308,8 @@ class TestAlignedEntryValidation:
                 patch("audio_utils.get_cached_folders", side_effect=AssertionError("should not query S3 for current epoch")):
             with pytest.raises(
                 ValueError,
-                match=r"old testing_row: human,rpi_sunset_bay,2025_12_01_00_00_48_PST,https://live\.orcasound\.net/bouts/new/sunset-bay\?time=2025-12-01T08%3A00%3A48\.000Z,Radio,fp_machine_only,100\n"
-                r"  new testing_row: human,rpi_sunset_bay,2025_12_01_00_00_00_PST,https://live\.orcasound\.net/bouts/new/sunset-bay\?time=2025-12-01T08%3A00%3A00\.000Z,Radio,fp_machine_only,100",
+                match=r"old testing_row: human,rpi_sunset_bay,2025_12_01_00_00_50_PST,https://live\.orcasound\.net/bouts/new/sunset-bay\?time=2025-12-01T08%3A00%3A48\.000Z,Radio,fp_machine_only,100\n"
+                r"  new testing_row: human,rpi_sunset_bay,2025_12_01_00_00_02_PST,https://live\.orcasound\.net/bouts/new/sunset-bay\?time=2025-12-01T08%3A00%3A00\.000Z,Radio,fp_machine_only,100",
             ):
                 validate_aligned_entries(testing_rows)
 
@@ -289,7 +319,7 @@ class TestAlignedEntryValidation:
             CSVRow(
                 "human",
                 "rpi_sunset_bay",
-                "2025_01_01_00_10_48_PST",
+                "2025_01_01_00_10_50_PST",
                 "https://live.orcasound.net/bouts/new/sunset-bay?time=2025-01-01T08%3A10%3A48.000Z",
                 "Radio",
                 "fp_machine_only",
@@ -310,8 +340,8 @@ class TestAlignedEntryValidation:
                 patch("audio_utils.get_cached_folders", return_value=[str(folder_time)]):
             with pytest.raises(
                 ValueError,
-                match=r"old testing_row: human,rpi_sunset_bay,2025_01_01_00_10_48_PST,https://live\.orcasound\.net/bouts/new/sunset-bay\?time=2025-01-01T08%3A10%3A48\.000Z,Radio,fp_machine_only,100\n"
-                r"  new testing_row: human,rpi_sunset_bay,2025_01_01_00_10_00_PST,https://live\.orcasound\.net/bouts/new/sunset-bay\?time=2025-01-01T08%3A10%3A00\.000Z,Radio,fp_machine_only,100",
+                match=r"old testing_row: human,rpi_sunset_bay,2025_01_01_00_10_50_PST,https://live\.orcasound\.net/bouts/new/sunset-bay\?time=2025-01-01T08%3A10%3A48\.000Z,Radio,fp_machine_only,100\n"
+                r"  new testing_row: human,rpi_sunset_bay,2025_01_01_00_10_02_PST,https://live\.orcasound\.net/bouts/new/sunset-bay\?time=2025-01-01T08%3A10%3A00\.000Z,Radio,fp_machine_only,100",
             ):
                 validate_aligned_entries(testing_rows)
 
@@ -343,7 +373,7 @@ class TestAlignedEntryValidation:
             with pytest.raises(
                 ValueError,
                 match=r"old testing_row: human,rpi_sunset_bay,2024_07_19_12_51_09_PST,https://live\.orcasound\.net/bouts/new/sunset-bay\?time=2024-07-19T19%3A51%3A09\.000Z,Human voices causing false positives despite significant noise from something contacting ladder and/or hydrophone\.,fp_machine_only,54\.4156\n"
-                r"  new testing_row: human,rpi_sunset_bay,2024_07_19_12_50_08_PDT,https://live\.orcasound\.net/bouts/new/sunset-bay\?time=2024-07-19T19%3A50%3A08\.000Z,Human voices causing false positives despite significant noise from something contacting ladder and/or hydrophone\.,fp_machine_only,54\.4156",
+                r"  new testing_row: human,rpi_sunset_bay,2024_07_19_12_50_10_PDT,https://live\.orcasound\.net/bouts/new/sunset-bay\?time=2024-07-19T19%3A50%3A08\.000Z,Human voices causing false positives despite significant noise from something contacting ladder and/or hydrophone\.,fp_machine_only,54\.4156",
             ):
                 validate_aligned_entries(testing_rows)
 
@@ -354,22 +384,45 @@ class TestCacheAndCleanup:
             csv_path = tmp_path / "training_3s_samples.csv"
             csv_path.write_text(
                 "category,node_name,timestamp_pst,uri,description,notes,confidence\n"
-                "resident,rpi_andrews_bay,2025_01_01_00_00_00_PST,uri,desc,note,100\n",
+                "resident,rpi_andrews_bay,2025_01_01_00_00_02_PST,uri,desc,note,100\n",
                 encoding="utf-8",
             )
 
             output_root = tmp_path / "output-wav"
             cache_root = tmp_path / "cache-wav"
-            cached_file = cache_root / "resident" / "rpi-andrews-bay_2025_01_01_00_00_00_PST.wav"
+            cached_file = cache_root / "resident" / "rpi-andrews-bay_2025_01_01_00_00_02_PST.wav"
             cached_file.parent.mkdir(parents=True, exist_ok=True)
             cached_file.write_bytes(b"cached")
+            cached_file.with_name(f"{cached_file.name}.audio-start").write_text(
+                "2025_01_01_00_00_00_PST", encoding="utf-8"
+            )
 
             with patch("audio_utils.get_cached_folders", side_effect=AssertionError("should not download")):
                 process_csv(csv_path, output_root, cache_root=cache_root)
 
-            downloaded_file = output_root / "resident" / "rpi-andrews-bay_2025_01_01_00_00_00_PST.wav"
+            downloaded_file = output_root / "resident" / "rpi-andrews-bay_2025_01_01_00_00_02_PST.wav"
             assert downloaded_file.exists()
             assert downloaded_file.read_bytes() == b"cached"
+
+    def test_process_csv_rejects_legacy_cache_without_audio_start_metadata(self, tmp_path):
+        timestamp = "2025_01_01_00_00_02_PST"
+        output_root = tmp_path / "output-wav"
+        cache_root = tmp_path / "cache-wav"
+        stale_cache = cache_root / "resident" / f"rpi-andrews-bay_{timestamp}.wav"
+        stale_cache.parent.mkdir(parents=True)
+        stale_cache.write_bytes(b"pre-offset audio")
+
+        folder_time = int(datetime(2025, 1, 1, 9, 0, tzinfo=timezone.utc).timestamp())
+        with patch("audio_utils.get_cached_folders", return_value=[str(folder_time)]) as get_folders, \
+                patch("audio_utils.get_folders_between_timestamp", return_value=[folder_time]), \
+                patch("audio_utils.load_m3u8_with_retry", return_value=Mock(segments=[])):
+            download_wavs.download_audio_segment(
+                "resident", "rpi_andrews_bay", timestamp, output_root, cache_root=cache_root
+            )
+
+        expected = output_root / "resident" / f"rpi-andrews-bay_{timestamp}.wav"
+        get_folders.assert_called_once()
+        assert not expected.exists()
 
     def test_process_csv_deletes_stale_wavs(self):
         with TemporaryDirectory() as tmp:
@@ -377,15 +430,18 @@ class TestCacheAndCleanup:
             csv_path = tmp_path / "training_3s_samples.csv"
             csv_path.write_text(
                 "category,node_name,timestamp_pst,uri,description,notes,confidence\n"
-                "resident,rpi_andrews_bay,2025_01_01_00_00_00_PST,uri,desc,note,100\n",
+                "resident,rpi_andrews_bay,2025_01_01_00_00_02_PST,uri,desc,note,100\n",
                 encoding="utf-8",
             )
 
             output_root = tmp_path / "output-wav"
-            expected = output_root / "resident" / "rpi-andrews-bay_2025_01_01_00_00_00_PST.wav"
+            expected = output_root / "resident" / "rpi-andrews-bay_2025_01_01_00_00_02_PST.wav"
             stale = output_root / "resident" / "old.wav"
             expected.parent.mkdir(parents=True, exist_ok=True)
             expected.write_bytes(b"keep")
+            expected.with_name(f"{expected.name}.audio-start").write_text(
+                "2025_01_01_00_00_00_PST", encoding="utf-8"
+            )
             stale.write_bytes(b"remove")
 
             process_csv(csv_path, output_root)
@@ -400,12 +456,12 @@ class TestCacheAndCleanup:
             csv_path = tmp_path / "training_3s_samples.csv"
             csv_path.write_text(
                 "category,node_name,timestamp_pst,uri,description,notes,confidence\n"
-                "resident,rpi_andrews_bay,2025_01_01_00_00_00_PST,uri,desc,note,100\n",
+                "resident,rpi_andrews_bay,2025_01_01_00_00_02_PST,uri,desc,note,100\n",
                 encoding="utf-8",
             )
 
             output_root = tmp_path / "output-wav"
-            expected = output_root / "resident" / "rpi-andrews-bay_2025_01_01_00_00_00_PST.wav"
+            expected = output_root / "resident" / "rpi-andrews-bay_2025_01_01_00_00_02_PST.wav"
             humpback_signal = (
                 output_root / "humpback" / "signals-humpback_song_0000s.wav"
             )
@@ -413,6 +469,9 @@ class TestCacheAndCleanup:
             expected.parent.mkdir(parents=True, exist_ok=True)
             humpback_signal.parent.mkdir(parents=True, exist_ok=True)
             expected.write_bytes(b"keep")
+            expected.with_name(f"{expected.name}.audio-start").write_text(
+                "2025_01_01_00_00_00_PST", encoding="utf-8"
+            )
             humpback_signal.write_bytes(b"humpback")
             noise.write_bytes(b"noise")
 
@@ -439,7 +498,7 @@ class TestCacheAndCleanup:
             csv_path = tmp_path / "testing_60s_samples.csv"
             csv_path.write_text(
                 "category,node_name,timestamp_pst,uri,description,notes,confidence\n"
-                "resident,rpi_andrews_bay,2025_01_01_00_00_00_PST,uri,desc,tp_human_only,100\n",
+                "resident,rpi_andrews_bay,2025_01_01_00_00_02_PST,uri,desc,tp_human_only,100\n",
                 encoding="utf-8",
             )
 
@@ -449,17 +508,63 @@ class TestCacheAndCleanup:
             stale.write_bytes(b"remove")
 
             cache_root = tmp_path / "cache-testing-wav"
-            cached_file = cache_root / "resident" / "rpi-andrews-bay_2025_01_01_00_00_00_PST.wav"
+            cached_file = cache_root / "resident" / "rpi-andrews-bay_2025_01_01_00_00_02_PST.wav"
             cached_file.parent.mkdir(parents=True, exist_ok=True)
             cached_file.write_bytes(b"cached")
+            cached_file.with_name(f"{cached_file.name}.audio-start").write_text(
+                "2025_01_01_00_00_00_PST", encoding="utf-8"
+            )
 
             with patch("audio_utils.download_60s_audio", side_effect=AssertionError("should not download")):
                 process_testing_csv(csv_path, output_root, cache_root=cache_root)
 
-            expected = output_root / "resident" / "rpi-andrews-bay_2025_01_01_00_00_00_PST.wav"
+            expected = output_root / "resident" / "rpi-andrews-bay_2025_01_01_00_00_02_PST.wav"
             assert expected.exists()
             assert expected.read_bytes() == b"cached"
             assert not stale.exists()
+
+    def test_process_testing_csv_rejects_cache_with_old_audio_start(self, tmp_path):
+        timestamp = "2025_01_01_00_00_02_PST"
+        output_root = tmp_path / "output-testing-wav"
+        cache_root = tmp_path / "cache-testing-wav"
+        stale_cache = cache_root / "resident" / f"rpi-andrews-bay_{timestamp}.wav"
+        stale_cache.parent.mkdir(parents=True)
+        stale_cache.write_bytes(b"pre-offset audio")
+        stale_cache.with_name(f"{stale_cache.name}.audio-start").write_text(
+            "2025_01_01_00_00_02_PST", encoding="utf-8"
+        )
+
+        def fake_download_audio_from_start_utc(node_name, start_time_utc, tmp_dir, duration_seconds):
+            downloaded = Path(tmp_dir) / "downloaded.wav"
+            downloaded.write_bytes(b"corrected audio")
+            return str(downloaded)
+
+        row = CSVRow(
+            "resident", "rpi_andrews_bay", timestamp, "uri", "desc", "tp_human_only", "100"
+        )
+        with patch("audio_utils.download_audio_from_start_utc", side_effect=fake_download_audio_from_start_utc) as download:
+            download_wavs.download_testing_sample(row, output_root, cache_root=cache_root)
+
+        expected = output_root / "resident" / f"rpi-andrews-bay_{timestamp}.wav"
+        download.assert_called_once()
+        assert expected.read_bytes() == b"corrected audio"
+        assert download_wavs._has_audio_start_marker(
+            expected, download_wavs.parse_timestamp_pacific("2025_01_01_00_00_00_PST")
+        )
+
+    def test_failed_testing_refresh_preserves_unverified_file_without_serving_it(self, tmp_path):
+        timestamp = "2025_01_01_00_00_02_PST"
+        output_root = tmp_path / "output-testing-wav"
+        expected = output_root / "resident" / f"rpi-andrews-bay_{timestamp}.wav"
+        expected.parent.mkdir(parents=True)
+        expected.write_bytes(b"unverified old audio")
+
+        with patch("audio_utils.download_audio_from_start_utc", return_value=None):
+            with pytest.raises(AssertionError, match="Failed to download 60-second clip"):
+                download_wavs.download_testing_file(expected, output_root)
+
+        assert not expected.exists()
+        assert expected.with_name(f"{expected.name}.unverified").read_bytes() == b"unverified old audio"
 
 
 class TestNodeSlugValidation:
@@ -468,7 +573,7 @@ class TestNodeSlugValidation:
             CSVRow(
                 "resident",
                 "rpi_andrews_bay",
-                "2025_01_01_01_01_06_PST",
+                "2025_01_01_01_01_08_PST",
                 "https://live.orcasound.net/bouts/new/andrews-bay?time=2025-01-01T09%3A01%3A06.000Z",
                 "desc",
                 "tp_human_only",
@@ -536,7 +641,7 @@ class TestUriTimestampValidation:
             CSVRow(
                 "resident",
                 "rpi_andrews_bay",
-                "2025_01_01_01_01_06_PST",
+                "2025_01_01_01_01_08_PST",
                 "https://live.orcasound.net/bouts/new/andrews-bay?time=2025-01-01T09%3A01%3A06.000Z",
                 "desc",
                 "tp_human_only",
@@ -552,7 +657,7 @@ class TestUriTimestampValidation:
             CSVRow(
                 "resident",
                 "rpi_sunset_bay",
-                "2024_07_19_12_50_08_PST",
+                "2024_07_19_12_50_10_PST",
                 "https://live.orcasound.net/bouts/new/sunset-bay?time=2024-07-19T19%3A50%3A08.000Z",
                 "desc",
                 "tp_human_only",
@@ -561,6 +666,40 @@ class TestUriTimestampValidation:
         ]
 
         validate_uri_timestamps(rows)
+
+    def test_all_manifest_uris_are_two_seconds_behind_corrected_timestamps(self):
+        rows = [
+            CSVRow(
+                "resident",
+                "rpi_andrews_bay",
+                "2025_01_01_01_01_08_PST",
+                "https://live.orcasound.net/bouts/new/andrews-bay?time=2025-01-01T09%3A01%3A06.000Z",
+                "desc",
+                "tp_human_only",
+                "100",
+            ),
+        ]
+
+        validate_uri_timestamps(rows)
+        rows[0].timestamp_pst = "2025_01_01_01_01_06_PST"
+        with pytest.raises(ValueError, match="Timestamp mismatch"):
+            validate_uri_timestamps(rows)
+
+
+def test_download_audio_segment_uses_orcasite_time_for_hls_lookup(tmp_path):
+    folder_time = int(datetime(2025, 1, 1, 9, 0, 0, tzinfo=timezone.utc).timestamp())
+    row_timestamp = "2025_01_01_01_00_02_PST"
+    stream = Mock(segments=[])
+
+    with patch("audio_utils.get_cached_folders", return_value=[str(folder_time)]), patch(
+        "audio_utils.get_folders_between_timestamp", return_value=[folder_time]
+    ) as get_folders, patch("audio_utils.load_m3u8_with_retry", return_value=stream):
+        download_wavs.download_audio_segment(
+            "resident", "rpi_andrews_bay", row_timestamp, tmp_path
+        )
+
+    expected_start = int(datetime(2025, 1, 1, 9, 0, 0, tzinfo=timezone.utc).timestamp())
+    assert get_folders.call_args.args[1:] == (expected_start, expected_start + 3)
 
 
 class TestValidateOnly:
@@ -571,12 +710,12 @@ class TestValidateOnly:
             csv_dir.mkdir(parents=True, exist_ok=True)
             (csv_dir / "training_3s_samples.csv").write_text(
                 "category,node_name,timestamp_pst,uri,description,notes,confidence\n"
-                "resident,rpi_andrews_bay,2025_01_01_01_00_00_PST,https://live.orcasound.net/bouts/new/andrews-bay?time=2025-01-01T09%3A00%3A00.000Z,desc,note,100\n",
+                "resident,rpi_andrews_bay,2025_01_01_01_00_02_PST,https://live.orcasound.net/bouts/new/andrews-bay?time=2025-01-01T09%3A00%3A00.000Z,desc,note,100\n",
                 encoding="utf-8",
             )
             (csv_dir / "testing_60s_samples.csv").write_text(
                 "category,node_name,timestamp_pst,uri,description,notes,confidence\n"
-                "resident,rpi_andrews_bay,2025_01_01_01_01_06_PST,https://live.orcasound.net/bouts/new/andrews-bay?time=2025-01-01T09%3A01%3A06.000Z,desc,tp_human_only,100\n",
+                "resident,rpi_andrews_bay,2025_01_01_01_01_08_PST,https://live.orcasound.net/bouts/new/andrews-bay?time=2025-01-01T09%3A01%3A06.000Z,desc,tp_human_only,100\n",
                 encoding="utf-8",
             )
 
