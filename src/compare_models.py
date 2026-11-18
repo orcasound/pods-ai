@@ -474,7 +474,7 @@ def evaluate_model(
     model_revision: Optional[str] = None,
     result_model_type: Optional[str] = None,
     inference_model: Optional[Any] = None,
-    model_variant: Optional[str] = None,
+    model_variant: Optional[str] = "default",
 ) -> ModelResult:
     """
     Run a model against all test samples and accumulate results.
