@@ -46,6 +46,8 @@ namespace.  The `LiveInferenceSystem/deploy/` directory contains the Kubernetes 
 To release a new container image, push a tag of the form `LiveInferenceSystem.v#.#.#`.
 This triggers the `LiveInferenceSystem-deploy` workflow, which builds the image and pushes it to
 `orcaconservancycr.azurecr.io/pods-ai-live-inference-system`.
+For a manual workflow run, provide the release suffix (for example, `v1.2.3`); the workflow
+checks out the existing `LiveInferenceSystem.v1.2.3` tag rather than an arbitrary branch.
 
 To deploy to a hydrophone location:
 
