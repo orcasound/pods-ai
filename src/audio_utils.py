@@ -3,8 +3,8 @@
 """
 Common utilities for audio downloading and S3 operations.
 
-This module contains shared functions used by both extract_training_samples.py
-and download_wavs.py to avoid code duplication.
+This module contains shared functions used by download_wavs.py and potentially
+other scripts to avoid code duplication.
 """
 
 from dataclasses import dataclass
@@ -40,8 +40,9 @@ MAX_DOWNLOAD_RETRIES = 3
 
 # Seconds to wait between download retry attempts.
 DOWNLOAD_RETRY_DELAY_SECONDS = 2
-PACIFIC_TZ = timezone('US/Pacific')
+PACIFIC_TZ = timezone('America/Los_Angeles')
 UTC_TZ = timezone('UTC')
+AUDIO_OFFSET_SECONDS = 2
 COSMOS_URL = os.environ.get("COSMOS_URL", "").strip() or "https://aifororcasmetadatastore.documents.azure.com:443/"
 COSMOS_KEY = os.environ.get("COSMOS_KEY", "").strip()
 COSMOS_DB = os.environ.get("COSMOS_DB", "predictions")
@@ -130,20 +131,18 @@ def get_folders_between_timestamp(bucket_list: List[str], start_time: int, end_t
     return bucket_list[max(0, start_index - 1) : end_index + 1]
 
 
-def get_difference_between_times_in_seconds(unix_time1: int, unix_time2: int) -> float:
+def get_difference_between_times_in_seconds(later_unix_time: int, earlier_unix_time: int) -> float:
     """
     Calculate the difference between two unix timestamps in seconds.
     
     Parameters:
-        unix_time1 (int): First unix timestamp.
-        unix_time2 (int): Second unix timestamp.
+        later_unix_time (int): Later unix timestamp.
+        earlier_unix_time (int): Earlier unix timestamp.
     
     Returns:
         float: Difference in seconds.
     """
-    dt1 = datetime.fromtimestamp(int(unix_time1))
-    dt2 = datetime.fromtimestamp(int(unix_time2))
-    return (dt1 - dt2).total_seconds()
+    return later_unix_time - earlier_unix_time
 
 
 def download_from_url(dl_url: str, dl_dir: str):
@@ -204,24 +203,21 @@ def load_m3u8_with_retry(stream_url: str) -> m3u8.M3U8:
     raise last_exception
 
 
-def format_timestamp_pst(dt: datetime) -> str:
-    """
-    Format a datetime object as PST timestamp string in the format YYYY_MM_DD_HH_MM_SS_PST.
-    """
-    dt_pst = dt.astimezone(PACIFIC_TZ)
-    return dt_pst.strftime("%Y_%m_%d_%H_%M_%S_PST")
+def format_timestamp_pacific(dt: datetime) -> str:
+    """Format a datetime in Pacific time as ``YYYY_MM_DD_HH_MM_SS_{TZ}``."""
+    dt_pacific = dt.astimezone(PACIFIC_TZ)
+    return dt_pacific.strftime("%Y_%m_%d_%H_%M_%S_%Z")
 
 
-def parse_timestamp_pst(ts_str: str) -> datetime:
+def parse_timestamp_pacific(ts_str: str) -> datetime:
     """
-    Parse a PST timestamp string in the format YYYY_MM_DD_HH_MM_SS_PST into a timezone-aware datetime.
+    Parse a Pacific timestamp string into a timezone-aware datetime.
     """
-    if not ts_str.endswith("_PST"):
-        raise ValueError(f"Timestamp '{ts_str}' must end with '_PST'")
-    body = ts_str[:-4]
+    if not ts_str.upper().endswith(("_PST", "_PDT")):
+        raise ValueError(f"Timestamp '{ts_str}' must end with '_PST' or '_PDT'")
+    body, abbreviation = ts_str.upper().rsplit("_", 1)
     dt_naive = datetime.strptime(body, "%Y_%m_%d_%H_%M_%S")
-    return PACIFIC_TZ.localize(dt_naive)
-
+    return PACIFIC_TZ.localize(dt_naive, is_dst=abbreviation == "PDT")
 
 def get_node_name_for_feed(feed: OrcasiteFeed) -> str:
     """Retrieve the node name associated with an OrcasiteFeed."""
@@ -308,7 +304,7 @@ def get_machine_detections(
 
 
 def _get_aligned_end_time(timestamp_pst_str: str) -> datetime:
-    raw_end = parse_timestamp_pst(timestamp_pst_str)
+    raw_end = parse_timestamp_pacific(timestamp_pst_str)
     snapped_sec = ((raw_end.second + 9) // 10) * 10
     if snapped_sec == 60:
         # roll over to next minute.
@@ -327,10 +323,20 @@ def download_60s_audio(node_name: str, min_end_timestamp_pst_str: str, tmp_dir: 
     # HLS folder/segment logic. This reduces duplication and keeps behavior
     # consistent between callers that request clips by end-time vs start-time.
     end_time = _get_aligned_end_time(min_end_timestamp_pst_str)
-    audio_offset = 2 # startup delay
-    start_time = end_time - timedelta(seconds=60) - timedelta(seconds=audio_offset)
+    start_time = end_time - timedelta(seconds=60 + AUDIO_OFFSET_SECONDS)
     start_time_utc = start_time.astimezone(UTC_TZ)
 
+    return download_audio_from_start_utc(node_name, start_time_utc, tmp_dir, 60)
+
+
+def download_60s_audio_from_start(
+    node_name: str,
+    start_timestamp_pst_str: str,
+    tmp_dir: str,
+) -> Optional[str]:
+    """Download from the corrected start, translated to the Orcasite HLS timeline."""
+    start_time_utc = parse_timestamp_pacific(start_timestamp_pst_str).astimezone(UTC_TZ)
+    start_time_utc -= timedelta(seconds=AUDIO_OFFSET_SECONDS)
     return download_audio_from_start_utc(node_name, start_time_utc, tmp_dir, 60)
 
 
@@ -338,7 +344,7 @@ MIN_SEGMENT_DURATION = 0.001
 FLOAT_TOLERANCE = 1e-9
 
 def _build_clip_id(start_time_utc: datetime) -> str:
-    return start_time_utc.astimezone(PACIFIC_TZ).strftime("%Y_%m_%d_%H_%M_%S_PST")
+    return start_time_utc.astimezone(PACIFIC_TZ).strftime("%Y_%m_%d_%H_%M_%S_%Z")
 
 
 def format_utc_iso_z(dt: datetime) -> str:

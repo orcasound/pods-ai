@@ -33,6 +33,12 @@ def _import_stubbed_train_module(monkeypatch):
     fake_transformers.TrainingArguments = object
     fake_transformers.Trainer = object
 
+    class _FakeEarlyStoppingCallback:
+        def __init__(self, early_stopping_patience):
+            self.early_stopping_patience = early_stopping_patience
+
+    fake_transformers.EarlyStoppingCallback = _FakeEarlyStoppingCallback
+
     class _EvalPrediction:
         def __init__(self, predictions, label_ids):
             self.predictions = predictions
@@ -160,12 +166,13 @@ def test_default_training_model_uses_spectrogram_checkpoint(monkeypatch, tmp_pat
             captured["training_args"] = kwargs
 
     class _FakeTrainer:
-        def __init__(self, model, args, train_dataset, eval_dataset, compute_metrics):
+        def __init__(self, model, args, train_dataset, eval_dataset, compute_metrics, callbacks):
             self.model = model
             self.args = args
             self.train_dataset = train_dataset
             self.eval_dataset = eval_dataset
             self.compute_metrics = compute_metrics
+            captured["callbacks"] = callbacks
 
         def train(self, resume_from_checkpoint=None):
             return resume_from_checkpoint
@@ -206,6 +213,14 @@ def test_default_training_model_uses_spectrogram_checkpoint(monkeypatch, tmp_pat
     assert captured["feature_extractor_model_name"] == "MIT/ast-finetuned-audioset-10-10-0.4593"
     assert captured["model_name"] == "MIT/ast-finetuned-audioset-10-10-0.4593"
     assert captured["model_kwargs"]["ignore_mismatched_sizes"] is True
+    assert captured["training_args"]["num_train_epochs"] == 8
+    assert captured["training_args"]["eval_strategy"] == "epoch"
+    assert captured["training_args"]["load_best_model_at_end"] is True
+    assert captured["training_args"]["metric_for_best_model"] == "f1"
+    assert len(captured["callbacks"]) == 1
+    callback = captured["callbacks"][0]
+    assert isinstance(callback, module.EarlyStoppingCallback)
+    assert callback.early_stopping_patience == 2
 
 
 def test_preprocess_function_normalizes_audio_length_before_extractor(monkeypatch):
@@ -262,12 +277,13 @@ def test_preprocessing_workers_are_capped_by_smallest_split(monkeypatch, tmp_pat
             captured["training_args"] = kwargs
 
     class _FakeTrainer:
-        def __init__(self, model, args, train_dataset, eval_dataset, compute_metrics):
+        def __init__(self, model, args, train_dataset, eval_dataset, compute_metrics, callbacks):
             self.model = model
             self.args = args
             self.train_dataset = train_dataset
             self.eval_dataset = eval_dataset
             self.compute_metrics = compute_metrics
+            self.callbacks = callbacks
 
         def train(self, resume_from_checkpoint=None):
             return resume_from_checkpoint
@@ -345,12 +361,13 @@ def test_training_enables_fp16_when_cuda_is_available(monkeypatch, tmp_path):
             captured["training_args"] = kwargs
 
     class _FakeTrainer:
-        def __init__(self, model, args, train_dataset, eval_dataset, compute_metrics):
+        def __init__(self, model, args, train_dataset, eval_dataset, compute_metrics, callbacks):
             self.model = model
             self.args = args
             self.train_dataset = train_dataset
             self.eval_dataset = eval_dataset
             self.compute_metrics = compute_metrics
+            self.callbacks = callbacks
 
         def train(self, resume_from_checkpoint=None):
             return resume_from_checkpoint
@@ -428,12 +445,13 @@ def test_push_to_hub_uses_last_six_checkpoints(monkeypatch, tmp_path):
             captured_training_args.update(kwargs)
 
     class _FakeTrainer:
-        def __init__(self, model, args, train_dataset, eval_dataset, compute_metrics):
+        def __init__(self, model, args, train_dataset, eval_dataset, compute_metrics, callbacks):
             self.model = model
             self.args = args
             self.train_dataset = train_dataset
             self.eval_dataset = eval_dataset
             self.compute_metrics = compute_metrics
+            self.callbacks = callbacks
 
         def train(self, resume_from_checkpoint=None):
             return resume_from_checkpoint
@@ -641,8 +659,9 @@ def test_warmup_steps_not_warmup_ratio_passed_to_training_arguments(monkeypatch,
             captured_training_args.update(kwargs)
 
     class _FakeTrainer:
-        def __init__(self, model, args, train_dataset, eval_dataset, compute_metrics):
+        def __init__(self, model, args, train_dataset, eval_dataset, compute_metrics, callbacks):
             self.args = args
+            self.callbacks = callbacks
 
         def train(self, resume_from_checkpoint=None):
             return None
@@ -698,6 +717,7 @@ def test_warmup_steps_not_warmup_ratio_passed_to_training_arguments(monkeypatch,
 
     expected_steps = int(math.ceil(train_size / batch_size) * epochs * 0.1)
     assert captured_training_args["warmup_steps"] == expected_steps
+    assert captured_training_args["num_train_epochs"] == epochs
 
 
 def test_metric_loader_falls_back_to_sklearn_when_evaluate_metric_missing(monkeypatch):
