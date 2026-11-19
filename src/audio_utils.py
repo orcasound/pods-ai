@@ -289,6 +289,7 @@ def download_audio_from_start_utc(
 ) -> Optional[str]:
     """Download a clip beginning at start_time_utc and lasting for duration_seconds."""
     try:
+        # Normalize the requested start and calculate the interval to crop.
         start_time_utc = (
             start_time_utc.replace(tzinfo=UTC_TZ)
             if start_time_utc.tzinfo is None
@@ -301,6 +302,7 @@ def download_audio_from_start_utc(
             "https://s3-us-west-2.amazonaws.com/"
             f"audio-orcasound-net/{node_name}"
         )
+        # Limit the search to HLS folders that may contain the requested interval.
         valid_folders = s3_utils.get_folders_between_timestamp(
             get_cached_folders("audio-orcasound-net", f"{node_name}/hls/"),
             str(int(start_timestamp)),
@@ -310,6 +312,7 @@ def download_audio_from_start_utc(
             print(f"  Warning: No audio found for {start_time_utc}")
             return None
 
+        # Load candidate playlists, build their timelines, and select full coverage.
         selected_segments = None
         for folder in valid_folders:
             archive = live = None
@@ -379,6 +382,7 @@ def download_audio_from_start_utc(
             print(f"  Warning: No audio found for {start_time_utc}")
             return None
 
+        # Download and concatenate the selected transport-stream segments.
         downloaded_segments = []
         for segment in selected_segments:
             download_from_url(segment.url, tmp_dir)
@@ -402,6 +406,7 @@ def download_audio_from_start_utc(
         wav_file_path = str(
             Path(tmp_dir) / f"temp_{duration_seconds:g}s_{node_name}_{clip_id}.wav"
         )
+        # Convert the segment stream into exactly the requested WAV interval.
         stream = ffmpeg.input(source_path, ss=ss_offset)
         stream = ffmpeg.output(
             stream,
