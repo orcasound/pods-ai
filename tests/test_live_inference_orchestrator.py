@@ -7,6 +7,25 @@ from unittest.mock import Mock, patch
 import LiveInferenceOrchestrator as orchestrator
 
 
+def test_get_model_id_appends_release_version() -> None:
+    """The logged model ID should identify the deployed container release."""
+    model_id = orchestrator.get_model_id(
+        {"model_id": "davethaler/whale-call-detector"},
+        release_version="v1.6.0",
+    )
+
+    assert model_id == "davethaler/whale-call-detector-v1.6.0"
+
+
+def test_get_model_id_without_release_version_is_unchanged() -> None:
+    """Local and test runs without release metadata should keep the configured ID."""
+    model_id = orchestrator.get_model_id(
+        {"model_id": "davethaler/whale-call-detector"}
+    )
+
+    assert model_id == "davethaler/whale-call-detector"
+
+
 @patch("LiveInferenceOrchestrator.requests.get")
 def test_orcasound_attributes_pulled_from_feed(mock_get) -> None:
     mock_response = Mock()
