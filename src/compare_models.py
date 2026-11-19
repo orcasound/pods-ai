@@ -306,8 +306,8 @@ def parse_orcahello_variant(spec: str) -> tuple[str, dict]:
     name = name.strip()
     settings = settings.strip()
 
-    if not name:
-        raise ValueError("OrcaHello variant name must not be empty")
+    if not name or name == "default":
+        raise ValueError("OrcaHello variant name must not be empty or 'default'")
 
     parts = settings.split(":")
     strategy = parts[0].strip()
@@ -490,7 +490,7 @@ def evaluate_model(
         result_model_type: Optional display name to store in ModelResult.model_type.
                            If omitted, model_type is used.
         inference_model: Optional preloaded model inference instance to reuse.
-        model_variant: Optional model configuration to overrite the default
+        model_variant: Optional model configuration to overwrite the default
 
     Returns:
         ModelResult with counts of correct, false positive, and false negative predictions,
@@ -744,7 +744,7 @@ def main() -> int:
         help=(
             "OrcaHello configuration variant to evaluate. "
             "Can be specified multiple times. "
-            "Use '--orcahello-variant default' to include the default config in the comparison"
+            "Use '--orcahello-variant default' to include the default config in the comparison. "
             "Examples: thresholded=mean_thresholded, "
             "top3=mean_top_k:3."
         ),
@@ -814,7 +814,7 @@ def main() -> int:
             )
         parsed_models = [parse_model_spec(model) for model in models]
 
-        # handle variants of orcahello given different aggregation strategies
+        # Handle variants of orcahello given different aggregation strategies.
         orcahello_variants = []
         if args.orcahello_variant:
             if "orcahello" not in models:
@@ -856,7 +856,7 @@ def main() -> int:
         ]
     except ValueError as exc:
         print(f"Error: {exc}", file=sys.stderr)
-        return 1           
+        return 1
 
     model_paths: dict[str, Optional[str]] = {
         "orcahello": args.orcahello_model_path,
@@ -897,11 +897,7 @@ def main() -> int:
 
         # Expand OrcaHello into multiple configuration variants.
         if model_type == "orcahello":
-            variants = orcahello_variants or [("orcahello", None)]
-
-            for variant_name, variant_config in variants:
-                if variant_name == "default":
-                    variant_config = None
+            variants = orcahello_variants or [("default", None)]
         else:
             variants = [("default", None)]
 
@@ -943,9 +939,8 @@ def main() -> int:
                     fe = fe or PODSAI_MODEL_ID
                     kwargs['feature_extractor'] = fe
 
-                # Pass config only for explicitly configured OrcaHello variants
-                # These settings apply only to orcahello model
-                if variant_config is not None:
+                if model_type == "orcahello" and variant_config is not None:
+                    # These settings apply only to orcahello model.
                     kwargs["config"] = variant_config
                     print(f"  Configuration: {variant_config}")
 
