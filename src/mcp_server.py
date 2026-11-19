@@ -13,6 +13,7 @@ Tools — all usable without AKS access:
 8. export_unlabeled_to_csv — extract unlabeled remote data and save directly to disk.
 """
 
+import contextlib
 import csv
 import json
 import sys
@@ -20,9 +21,6 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-import boto3
-from botocore import UNSIGNED
-from botocore.config import Config
 from mcp.server.fastmcp import FastMCP
 import requests
 import structlog
@@ -56,7 +54,10 @@ _PROJECT_ROOT = _SRC_DIR.parent
 _CSV_DIR = _PROJECT_ROOT / "output" / "csv"
 
 sys.path.insert(0, str(_SRC_DIR))
+from orca_hls import get_s3_utils  # noqa: E402
 from orcasite_feeds import get_orcasite_feeds_with_retry  # noqa: E402
+
+s3_utils = get_s3_utils()
 
 mcp = FastMCP("Orcasound MCP")
 
@@ -202,20 +203,11 @@ def list_s3_recordings(
 
     logger.info("list_s3_recordings", node_name=node_name, date_prefix=date_prefix)
 
-    prefix = f"{node_name}/hls/"
+    prefix = f"{node_name}/hls/{date_prefix or ''}"
+    with contextlib.redirect_stdout(sys.stderr):
+        timestamps = s3_utils.get_all_folders(S3_BUCKET, prefix)
     if date_prefix:
-        prefix += date_prefix
-
-    s3 = boto3.client("s3", config=Config(signature_version=UNSIGNED))
-    paginator = s3.get_paginator("list_objects_v2")
-
-    timestamps: List[str] = []
-    for page in paginator.paginate(Bucket=S3_BUCKET, Prefix=prefix, Delimiter="/"):
-        for cp in page.get("CommonPrefixes", []):
-            timestamps.append(cp["Prefix"].rstrip("/").split("/")[-1])
-        if len(timestamps) >= max_results:
-            break
-
+        timestamps = [timestamp for timestamp in timestamps if timestamp.startswith(date_prefix)]
     timestamps = sorted(timestamps)[-max_results:]
 
     return {

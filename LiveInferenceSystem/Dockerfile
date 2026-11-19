@@ -57,6 +57,7 @@ COPY ./src/ ./src/
 
 # OrcaHello HLS client (required by LiveInferenceOrchestrator.py)
 COPY ./external/orcahello/InferenceSystem/src/orcasound_hls/ ./external/orcahello/InferenceSystem/src/orcasound_hls/
+COPY ./external/orca-hls-utils/src/orca_hls_utils/ ./external/orca-hls-utils/src/orca_hls_utils/
 
 ENTRYPOINT ["/usr/src/venv/bin/python3", "-u", "./src/LiveInferenceOrchestrator.py"]
 CMD []
