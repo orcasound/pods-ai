@@ -11,14 +11,10 @@ if not defined PYTHON_CMD set "PYTHON_CMD=%PYTHON%"
 if not defined PYTHON_CMD set "PYTHON_CMD=python"
 
 where "%PYTHON_CMD%" >nul 2>nul
-if errorlevel 1 (
-  set "PYTHON_CMD=py"
-)
+if errorlevel 1 set "PYTHON_CMD=py"
 
 where "%PYTHON_CMD%" >nul 2>nul
-if errorlevel 1 (
-  set "PYTHON_CMD=python3"
-)
+if errorlevel 1 set "PYTHON_CMD=python3"
 
 where "%PYTHON_CMD%" >nul 2>nul
 if errorlevel 1 (
@@ -26,7 +22,5 @@ if errorlevel 1 (
   exit /b 1
 )
 
-echo Applying Python 3.11 compatibility patch to fastai_audio...
-
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; $py = if ($env:PYTHON_CMD) { $env:PYTHON_CMD } elseif ($env:PYTHON) { $env:PYTHON } else { 'python' }; if (-not (Get-Command $py -ErrorAction SilentlyContinue)) { $py = 'py' }; if (-not (Get-Command $py -ErrorAction SilentlyContinue)) { $py = 'python3' }; if (-not (Get-Command $py -ErrorAction SilentlyContinue)) { throw 'No Python interpreter found on PATH.' }; $roots=@(); foreach ($entry in @($env:PATH -split ';')) { if ($entry -and (Test-Path $entry)) { $roots += $entry } }; if ($env:PYTHONPATH) { foreach ($entry in ($env:PYTHONPATH -split ';')) { if ($entry) { $roots += $entry } } }; if ($env:PYTHONHOME) { $roots += $env:PYTHONHOME }; $seen=@{}; $packageNames=@('audio','fastaudio','fastai_audio'); $found=$null; foreach ($base in $roots) { if (-not $base) { continue }; if ($seen.ContainsKey($base)) { continue }; $seen[$base]=$true; foreach ($pkg in $packageNames) { $candidate = Join-Path $base ($pkg + '\data.py'); if (Test-Path $candidate) { $content = Get-Content -Raw -Encoding UTF8 $candidate; if ($content.Contains('SpectrogramConfig') -and $content.Contains('sg_cfg')) { $found = $candidate; break } } }; if ($found) { break } }; if (-not $found) { foreach ($base in $roots) { if (-not $base) { continue }; if ($base -notmatch 'site-packages|dist-packages') { continue }; foreach ($item in Get-ChildItem -Path $base -Recurse -Directory -ErrorAction SilentlyContinue) { foreach ($pkg in $packageNames) { $candidate = Join-Path $item.FullName ($pkg + '\data.py'); if (Test-Path $candidate) { $content = Get-Content -Raw -Encoding UTF8 $candidate; if ($content.Contains('SpectrogramConfig') -and $content.Contains('sg_cfg')) { $found = $candidate; break } } }; if ($found) { break } } ; if ($found) { break } } }; if (-not $found) { throw 'Could not locate the fastai_audio-compatible data.py in any Python site-packages directory. fastai_audio / fastaudio may not be installed in this environment. Try: python -m pip install -r requirements.txt' }; Write-Host ('Found patch target at: ' + $found); Copy-Item $found ($found + '.bak'); $text = Get-Content -Raw -Encoding UTF8 $found; $original = $text; if ($text -notmatch 'from dataclasses import dataclass, asdict, field') { $text = $text.Replace('from dataclasses import dataclass, asdict', 'from dataclasses import dataclass, asdict, field') }; if ($text -notmatch 'field\(default_factory=SpectrogramConfig\)') { $text = $text.Replace('sg_cfg: SpectrogramConfig = SpectrogramConfig()', 'sg_cfg: SpectrogramConfig = field(default_factory=SpectrogramConfig)') }; if ($text -eq $original) { throw 'No compatible patch targets found in the installed fastai_audio package' }; Set-Content -Encoding UTF8 -Path $found -Value $text; $patched = Get-Content -Raw -Encoding UTF8 $found; if ($patched -notmatch 'field\(default_factory=SpectrogramConfig\)') { throw 'Patch verification failed: field(default_factory=SpectrogramConfig) not found' }; Write-Host 'Patch applied successfully!'; Write-Host ('Backup saved to: ' + ($found + '.bak')); Write-Host 'Patch verification successful: field(default_factory=SpectrogramConfig) found'"
+"%PYTHON_CMD%" "%~dp0patch_fastai_audio.py"
 exit /b %ERRORLEVEL%
