@@ -7,6 +7,7 @@ dependencies = [
     # GPU is not required and would increase image size significantly.
     "torch>=2.13.0",
     "torchaudio>=2.1.0",
+    "torchvision>=0.16.0",
     # HuggingFace
     "transformers>=5.10.1",
     "huggingface-hub>=0.20.0",

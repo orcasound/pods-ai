@@ -13,9 +13,12 @@ from importlib.machinery import ModuleSpec
 from pathlib import Path
 from unittest.mock import MagicMock
 
-# Ensure src/ and bootstrap/src are on the path before any test module is imported.
-sys.path.insert(0, str(Path(__file__).parent.parent / 'bootstrap' / 'src'))
-sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
+# Ensure the repository root, src/, and bootstrap/src are on the path before
+# any test module is imported.
+_repo_root = Path(__file__).parent.parent
+sys.path.insert(0, str(_repo_root))
+sys.path.insert(0, str(_repo_root / 'bootstrap' / 'src'))
+sys.path.insert(0, str(_repo_root / 'src'))
 
 # Packages that are either heavy (torch/fastai) or optional in this
 # environment. Each is stubbed out only when it cannot be genuinely imported.
@@ -123,6 +126,18 @@ for _dep in _OPTIONAL_DEPS:
                             params.sampwidth,
                             params.framerate,
                         )
+
+                    @classmethod
+                    def from_file(cls, source_path, *_args, **_kwargs):
+                        return cls.from_wav(source_path)
+
+                    def export(self, output_path, *_args, **_kwargs):
+                        with wave.open(str(output_path), "wb") as wav_file:
+                            wav_file.setnchannels(self.channels)
+                            wav_file.setsampwidth(self.sample_width)
+                            wav_file.setframerate(self.frame_rate)
+                            wav_file.writeframes(self.raw_data)
+                        return open(str(output_path), "rb")
 
                     def __getitem__(self, time_range):
                         if not isinstance(time_range, slice):
