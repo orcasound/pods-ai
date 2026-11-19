@@ -490,7 +490,7 @@ def evaluate_model(
         result_model_type: Optional display name to store in ModelResult.model_type.
                            If omitted, model_type is used.
         inference_model: Optional preloaded model inference instance to reuse.
-        model_variant: Optional model configuration to overwrite the default
+        model_variant: Optional model configuration to overwrite the default.
 
     Returns:
         ModelResult with counts of correct, false positive, and false negative predictions,
@@ -939,8 +939,8 @@ def main() -> int:
                     fe = fe or PODSAI_MODEL_ID
                     kwargs['feature_extractor'] = fe
 
-                if model_type == "orcahello" and variant_config is not None:
-                    # These settings apply only to orcahello model.
+                if inference_model_type == "orcahello" and variant_config is not None:
+                    # These settings currently apply only to the orcahello model.
                     kwargs["config"] = variant_config
                     print(f"  Configuration: {variant_config}")
 
