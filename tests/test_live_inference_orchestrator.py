@@ -189,7 +189,7 @@ def test_load_model_config_returns_detector_config_from_yaml_file(tmp_path) -> N
 
 
 def test_process_segment_applies_inference_overrides() -> None:
-    """Process segment should honor nested inference overrides before calling model.predict."""
+    """Process segment should pass the configured detector config to model inference."""
     segment = Mock(
         folder_epoch=1,
         start_index=0,
@@ -199,11 +199,18 @@ def test_process_segment_applies_inference_overrides() -> None:
     )
     segment.download_as_wav.return_value = "clip.wav"
     model = Mock()
-    model.predict.return_value = {
-        "global_prediction_label": "resident",
-        "global_confidence": 0.7,
-        "local_predictions": [1],
-    }
+    detector_result = Mock(
+        global_prediction=0,
+        global_confidence=0.7,
+        local_predictions=[0],
+    )
+    model.detect_srkw_from_file.return_value = detector_result
+    model_config = DetectorInferenceConfig.from_dict(
+        {
+            "inference": {"window_s": 3.0, "window_hop_s": 1.5},
+            "global_prediction": {"pred_global_threshold": 0.8},
+        }
+    )
     config = {
         "hls_hydrophone_id": "test",
         "delete_local_wavs": True,
@@ -216,9 +223,13 @@ def test_process_segment_applies_inference_overrides() -> None:
     logger = Mock()
 
     with patch("LiveInferenceOrchestrator.os.remove"):
-        orchestrator._process_segment(segment, model, config, None, None, logger, "model", ".")
+        orchestrator._process_segment(
+            segment, model, model_config, config, None, logger, "model", "."
+        )
 
-    model.predict.assert_called_once_with("clip.wav", segment_duration=3, hop_duration=1.5)
+    model.detect_srkw_from_file.assert_called_once_with("clip.wav", model_config)
+    assert model_config.inference.window_hop_s == 1.5
+    assert model_config.global_prediction.pred_global_threshold == 0.8
     assert not any(call.args[0].startswith("Whale call detected") for call in logger.info.call_args_list)
 
 
