@@ -925,6 +925,14 @@ def main() -> int:
             if is_onnx_format:
                 inference_model_type = "podsai"
 
+            if is_onnx_format and variant_name != "default":
+                print(
+                    f"Error: --orcahello-variant {variant_name!r} cannot be applied to an "
+                    "ONNX model path; use a non-ONNX --orcahello-model-path or remove the variant.",
+                    file=sys.stderr,
+                )
+                return 1
+
             try:
                 # ONNX inference uses the PODS-AI feature extractor/configuration.
                 kwargs = {}
