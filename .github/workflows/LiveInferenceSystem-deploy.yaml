@@ -38,7 +38,7 @@ jobs:
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/LiveInferenceSystem.{0}', inputs.release_tag) || github.ref }}
           submodules: 'recursive'
-          
+
       - name: Resolve release tag suffix
         env:
           DISPATCH_RELEASE_TAG: ${{ inputs.release_tag }}
