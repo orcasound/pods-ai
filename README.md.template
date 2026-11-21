@@ -132,6 +132,9 @@ To have GitHub train a new model from the latest `main` branch:
     This will cause the
     [LiveInferenceSystem-deploy.yaml](.github/workflows/LiveInferenceSystem-deploy.yaml)
     workflow to build a new container image and push it to the Azure Container Registry.
+    The release version is also appended to the model ID recorded with detections,
+    e.g., `davethaler/whale-call-detector-v1.4.0`. Local runs without release metadata
+    continue to use the unversioned model ID.
 12. Once that succeeds, update the `LiveInferenceSystem/deploy/<slug>.yaml` files to
     reference the new image.  For example:
     ```

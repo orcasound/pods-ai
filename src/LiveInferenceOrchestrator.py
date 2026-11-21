@@ -116,6 +116,20 @@ def build_prediction_list(
     return prediction_list
 
 
+def get_model_id(
+    orch_config: dict[str, Any],
+    release_version: Optional[str] = None,
+) -> str:
+    """Return the configured model ID with the deployed release version when available."""
+    model_id = orch_config.get(
+        "model_id",
+        orch_config.get("model_hf_repo_id", PODSAI_MODEL_ID),
+    )
+    if release_version:
+        return f"{model_id}-{release_version}"
+    return model_id
+
+
 def build_cosmosdb_metadata(
     audio_uri: str,
     image_uri: str,
@@ -599,7 +613,7 @@ def main() -> int:
     )
     logger = setup_logger(app_insights_connection_string, log_level=args.log_level)
 
-    model_id = orch_config.get("model_id", orch_config.get("model_hf_repo_id", PODSAI_MODEL_ID))
+    model_id = get_model_id(orch_config, os.getenv("PODSAI_RELEASE_VERSION"))
     model = load_model(orch_config, logger)
 
     blob_service_client, cosmos_client = setup_azure_clients(orch_config)

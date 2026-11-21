@@ -6,13 +6,9 @@ name: LiveInferenceSystem-deploy
 on:
   push:
     tags:
-      - 'LiveInferenceSystem.v[0-9]+.[0-9]+.[0-9]+'
+      - 'LiveInferenceSystem.v*'
   workflow_dispatch:
     inputs:
-      ref:
-        description: 'Branch or tag to deploy from'
-        required: true
-        default: 'main'
       release_tag:
         description: 'Container release tag (e.g., v1.2.3)'
         required: true
@@ -40,15 +36,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
-          ref: ${{ github.event.inputs.ref || github.ref }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/LiveInferenceSystem.{0}', inputs.release_tag) || github.ref }}
           submodules: 'recursive'
 
       - name: Resolve release tag suffix
+        env:
+          DISPATCH_RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
           if [ "${{ github.event_name }}" = "push" ]; then
             echo "RELEASE_TAG=${GITHUB_REF_NAME#LiveInferenceSystem.}" >> $GITHUB_ENV
           else
-            echo "RELEASE_TAG=${{ github.event.inputs.release_tag }}" >> $GITHUB_ENV
+            echo "RELEASE_TAG=$DISPATCH_RELEASE_TAG" >> $GITHUB_ENV
           fi
 
       - name: Check if ACR secrets are set
@@ -82,7 +80,10 @@ jobs:
 
       - name: Build Dockerfile image
         run: |
-          docker build -f LiveInferenceSystem/Dockerfile -t $IMAGE_NAME .
+          docker build \
+            --build-arg PODSAI_RELEASE_VERSION="$RELEASE_TAG" \
+            -f LiveInferenceSystem/Dockerfile \
+            -t $IMAGE_NAME .
 
       - name: List Docker images
         run: docker images
