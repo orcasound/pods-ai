@@ -11,10 +11,10 @@
   to the training set.
 
 Key dependencies:
-- `boto3`: For accessing S3 audio files
+- `orca-hls-utils` (submodule): Shared Orcasound S3 and HLS audio access.
+- `boto3`, `m3u8`, `beautifulsoup4`, and `tqdm`: Runtime dependencies of the shared HLS utility
 - `ffmpeg-python`: For audio processing
 - `librosa>=0.10.0`: For audio analysis
-- `m3u8`: For HLS stream parsing
 - `pytz`: For timezone handling
 - `fastai==1.0.61`: For FastAI model support
 - `torch>=2.1.0`: PyTorch deep learning framework

@@ -96,6 +96,54 @@ def test_orcahello_loader_passes_revision_only_for_hub_models(tmp_path):
     assert calls[1] == (str(local_model), {"config": {}})
     assert calls[2] == ("orcasound/model", {"config": {}})
 
+def test_orcahello_passes_aggregation_config_to_detector():
+    from orcahello_inference import (OrcaHelloSRKWInference, _get_orcahello_classes)
+
+    _, OrcaHelloConfig = _get_orcahello_classes()
+
+    captured = {}
+
+    class FakeDetector:
+        _device = "cpu"
+        _dtype = "float32"
+    
+        @classmethod
+        def from_pretrained(cls, model_path, config, **kwargs):
+            return cls()
+
+        def eval(self):
+            return self
+
+        def detect_srkw_from_file(self, wav_path, config):
+            captured["config"] = config
+
+            return SimpleNamespace(
+                local_predictions=[1, 1, 0, 0],
+                local_confidences=[0.9, 0.6, 0.4, 0.2],
+                global_prediction=1,
+                global_confidence=0.75,
+            )
+
+    with patch(
+        "orcahello_inference._get_orcahello_classes",
+        return_value=(FakeDetector, OrcaHelloConfig),
+    ):
+        model = OrcaHelloSRKWInference(
+            model_path="fake-model",
+            config={
+                "global_prediction": {
+                    "aggregation_strategy": "mean_thresholded",
+                }
+            },
+        )
+
+        result = model.predict("fake.wav")
+
+        assert (
+             captured["config"].global_prediction.aggregation_strategy
+            == "mean_thresholded"
+        )
+        assert result["global_confidence"] == 0.75
 
 def test_export_wave_file_closes_output_before_decoding(tmp_path):
     """An exported segment is fully readable before the next pipeline stage."""

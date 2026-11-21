@@ -153,6 +153,82 @@ class TestTimestampHelpers:
         assert add_seconds_to_timestamp_pst("2025_01_01_00_00_03_PST", 60) == "2025_01_01_00_01_03_PST"
 
 
+@pytest.mark.parametrize(
+    ("row_timestamp", "uri_timestamp", "expected_start"),
+    [
+        (
+            "2025_01_01_00_00_05_PST",
+            "2025-01-01T08:00:03Z",
+            datetime(2025, 1, 1, 8, 0, 3, tzinfo=timezone.utc),
+        ),
+        (
+            "2025_07_01_00_00_05_PDT",
+            "2025-07-01T07:00:03Z",
+            datetime(2025, 7, 1, 7, 0, 3, tzinfo=timezone.utc),
+        ),
+        (
+            "2025_03_09_03_00_01_PDT",
+            "2025-03-09T09:59:59Z",
+            datetime(2025, 3, 9, 9, 59, 59, tzinfo=timezone.utc),
+        ),
+    ],
+)
+def test_training_sample_download_applies_corrected_timestamp_offset(
+    tmp_path, row_timestamp, uri_timestamp, expected_start
+):
+    """Translate corrected manifest timestamps to the Orcasite HLS timeline."""
+    wav_dir = tmp_path / "training-wav"
+    source_path = tmp_path / "source.wav"
+    source_path.write_bytes(b"wav")
+
+    with patch(
+        "download_wavs.download_audio_from_start_utc",
+        return_value=str(source_path),
+    ) as download:
+        download_wavs.download_audio_segment(
+            "resident",
+            "rpi_orcasound_lab",
+            row_timestamp,
+            wav_dir,
+            uri=f"https://live.orcasound.net/bouts/new/orcasound-lab?time={uri_timestamp}",
+        )
+
+    download.assert_called_once_with(
+        node_name="rpi_orcasound_lab",
+        start_time_utc=expected_start,
+        tmp_dir=ANY,
+        duration_seconds=3,
+    )
+    assert download.call_args.kwargs["start_time_utc"].tzinfo is timezone.utc
+    expected = (
+        wav_dir
+        / "resident"
+        / f"rpi-orcasound-lab_{row_timestamp}.wav"
+    )
+    assert expected.read_bytes() == b"wav"
+
+
+def test_training_sample_without_uri_applies_corrected_timestamp_offset(
+    tmp_path,
+):
+    """Apply the corrected timestamp offset even when the row has no URI."""
+    timestamp = "2025_01_01_00_00_03_PST"
+    source_path = tmp_path / "source.wav"
+    source_path.write_bytes(b"wav")
+
+    with patch(
+        "download_wavs.download_audio_from_start_utc",
+        return_value=str(source_path),
+    ) as download:
+        download_wavs.download_audio_segment(
+            "resident", "rpi_orcasound_lab", timestamp, tmp_path
+        )
+
+    assert download.call_args.kwargs["start_time_utc"] == datetime(
+        2025, 1, 1, 8, 0, 1, tzinfo=timezone.utc
+    )
+
+
 class TestOverlapValidation:
     def test_validate_no_overlaps_allows_non_overlapping_rows(self):
         training_rows = [
@@ -414,8 +490,8 @@ class TestCacheAndCleanup:
 
         folder_time = int(datetime(2025, 1, 1, 9, 0, tzinfo=timezone.utc).timestamp())
         with patch("audio_utils.get_cached_folders", return_value=[str(folder_time)]) as get_folders, \
-                patch("audio_utils.get_folders_between_timestamp", return_value=[folder_time]), \
-                patch("audio_utils.load_m3u8_with_retry", return_value=Mock(segments=[])):
+                patch("audio_utils.s3_utils.get_folders_between_timestamp", return_value=[folder_time]), \
+                patch("audio_utils.playlist_utils.load_archive_and_live", return_value=(Mock(segments=[]), None)):
             download_wavs.download_audio_segment(
                 "resident", "rpi_andrews_bay", timestamp, output_root, cache_root=cache_root
             )
@@ -657,7 +733,7 @@ class TestUriTimestampValidation:
             CSVRow(
                 "resident",
                 "rpi_sunset_bay",
-                "2024_07_19_12_50_10_PST",
+                "2024_07_19_12_50_10_PDT",
                 "https://live.orcasound.net/bouts/new/sunset-bay?time=2024-07-19T19%3A50%3A08.000Z",
                 "desc",
                 "tp_human_only",
@@ -667,7 +743,41 @@ class TestUriTimestampValidation:
 
         validate_uri_timestamps(rows)
 
-    def test_all_manifest_uris_are_two_seconds_behind_corrected_timestamps(self):
+    def test_validate_uri_timestamps_requires_two_second_offset_for_training(self):
+        """Accept the required corrected training timestamp difference."""
+        rows = [
+            CSVRow(
+                "resident",
+                "rpi_andrews_bay",
+                "2025_01_01_01_01_08_PST",
+                "https://live.orcasound.net/bouts/new/andrews-bay?time=2025-01-01T09%3A01%3A06.000Z",
+                "desc",
+                "note",
+                "100",
+            ),
+        ]
+
+        validate_uri_timestamps(rows)
+
+    def test_validate_uri_timestamps_rejects_unrelated_training_offset(self):
+        """Reject training timestamp differences other than two seconds."""
+        rows = [
+            CSVRow(
+                "resident",
+                "rpi_andrews_bay",
+                "2025_01_01_01_01_09_PST",
+                "https://live.orcasound.net/bouts/new/andrews-bay?time=2025-01-01T09%3A01%3A06.000Z",
+                "desc",
+                "note",
+                "100",
+            ),
+        ]
+
+        with pytest.raises(ValueError, match="Timestamp mismatch"):
+            validate_uri_timestamps(rows)
+
+    def test_validate_uri_timestamps_requires_two_second_offset_for_testing(self):
+        """Accept the required corrected testing timestamp difference."""
         rows = [
             CSVRow(
                 "resident",
@@ -679,28 +789,58 @@ class TestUriTimestampValidation:
                 "100",
             ),
         ]
-
         validate_uri_timestamps(rows)
-        rows[0].timestamp_pst = "2025_01_01_01_01_06_PST"
+        validate_uri_timestamps(rows)
+
+    def test_validate_uri_timestamps_rejects_zero_offset(self):
+        rows = [
+            CSVRow(
+                "resident",
+                "rpi_andrews_bay",
+                "2025_01_01_01_01_06_PST",
+                "https://live.orcasound.net/bouts/new/andrews-bay?time=2025-01-01T09%3A01%3A06.000Z",
+                "desc",
+                "tp_human_only",
+                "100",
+            ),
+        ]
+
         with pytest.raises(ValueError, match="Timestamp mismatch"):
             validate_uri_timestamps(rows)
 
-
 def test_download_audio_segment_uses_orcasite_time_for_hls_lookup(tmp_path):
-    folder_time = int(datetime(2025, 1, 1, 9, 0, 0, tzinfo=timezone.utc).timestamp())
     row_timestamp = "2025_01_01_01_00_02_PST"
-    stream = Mock(segments=[])
+    source_path = tmp_path / "source.wav"
+    source_path.write_bytes(b"wav")
 
-    with patch("audio_utils.get_cached_folders", return_value=[str(folder_time)]), patch(
-        "audio_utils.get_folders_between_timestamp", return_value=[folder_time]
-    ) as get_folders, patch("audio_utils.load_m3u8_with_retry", return_value=stream):
+    with patch(
+        "download_wavs.download_audio_from_start_utc",
+        return_value=str(source_path),
+    ) as download:
         download_wavs.download_audio_segment(
-            "resident", "rpi_andrews_bay", row_timestamp, tmp_path
+            "resident",
+            "rpi_andrews_bay",
+            row_timestamp,
+            tmp_path,
+            uri="https://live.orcasound.net/bouts/new/andrews-bay?time=2025-01-01T09%3A00%3A00.000Z",
         )
 
-    expected_start = int(datetime(2025, 1, 1, 9, 0, 0, tzinfo=timezone.utc).timestamp())
-    assert get_folders.call_args.args[1:] == (expected_start, expected_start + 3)
-
+    expected_start = datetime(2025, 1, 1, 9, 0, 0, tzinfo=timezone.utc)
+    download.assert_called_once_with(
+        node_name="rpi_andrews_bay",
+        start_time_utc=expected_start,
+        tmp_dir=ANY,
+        duration_seconds=3,
+    )
+    expected_wav = (
+        tmp_path
+        / "resident"
+        / "rpi-andrews-bay_2025_01_01_01_00_02_PST.wav"
+    )
+    assert expected_wav.read_bytes() == b"wav"
+    assert download_wavs._has_audio_start_marker(
+        expected_wav, download_wavs.parse_timestamp_pacific("2025_01_01_01_00_00_PST")
+    )
 
 class TestValidateOnly:
     def test_run_download_wavs_validate_only_skips_download_processing(self):
@@ -731,6 +871,40 @@ class TestValidateOnly:
                 mock_validate_aligned_entries.assert_called_once()
             finally:
                 os.chdir(original_cwd)
+
+    def test_run_download_wavs_processes_training_rows_with_corrected_uri_time(self):
+        """Pass corrected training rows through validation into process_csv."""
+        with TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            csv_dir = tmp_path / "output" / "csv"
+            csv_dir.mkdir(parents=True, exist_ok=True)
+            training_csv = csv_dir / "training_3s_samples.csv"
+            training_csv.write_text(
+                "category,node_name,timestamp_pst,uri,description,notes,confidence\n"
+                "resident,rpi_andrews_bay,2025_01_01_01_00_02_PST,"
+                "https://live.orcasound.net/bouts/new/andrews-bay?time=2025-01-01T09%3A00%3A00.000Z,"
+                "desc,note,100\n",
+                encoding="utf-8",
+            )
+            original_cwd = Path.cwd()
+            try:
+                os.chdir(tmp_path)
+                with (
+                    patch("download_wavs.validate_no_overlaps"),
+                    patch("download_wavs.validate_aligned_entries"),
+                    patch("download_wavs.validate_node_slug_in_uri"),
+                    patch("download_wavs.process_csv") as process_training,
+                ):
+                    run_download_wavs(
+                        training_csv_path=training_csv,
+                        testing_csv_path=tmp_path / "missing-testing.csv",
+                    )
+            finally:
+                os.chdir(original_cwd)
+
+            process_training.assert_called_once_with(
+                training_csv, Path("output/wav"), cache_root=None
+            )
 
     def test_parse_args_custom_training_and_testing_paths_are_forwarded(self, monkeypatch, tmp_path):
         custom_dir = tmp_path / "custom"

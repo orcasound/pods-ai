@@ -29,6 +29,7 @@ python src/compare_models.py [options]
 | `--podsai-model-revision REVISION` | Revision for the built-in `podsai` model. |
 | `--max-samples N` | Evaluate at most `N` WAV files. `N` must be positive. |
 | `--category NAME` | Evaluate only the named category. |
+| `--orcahello-variant` | Optional configuration to compare orcahello model with different aggregation strategies. |
 
 Built-in model names map to these inference backends:
 

@@ -804,8 +804,8 @@ class TestPrintSummary:
         captured = capsys.readouterr().out
         orcahello_line = next(line for line in captured.splitlines() if line.strip().startswith("orcahello"))
         columns = orcahello_line.split()
-        assert columns[7:9] == ["0.0%", "100.0%"]
-        assert columns[9:11] == ["0.0%", "100.0%"]
+        assert columns[8:10] == ["0.0%", "100.0%"]
+        assert columns[10:12] == ["0.0%", "100.0%"]
 
 
 # ---------------------------------------------------------------------------
@@ -1188,6 +1188,214 @@ class TestMainCLI:
         with patch.object(sys, "argv", test_args):
             result = main()
         assert result == 1
+
+    # test orcahello aggregation options reach the loader
+    @pytest.mark.parametrize(
+        ("variant", "expected_name", "expected_config"),
+        [
+            (
+                "default",
+                "default",
+                None,
+            ),
+            (
+                "thresholded=mean_thresholded",
+                "thresholded",
+                {
+                    "global_prediction": {
+                        "aggregation_strategy": "mean_thresholded",
+                    }
+                },
+            ),
+            (
+                "top3=mean_top_k:3",
+                "top3",
+                {
+                    "global_prediction": {
+                        "aggregation_strategy": "mean_top_k",
+                        "mean_top_k": 3,
+                    }
+                },
+            ),
+        ],
+    )
+    def test_orcahello_variant_config(self, tmp_path, variant, expected_name, expected_config):
+        """main() passes aggregation settings to the OrcaHello loader."""
+        from compare_models import ModelResult, main
+
+        wav_dir = tmp_path / "testing-wav"
+        _make_wav(wav_dir, "resident")
+
+        test_args = [
+            "compare_models.py",
+            "--wav-dir", str(wav_dir),
+            "--models", "orcahello",
+            "--orcahello-variant", variant,
+            "--max-samples", "1",
+        ]
+
+        model = type(
+            "Model",
+            (),
+            {"predict": lambda self, _: {}},
+        )()
+
+        with patch.object(sys, "argv", test_args), \
+            patch(
+                "compare_models.get_model_inference",
+                return_value=model,
+            ) as load_model, \
+            patch(
+                "compare_models.evaluate_model",
+                return_value=ModelResult("orcahello"),
+            ) as evaluate:
+
+            assert main() == 0
+
+            expected_loader_args = {
+                "model_type": "orcahello",
+                "model_path": "orcasound/orcahello-srkw-detector-v1",
+                "model_revision": None,
+            }
+
+            if expected_config is not None:
+                expected_loader_args["config"] = expected_config
+
+            load_model.assert_called_once_with(**expected_loader_args)
+            assert evaluate.call_args.kwargs["model_variant"] == expected_name
+
+    def test_orcahello_multiple_variants(self, tmp_path):
+        """main() evaluates multiple OrcaHello variants independently."""
+        from compare_models import ModelResult, main
+        from unittest.mock import call
+
+        wav_dir = tmp_path / "testing-wav"
+        _make_wav(wav_dir, "resident")
+
+        test_args = [
+            "compare_models.py",
+            "--wav-dir", str(wav_dir),
+            "--models", "orcahello",
+            "--orcahello-variant", "default",
+            "--orcahello-variant", "thresholded=mean_thresholded",
+            "--orcahello-variant", "top3=mean_top_k:3",
+            "--max-samples", "1",
+        ]
+
+        model = type(
+            "Model",
+            (),
+            {"predict": lambda self, _: {}},
+        )()
+
+        with patch.object(sys, "argv", test_args), \
+            patch(
+                "compare_models.get_model_inference",
+                return_value=model,
+            ) as load_model, \
+            patch(
+                "compare_models.evaluate_model",
+                return_value=ModelResult("orcahello"),
+            ) as evaluate:
+
+            assert main() == 0
+
+        assert load_model.call_count == 3
+        assert evaluate.call_count == 3
+
+        expected_common_args = {
+            "model_type": "orcahello",
+            "model_path": "orcasound/orcahello-srkw-detector-v1",
+            "model_revision": None,
+        }
+
+        load_model.assert_has_calls([
+            call(**expected_common_args),
+            call(
+                **expected_common_args,
+                config={
+                    "global_prediction": {
+                        "aggregation_strategy": "mean_thresholded",
+                    }
+                },
+            ),
+            call(
+                **expected_common_args,
+                config={
+                    "global_prediction": {
+                        "aggregation_strategy": "mean_top_k",
+                        "mean_top_k": 3,
+                    }
+                },
+            ),
+        ])
+
+        evaluated_names = [
+            call.kwargs["model_variant"]
+            for call in evaluate.call_args_list
+        ]
+
+        assert evaluated_names == [
+            "default",
+            "thresholded",
+            "top3",
+        ]
+
+    @pytest.mark.parametrize(
+        "variant",
+        [
+            "top3=mean_top_k",          # Missing top_k
+            "top3=mean_thresholded:3",  # top_k not allowed for mean_thresholded
+            "top3=invalid_strategy:3",  # Unsupported strategy
+            "top0=mean_top_k:0",
+            "top_negative=mean_top_k:-1",
+            "top_float=mean_top_k:2.5",
+            "top_invalid=mean_top_k:abc",
+        ],
+    )
+    def test_orcahello_variant_invalid(self, variant):
+        """Invalid aggregation strategies and missing top_k are rejected."""
+        from compare_models import parse_orcahello_variant
+
+        with pytest.raises(ValueError):
+            parse_orcahello_variant(variant)
+
+    # Test that if the user doesn't specify any variants, the original behavior is preserved
+    def test_orcahello_aggregation_defaults(self, tmp_path):
+        from compare_models import ModelResult, main
+
+        wav_dir = tmp_path / "testing-wav"
+        _make_wav(wav_dir, "resident")
+
+        test_args = [
+            "compare_models.py",
+            "--wav-dir", str(wav_dir),
+            "--models", "orcahello",
+            "--max-samples", "1",
+        ]
+
+        model = type(
+            "Model",
+            (),
+            {"predict": lambda self, _: {}},
+        )()
+
+        with patch.object(sys, "argv", test_args), \
+            patch(
+                "compare_models.get_model_inference",
+                return_value=model,
+            ) as load_model, \
+            patch(
+                "compare_models.evaluate_model",
+                return_value=ModelResult("orcahello"),
+            ):
+            assert main() == 0
+
+        load_model.assert_called_once_with(
+            model_type="orcahello",
+            model_path="orcasound/orcahello-srkw-detector-v1",
+            model_revision=None,
+        )
 
 
 # ---------------------------------------------------------------------------

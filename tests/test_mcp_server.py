@@ -16,19 +16,24 @@ except (ImportError, ModuleNotFoundError):
     # Mock dependencies if they cannot be genuinely imported.
     class MockFastMCP:
         def __init__(self, name):
+            """Initialize the test FastMCP stub."""
             self.name = name
             self.tools = {}
 
         def tool(self):
+            """Register tool functions without wrapping them."""
             def decorator(func):
+                """Store the decorated tool function."""
                 self.tools[func.__name__] = func
                 return func
             return decorator
 
         def run(self):
+            """Stub the server run method."""
             pass
 
         def _handle_raw_json(self, line):
+            """Stub raw JSON handling for tests."""
             pass
 
     mock_mcp_module = MagicMock()
@@ -63,10 +68,12 @@ from orcasite_feeds import OrcasiteFeed
 class TestMCPServer(unittest.TestCase):
 
     def test_validate_node_name_valid(self):
+        """Accept supported hydrophone node names."""
         _validate_node_name("rpi_sunset_bay")
         _validate_node_name("sunset-bay")
 
     def test_validate_node_name_invalid(self):
+        """Reject empty or malformed hydrophone node names."""
         with self.assertRaises(ValueError):
             _validate_node_name("invalid name!")
         with self.assertRaises(ValueError):
@@ -74,6 +81,7 @@ class TestMCPServer(unittest.TestCase):
 
     @patch("mcp_server.get_orcasite_feeds_with_retry")
     def test_list_hydrophones(self, mock_feeds):
+        """Return hydrophone metadata from Orcasite feeds."""
         mock_feeds.return_value = [
             OrcasiteFeed(
                 id="1",
@@ -96,6 +104,7 @@ class TestMCPServer(unittest.TestCase):
     @patch("mcp_server.get_orcasite_feeds_with_retry")
     @patch("requests.get")
     def test_get_recent_detections(self, mock_get, mock_feeds):
+        """Filter recent detections using the feed API."""
         mock_feeds.return_value = [
             OrcasiteFeed(
                 id="feed_123",
@@ -133,31 +142,52 @@ class TestMCPServer(unittest.TestCase):
         _, kwargs = mock_get.call_args
         self.assertIn("feed_123", kwargs["params"]["filter[feed_id]"])
 
-    @patch("boto3.client")
-    def test_list_s3_recordings(self, mock_boto):
-        mock_s3 = MagicMock()
-        mock_boto.return_value = mock_s3
-        
-        # Mock paginator.
-        mock_paginator = MagicMock()
-        mock_s3.get_paginator.return_value = mock_paginator
-        mock_paginator.paginate.return_value = [
-            {
-                "CommonPrefixes": [
-                    {"Prefix": "node_1/hls/1700000000/"},
-                    {"Prefix": "node_1/hls/1700000060/"}
-                ]
-            }
-        ]
-        
+    @patch("mcp_server.s3_utils.get_all_folders")
+    def test_list_s3_recordings(self, mock_get_all_folders):
+        """List S3 recording folders through the shared utility."""
+        mock_get_all_folders.return_value = ["1700000000", "1700000060"]
         result = list_s3_recordings("node_1")
         self.assertEqual(result["node_name"], "node_1")
         self.assertEqual(result["total_found"], 2)
         self.assertIn("1700000000", result["timestamps"])
+        mock_get_all_folders.assert_called_once_with(
+            "audio-orcasound-net", "node_1/hls/"
+        )
+
+    @patch("mcp_server.s3_utils.get_all_folders")
+    def test_empty_s3_listing_keeps_message_off_stdout(self, mock_get_all_folders):
+        """Keep shared S3 diagnostics off the MCP JSON-RPC output stream."""
+        def print_empty_listing(*args):
+            """Match the shared utility's empty-list diagnostic behavior."""
+            print("No content returned")
+            return []
+
+        mock_get_all_folders.side_effect = print_empty_listing
+        with (
+            patch("sys.stdout", new_callable=io.StringIO) as stdout,
+            patch("sys.stderr", new_callable=io.StringIO) as stderr,
+        ):
+            result = list_s3_recordings("node_1")
+
+        self.assertEqual(result["timestamps"], [])
+        self.assertEqual(stdout.getvalue(), "")
+        self.assertIn("No content returned", stderr.getvalue())
+
+    @patch("mcp_server.s3_utils.get_all_folders")
+    def test_list_s3_recordings_supports_date_prefix(self, mock_get_all_folders):
+        """Filter S3 recording folders by the requested timestamp prefix."""
+        mock_get_all_folders.return_value = ["1700000000", "1740000000"]
+        result = list_s3_recordings("node_1", date_prefix="174")
+
+        self.assertEqual(result["timestamps"], ["1740000000"])
+        mock_get_all_folders.assert_called_once_with(
+            "audio-orcasound-net", "node_1/hls/174"
+        )
 
     @patch("mcp_server._read_csv")
     @patch("mcp_server.Path.exists")
     def test_get_sample_stats(self, mock_exists, mock_read):
+        """Summarize sample counts by category and station."""
         mock_exists.return_value = True
         mock_read.return_value = [
             {"Category": "whale", "NodeName": "node_1"},
@@ -176,6 +206,7 @@ class TestMCPServer(unittest.TestCase):
     @patch("mcp_server.Path.exists")
     @patch("mcp_server.get_recent_detections")
     def test_find_unlabeled_detections(self, mock_get_det, mock_exists, mock_read):
+        """Find detections that are absent from local sample manifests."""
         mock_exists.return_value = True
         mock_read.return_value = [
             {"URI": "s3://bucket/node/hls/1700000000/live000.ts"}
@@ -199,6 +230,7 @@ class TestMCPServer(unittest.TestCase):
         self.assertEqual(result["unlabeled"][0]["id"], "det_new")
 
     def test_generate_spectrogram_validates_paths(self):
+        """Reject invalid inputs for spectrogram generation."""
         with tempfile.TemporaryDirectory() as tmpdir:
             wav_path = Path(tmpdir) / "clip.wav"
             wav_path.write_bytes(b"not-really-audio")
@@ -213,9 +245,11 @@ class TestMCPServer(unittest.TestCase):
                 generate_spectrogram("relative/path/clip.wav")
 
     def test_generate_spectrogram_routes_directory_and_file_outputs(self):
+        """Route generated spectrograms to directories or explicit files."""
         mock_module = MagicMock()
 
         def fake_write(wav_file, output_path=None):
+            """Write a fake spectrogram to the requested output location."""
             if output_path is None:
                 output_file = Path(str(wav_file)).with_suffix(".png")
             else:
@@ -244,6 +278,7 @@ class TestMCPServer(unittest.TestCase):
                 self.assertTrue((Path(tmpdir) / "custom_name.png").exists())
 
     def test_generate_spectrogram_dependency_guard(self):
+        """Report missing spectrogram dependencies to callers."""
         with tempfile.TemporaryDirectory() as tmpdir:
             wav_path = Path(tmpdir) / "clip.wav"
             wav_path.write_bytes(b"not-really-audio")
@@ -253,6 +288,7 @@ class TestMCPServer(unittest.TestCase):
                     generate_spectrogram(str(wav_path))
 
     def test_generate_spectrogram_requires_generated_file(self):
+        """Require the visualizer to produce the requested image."""
         mock_module = MagicMock()
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -266,6 +302,7 @@ class TestMCPServer(unittest.TestCase):
                     generate_spectrogram(str(wav_path))
 
     def test_generate_spectrogram_rejects_existing_default_or_directory_targets(self):
+        """Reject output paths that cannot identify a spectrogram file."""
         with tempfile.TemporaryDirectory() as tmpdir:
             wav_path = Path(tmpdir) / "clip.wav"
             wav_path.write_bytes(b"not-really-audio")
@@ -284,9 +321,11 @@ class TestMCPServer(unittest.TestCase):
                     generate_spectrogram(str(wav_path), output_path=str(spectra_dir))
 
     def test_generate_spectrogram_returns_metadata(self):
+        """Return metadata for the generated spectrogram."""
         mock_module = MagicMock()
 
         def fake_write(wav_file, output_path=None):
+            """Create the image artifact returned by the fake visualizer."""
             output = Path(output_path) if output_path is not None else Path(str(wav_file)).with_suffix(".png")
             output.parent.mkdir(parents=True, exist_ok=True)
             output.write_bytes(b"png-data")
@@ -313,6 +352,7 @@ class TestMCPServer(unittest.TestCase):
     @patch("mcp_server.Path.exists")
     @patch("mcp_server.Path.is_absolute")
     def test_compare_models_on_clip(self, mock_abs, mock_exists, mock_get_model):
+        """Return results from the configured inference backends."""
         mock_abs.return_value = True
         mock_exists.return_value = True
         
@@ -384,6 +424,7 @@ class TestMCPServer(unittest.TestCase):
     @patch("builtins.open", new_callable=unittest.mock.mock_open)
     @patch("mcp_server.csv.DictWriter")
     def test_export_unlabeled_to_csv(self, mock_writer, mock_open, mock_find):
+        """Export unlabeled detections to a CSV file."""
         mock_find.return_value = {
             "unlabeled": [
                 {"id": "det_1", "category": "whale"}
@@ -398,6 +439,7 @@ class TestMCPServer(unittest.TestCase):
         mock_writer.assert_called_once()
 
     def test_export_unlabeled_to_csv_invalid_inputs(self):
+        """Reject invalid options for CSV export."""
         from mcp_server import export_unlabeled_to_csv
 
         # Invalid node name.
@@ -619,17 +661,20 @@ class TestDualHandshake(unittest.TestCase):
         # Create a mock wrapper based on the implementation.
         class PrependedStdin:
             def __init__(self, prepended_line, original):
+                """Initialize a stream wrapper with a line to prepend."""
                 self._prepended = prepended_line
                 self._original = original
                 self._consumed = False
             
             def readline(self):
+                """Return the prepended line, then read the wrapped stream."""
                 if not self._consumed:
                     self._consumed = True
                     return self._prepended
                 return self._original.readline()
             
             def read(self, size=-1):
+                """Read the prepended and wrapped stream contents."""
                 if not self._consumed:
                     self._consumed = True
                     result = self._prepended

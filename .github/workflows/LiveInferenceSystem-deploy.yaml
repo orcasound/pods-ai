@@ -33,15 +33,12 @@ jobs:
         with:
           egress-policy: audit
 
-      - name: Checkout
+- name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/LiveInferenceSystem.{0}', inputs.release_tag) || github.ref }}
-          submodules: 'false'
-
-      - name: Initialize orcahello submodule
-        run: git submodule update --init external/orcahello
-
+          submodules: 'recursive'
+          
       - name: Resolve release tag suffix
         env:
           DISPATCH_RELEASE_TAG: ${{ inputs.release_tag }}
