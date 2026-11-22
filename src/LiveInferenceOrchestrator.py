@@ -24,12 +24,12 @@ external_src = (
     / "src"
 )
 if external_src.exists() and str(external_src) not in sys.path:
-    sys.path.append(str(external_src))
+    sys.path.insert(0, str(external_src))
 
 from pytz import timezone as pytz_tz
-from run_inference import build_tags_list, normalize_detection_result
-from external.orcahello.InferenceSystem.src.model.types import DetectorInferenceConfig
-from external.orcahello.InferenceSystem.src.model.inference import OrcaHelloSRKWDetectorV1
+from run_inference import PODSAI_MODEL_ID, build_tags_list, normalize_detection_result
+from model.types import DetectorInferenceConfig
+from model.inference import OrcaHelloSRKWDetectorV1
 
 AZURE_STORAGE_ACCOUNT_NAME = "livemlaudiospecstorage"
 AZURE_STORAGE_AUDIO_CONTAINER_NAME = "audiowavs"
@@ -531,8 +531,8 @@ def _process_segment(
     model_id: Optional[str] = None,
     local_dir: str = ".",
 ) -> None:
-    from external.orcahello.InferenceSystem.src.LiveInferenceOrchestrator import cleanup_azure_uploads
-    from external.orcahello.InferenceSystem.src import spectrogram_visualizer
+    from LiveInferenceOrchestrator import cleanup_azure_uploads
+    import spectrogram_visualizer
     """Process a single HLS segment: download, inference, upload."""
     if orch_config is None:
         orch_config = model_config if isinstance(model_config, dict) else {}
