@@ -50,17 +50,17 @@ ENV HF_HUB_OFFLINE=1
 ENV PYTHONPATH=/usr/src/app:${PYTHONPATH}
 
 # App working directory
+ARG PODSAI_RELEASE_VERSION
+ENV PODSAI_RELEASE_VERSION=${PODSAI_RELEASE_VERSION}
+
 WORKDIR /usr/src/app
 
 # PODS-AI source code
 COPY ./src/ ./src/
 
-# Copy the default detector config used by config.yml model_config_path.
-COPY ./external/orcahello/InferenceSystem/model/ ./model/
-
-# OrcaHello runtime dependency: copy the full InferenceSystem source tree so
-# imports like `from external.orcahello.InferenceSystem.src...` resolve.
-COPY ./external/orcahello/InferenceSystem/src/ ./external/orcahello/InferenceSystem/src/
+# OrcaHello HLS client (required by LiveInferenceOrchestrator.py)
+COPY ./external/orcahello/InferenceSystem/src/orcasound_hls/ ./external/orcahello/InferenceSystem/src/orcasound_hls/
+COPY ./external/orca-hls-utils/src/orca_hls_utils/ ./external/orca-hls-utils/src/orca_hls_utils/
 
 ENTRYPOINT ["/usr/src/venv/bin/python3", "-u", "./src/LiveInferenceOrchestrator.py"]
 CMD []

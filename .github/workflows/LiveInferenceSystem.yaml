@@ -38,6 +38,8 @@ jobs:
             src:
               - LiveInferenceSystem/**
               - src/audio_utils.py
+              - src/orca_hls.py
+              - external/orca-hls-utils
               - src/LiveInferenceOrchestrator.py
               - src/model_inference.py
               - src/model_revisions.py
@@ -60,10 +62,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
-          submodules: 'false'
-
-      - name: Initialize orcahello submodule
-        run: git submodule update --init external/orcahello
+          submodules: 'recursive'
 
       - name: Free up disk space
         run: |

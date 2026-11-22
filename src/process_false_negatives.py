@@ -130,7 +130,7 @@ def process_false_negatives(
             else:
                 model_id = "Unknown"
 
-            if ("davethaler/whale-call-detector" == model_id):
+            if model_id.startswith("davethaler/whale-call-detector"):
                 continue
 
             summary["confirmed"] += 1

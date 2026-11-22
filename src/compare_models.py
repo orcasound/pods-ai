@@ -80,6 +80,7 @@ class ModelResult:
     """Accumulated results for a single model across all test samples."""
 
     model_type: str
+    variant: str = "default"
     total: int = 0
     correct: int = 0
     false_positives: int = 0
@@ -290,6 +291,64 @@ def parse_model_spec(spec: str) -> tuple[str, str, Optional[str]]:
         )
     return model, MODEL_TYPE_TO_INFERENCE_TYPE[model], None
 
+def parse_orcahello_variant(spec: str) -> tuple[str, dict]:
+    """Parse NAME=STRATEGY[:TOP_K] into a display name and config."""
+    if spec.strip() == "default":
+        return "default", None
+
+    if "=" not in spec:
+        raise ValueError(
+            f"invalid OrcaHello variant {spec!r}; "
+            "expected NAME=STRATEGY[:TOP_K]"
+        )
+
+    name, settings = spec.split("=", 1)
+    name = name.strip()
+    settings = settings.strip()
+
+    if not name or name == "default":
+        raise ValueError("OrcaHello variant name must not be empty or 'default'")
+
+    parts = settings.split(":")
+    strategy = parts[0].strip()
+
+    if strategy not in {"mean_thresholded", "mean_top_k"}:
+        raise ValueError(
+            f"invalid aggregation strategy {strategy!r}; "
+            "expected mean_thresholded or mean_top_k"
+        )
+
+    if strategy == "mean_thresholded":
+        if len(parts) != 1:
+            raise ValueError(
+                "mean_thresholded does not accept a top_k value"
+            )
+        global_config = {
+            "aggregation_strategy": strategy,
+        }
+
+    else:
+        if len(parts) != 2:
+            raise ValueError(
+                "mean_top_k requires a positive top_k value, "
+                "for example top3=mean_top_k:3"
+            )
+        try:
+            top_k = int(parts[1])
+        except ValueError as exc:
+            raise ValueError(
+                f"invalid top_k value in {spec!r}"
+            ) from exc
+
+        if top_k <= 0:
+            raise ValueError("top_k must be a positive integer")
+
+        global_config = {
+            "aggregation_strategy": strategy,
+            "mean_top_k": top_k,
+        }
+
+    return name, {"global_prediction": global_config}
 
 def resolve_custom_model_path(model_path: str) -> tuple[str, bool]:
     """Validate and normalize a custom model path or Hugging Face ID.
@@ -415,6 +474,7 @@ def evaluate_model(
     model_revision: Optional[str] = None,
     result_model_type: Optional[str] = None,
     inference_model: Optional[Any] = None,
+    model_variant: Optional[str] = "default",
 ) -> ModelResult:
     """
     Run a model against all test samples and accumulate results.
@@ -430,12 +490,13 @@ def evaluate_model(
         result_model_type: Optional display name to store in ModelResult.model_type.
                            If omitted, model_type is used.
         inference_model: Optional preloaded model inference instance to reuse.
+        model_variant: Optional model configuration to overwrite the default.
 
     Returns:
         ModelResult with counts of correct, false positive, and false negative predictions,
         plus timing information for predict() calls.
     """
-    result = ModelResult(model_type=result_model_type or model_type, total=len(wav_paths))
+    result = ModelResult(model_type=result_model_type or model_type, variant = model_variant, total=len(wav_paths))
     display_model_type = result.model_type
 
     for wav_path in wav_paths:
@@ -533,7 +594,7 @@ def print_confusion_matrix(result: ModelResult) -> None:
     col_width = max(max(len(label) for label in predicted_labels), widest_total) + MATRIX_CELL_PADDING
     row_label_width = max(len(label) for label in all_labels) + MATRIX_CELL_PADDING
 
-    print(f"Confusion Matrix for {result.model_type} (rows=actual, cols=predicted):")
+    print(f"Confusion Matrix for {result.model_type} {result.variant} (rows=actual, cols=predicted):")
     print(f"{'':>{row_label_width}}", end="")
     for label in predicted_labels:
         print(f"{label:>{col_width}}", end="")
@@ -558,7 +619,7 @@ def print_summary(results: list[ModelResult]) -> None:
     """
     class_column_format = " {:>7} {:>7}"
     header = (
-        f"{'Model':<15} {'Evaluated':>9} {'Correct':>9} {'Accuracy':>9} {'F1':>7}"
+        f"{'Model':<15} {'Variant':<15} {'Evaluated':>9} {'Correct':>9} {'Accuracy':>9} {'F1':>7}"
         f"{class_column_format.format('RFP%', 'RFN%')}"
         f"{class_column_format.format('TFP%', 'TFN%')}"
         f"{class_column_format.format('HFP%', 'HFN%')}"
@@ -589,7 +650,7 @@ def print_summary(results: list[ModelResult]) -> None:
             )
 
         print(
-            f"{r.model_type:<15} {evaluated:>9} {r.correct:>9} {accuracy:>9} {whale_f1:>7}"
+            f"{r.model_type:<15} {r.variant:<15} {evaluated:>9} {r.correct:>9} {accuracy:>9} {whale_f1:>7}"
             f"{''.join(class_stats)} {avg_time:>10}"
         )
         if r.skipped:
@@ -676,6 +737,19 @@ def main() -> int:
         ),
     )
     parser.add_argument(
+        "--orcahello-variant",
+        action="append",
+        default=None,
+        metavar="NAME=STRATEGY[:TOP_K]",
+        help=(
+            "OrcaHello configuration variant to evaluate. "
+            "Can be specified multiple times. "
+            "Use '--orcahello-variant default' to include the default config in the comparison. "
+            "Examples: thresholded=mean_thresholded, "
+            "top3=mean_top_k:3."
+        ),
+    )
+    parser.add_argument(
         "--podsai-model-path",
         default=PODSAI_MODEL_ID,
         help=(
@@ -739,6 +813,25 @@ def main() -> int:
                 "--custom-model-path"
             )
         parsed_models = [parse_model_spec(model) for model in models]
+
+        # Handle variants of orcahello given different aggregation strategies.
+        orcahello_variants = []
+        if args.orcahello_variant:
+            if "orcahello" not in models:
+                raise ValueError(
+                    "--orcahello-variant requires orcahello in --models"
+                )
+
+            orcahello_variants = [
+                parse_orcahello_variant(spec)
+                for spec in args.orcahello_variant
+            ]
+
+            variant_names = [name for name, _ in orcahello_variants]
+
+            if len(variant_names) != len(set(variant_names)):
+                raise ValueError("OrcaHello variant names must be unique")
+
         seen_models: set[str] = set()
         for display_name, _, _ in parsed_models:
             if display_name in seen_models:
@@ -801,66 +894,95 @@ def main() -> int:
 
     results = []
     for model_type, inference_model_type, custom_path in model_specs:
-        print(f"Evaluating model: {model_type}")
-        effective_model_path = custom_path or model_paths.get(model_type)
-        is_custom_model = model_type == "custom"
-        is_onnx_format = (
-            isinstance(effective_model_path, str)
-            and effective_model_path.lower().endswith(".onnx")
-        )
-        if is_onnx_format and not Path(effective_model_path).is_file():
-            print(f"ONNX file not found: {effective_model_path}", file=sys.stderr)
-            return 1
-        if is_onnx_format:
-            effective_revision = args.podsai_model_revision
-        elif is_custom_model:
-            effective_revision = (
-                None if custom_path_is_local else args.custom_model_revision
-            )
+
+        # Expand OrcaHello into multiple configuration variants.
+        if model_type == "orcahello":
+            variants = orcahello_variants or [("default", None)]
         else:
-            effective_revision = model_revisions.get(model_type)
-        if is_onnx_format:
-            inference_model_type = "podsai"
-        try:
-            # ONNX inference uses the PODS-AI feature extractor/configuration.
-            kwargs = {}
-            kwargs["model_revision"] = effective_revision
-            if is_onnx_format:
-                # Prefer an explicit extractor, then the configured PODS-AI model,
-                # unless that path is itself an ONNX file.
-                fe = args.feature_extractor or model_paths.get("podsai")
-                if isinstance(fe, str) and fe.lower().endswith(".onnx"):
-                    fe = None
-                fe = fe or PODSAI_MODEL_ID
-                kwargs['feature_extractor'] = fe
-            inference_model = get_model_inference(
-                model_type=inference_model_type,
-                model_path=effective_model_path,
-                **kwargs,
+            variants = [("default", None)]
+
+        for variant_name, variant_config in variants:
+            print(f"Evaluating model: {model_type}-{variant_name}")
+
+            effective_model_path = custom_path or model_paths.get(model_type)
+            is_custom_model = model_type == "custom"
+            is_onnx_format = (
+                isinstance(effective_model_path, str)
+                and effective_model_path.lower().endswith(".onnx")
             )
-            if is_custom_model:
-                validate_inference_model(inference_model, model_type)
-        except MODEL_LOAD_ERRORS as exc:
-            if is_custom_model:
-                print(
-                    f"Error loading custom model {custom_path!r}: "
-                    "the model must be compatible with the PODS-AI inference "
-                    f"contract ({type(exc).__name__}: {exc})",
-                    file=sys.stderr,
+            if is_onnx_format and not Path(effective_model_path).is_file():
+                print(f"ONNX file not found: {effective_model_path}", file=sys.stderr)
+                return 1
+            if is_onnx_format:
+                effective_revision = args.podsai_model_revision
+            elif is_custom_model:
+                effective_revision = (
+                    None if custom_path_is_local else args.custom_model_revision
                 )
             else:
-                print(f"Error loading {model_type} model: {exc}", file=sys.stderr)
-            return 1
-        model_result = evaluate_model(
-            model_type=inference_model_type,
-            model_path=effective_model_path,
-            wav_paths=wav_paths,
-            wav_dir=wav_dir,
-            model_revision=effective_revision,
-            result_model_type=model_type,
-            inference_model=inference_model,
-        )
-        results.append(model_result)
+                effective_revision = model_revisions.get(model_type)
+
+            if is_onnx_format:
+                inference_model_type = "podsai"
+
+            if is_onnx_format and variant_name != "default":
+                print(
+                    f"Error: --orcahello-variant {variant_name!r} cannot be applied to an "
+                    "ONNX model path; use a non-ONNX --orcahello-model-path or remove the variant.",
+                    file=sys.stderr,
+                )
+                return 1
+
+            try:
+                # ONNX inference uses the PODS-AI feature extractor/configuration.
+                kwargs = {}
+                kwargs["model_revision"] = effective_revision
+
+                if is_onnx_format:
+                    # Prefer an explicit extractor, then the configured PODS-AI model,
+                    # unless that path is itself an ONNX file.
+                    fe = args.feature_extractor or model_paths.get("podsai")
+                    if isinstance(fe, str) and fe.lower().endswith(".onnx"):
+                        fe = None
+                    fe = fe or PODSAI_MODEL_ID
+                    kwargs['feature_extractor'] = fe
+
+                if inference_model_type == "orcahello" and variant_config is not None:
+                    # These settings currently apply only to the orcahello model.
+                    kwargs["config"] = variant_config
+                    print(f"  Configuration: {variant_config}")
+
+                inference_model = get_model_inference(
+                    model_type=inference_model_type,
+                    model_path=effective_model_path,
+                    **kwargs,
+                )
+
+                if is_custom_model:
+                    validate_inference_model(inference_model, model_type)
+            except MODEL_LOAD_ERRORS as exc:
+                if is_custom_model:
+                    print(
+                        f"Error loading custom model {custom_path!r}: "
+                        "the model must be compatible with the PODS-AI inference "
+                        f"contract ({type(exc).__name__}: {exc})",
+                        file=sys.stderr,
+                    )
+                else:
+                    print(f"Error loading {model_type} model: {exc}", file=sys.stderr)
+                return 1
+            
+            model_result = evaluate_model(
+                model_type=inference_model_type,
+                model_path=effective_model_path,
+                wav_paths=wav_paths,
+                wav_dir=wav_dir,
+                model_revision=effective_revision,
+                result_model_type=model_type,
+                inference_model=inference_model,
+                model_variant=variant_name,
+            )
+            results.append(model_result)
         print()
 
     print_summary(results)

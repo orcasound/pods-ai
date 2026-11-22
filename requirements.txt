@@ -1,6 +1,8 @@
 azure-cosmos
 pytest
 boto3
+beautifulsoup4
+tqdm
 ffmpeg-python
 ipython
 librosa>=0.10.0

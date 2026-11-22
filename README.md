@@ -80,9 +80,18 @@ result in a false positive.
 
 ## Getting Started
 
-1. Install Python 3.12
+1. Clone the repository with its required submodules:
 
-2. Install FFmpeg
+```
+git clone --recurse-submodules https://github.com/orcasound/pods-ai.git
+cd pods-ai
+```
+
+If you already cloned without submodules, run `git submodule update --init --recursive`.
+
+2. Install Python 3.12
+
+3. Install FFmpeg
 
 Linux:
 ```
@@ -94,7 +103,7 @@ Windows:
 choco install ffmpeg -y
 ```
 
-3. Install Python dependencies:
+4. Install Python dependencies:
 
 ```
 pip install -r requirements.txt
@@ -110,7 +119,7 @@ pip install -r requirements-onnx.txt
 
 On some platforms you may prefer an optimized ONNXRuntime provider (OpenVINO, DirectML, TensorRT). See the ONNX Runtime docs for platform-specific wheels.
 
-4. Patch fastai_audio
+5. Patch fastai_audio
 
 Linux:
 ```bash
@@ -122,7 +131,7 @@ Windows:
 patch_fastai_audio.bat
 ```
 
-5. Run unit tests with `python -m pytest tests/ -v -s`
+6. Run unit tests with `python -m pytest tests/ -v -s`
 
 If anything fails, compare what the [run_tests.yml](.github/workflows/run_tests.yml) workflow does.
 
@@ -179,6 +188,9 @@ To have GitHub train a new model from the latest `main` branch:
     This will cause the
     [LiveInferenceSystem-deploy.yaml](.github/workflows/LiveInferenceSystem-deploy.yaml)
     workflow to build a new container image and push it to the Azure Container Registry.
+    The release version is also appended to the model ID recorded with detections,
+    e.g., `davethaler/whale-call-detector-v1.4.0`. Local runs without release metadata
+    continue to use the unversioned model ID.
 12. Once that succeeds, update the `LiveInferenceSystem/deploy/<slug>.yaml` files to
     reference the new image.  For example:
     ```

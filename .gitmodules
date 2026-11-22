@@ -4,3 +4,6 @@
 [submodule "external/orcahello"]
 	path = external/orcahello
 	url = https://github.com/orcasound/orcahello
+[submodule "orca-hls-utils"]
+	path = external/orca-hls-utils
+	url = https://github.com/orcasound/orca-hls-utils

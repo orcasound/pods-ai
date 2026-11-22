@@ -9,37 +9,30 @@ other scripts to avoid code duplication.
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+import http.client
 from pathlib import Path
 from typing import List, Optional
-import math
-import http.client
 import os
 import shutil
 import time
 import urllib.error
 
-import boto3
 from azure.cosmos import CosmosClient
-from botocore import UNSIGNED
-from botocore.config import Config
 import ffmpeg
-import m3u8
+import requests
 try:
     from orcasite_feeds import OrcasiteFeed
 except ImportError:  # pragma: no cover
     from src.orcasite_feeds import OrcasiteFeed
+from orca_hls import get_playlist_utils, get_scraper, get_s3_utils
 from pytz import timezone
-import requests
 
+scraper = get_scraper()
+playlist_utils = get_playlist_utils()
+s3_utils = get_s3_utils()
 
 # Simple in-memory cache for S3 folder listings keyed by "bucket::prefix"
 _FOLDERS_CACHE = {}
-
-# Number of times to retry a download on transient connection errors.
-MAX_DOWNLOAD_RETRIES = 3
-
-# Seconds to wait between download retry attempts.
-DOWNLOAD_RETRY_DELAY_SECONDS = 2
 PACIFIC_TZ = timezone('America/Los_Angeles')
 UTC_TZ = timezone('UTC')
 AUDIO_OFFSET_SECONDS = 2
@@ -76,22 +69,7 @@ def get_all_folders(bucket: str, prefix: str) -> List[str]:
     Returns:
         List[str]: List of folder names (without the prefix).
     """
-    s3 = boto3.client("s3", config=Config(signature_version=UNSIGNED))
-    paginator = s3.get_paginator("list_objects_v2")
-    kwargs = {"Bucket": bucket, "Prefix": prefix, "Delimiter": "/"}
-
-    all_keys = []
-    for page in paginator.paginate(**kwargs):
-        try:
-            common_prefixes = page["CommonPrefixes"]
-            prefixes = [
-                prefix["Prefix"].split("/")[-2] for prefix in common_prefixes
-            ]
-            all_keys.extend(prefixes)
-        except KeyError:
-            break
-
-    return all_keys
+    return s3_utils.get_all_folders(bucket, prefix)
 
 
 def get_cached_folders(bucket: str, prefix: str) -> List[str]:
@@ -103,32 +81,6 @@ def get_cached_folders(bucket: str, prefix: str) -> List[str]:
     if key not in _FOLDERS_CACHE:
         _FOLDERS_CACHE[key] = get_all_folders(bucket, prefix)
     return _FOLDERS_CACHE[key]
-
-
-def get_folders_between_timestamp(bucket_list: List[str], start_time: int, end_time: int) -> List[int]:
-    """
-    Filter bucket list to only include folders between start_time and end_time.
-    
-    Parameters:
-        bucket_list (List[str]): List of folder names (as strings).
-        start_time (int): Start unix timestamp.
-        end_time (int): End unix timestamp.
-    
-    Returns:
-        List[int]: Filtered list of folder names as integers.
-    """
-    bucket_list = [int(bucket) for bucket in bucket_list]
-    start_index = 0
-    end_index = len(bucket_list) - 1
-
-    while start_index < len(bucket_list) and bucket_list[start_index] < start_time:
-        start_index += 1
-
-    while end_index >= 0 and bucket_list[end_index] > end_time:
-        end_index -= 1
-
-    # Include the folder before start_time to ensure we have data.
-    return bucket_list[max(0, start_index - 1) : end_index + 1]
 
 
 def get_difference_between_times_in_seconds(later_unix_time: int, earlier_unix_time: int) -> float:
@@ -146,61 +98,24 @@ def get_difference_between_times_in_seconds(later_unix_time: int, earlier_unix_t
 
 
 def download_from_url(dl_url: str, dl_dir: str):
-    """
-    Download a file from URL to a directory, with retry on transient connection errors.
-
-    Retries up to MAX_DOWNLOAD_RETRIES times on ConnectionError or ChunkedEncodingError
-    before re-raising the exception.
-
-    Parameters:
-        dl_url (str): URL to download from.
-        dl_dir (str): Directory to save the file.
-    """
-    file_name = os.path.basename(dl_url)
-    dl_path = os.path.join(dl_dir, file_name)
-
-    if os.path.isfile(dl_path):
-        return
-
-    last_exception: Exception = RuntimeError("No attempts made")
-    for attempt in range(MAX_DOWNLOAD_RETRIES + 1):
+    """Download a URL with retries for transient network failures."""
+    for attempt in range(3):
         try:
-            response = requests.get(dl_url, timeout=30)
-            response.raise_for_status()
-            with open(dl_path, 'wb') as f:
-                f.write(response.content)
-            return
-        except (requests.exceptions.ConnectionError, requests.exceptions.ChunkedEncodingError) as e:
-            last_exception = e
-            if attempt < MAX_DOWNLOAD_RETRIES:
-                print(f"  Retry {attempt + 1} of {MAX_DOWNLOAD_RETRIES} for {dl_url}: {e}")
-                time.sleep(DOWNLOAD_RETRY_DELAY_SECONDS)
-    raise last_exception
-
-
-def load_m3u8_with_retry(stream_url: str) -> m3u8.M3U8:
-    """
-    Load an m3u8 playlist from a URL, retrying on transient network errors.
-
-    Retries up to MAX_DOWNLOAD_RETRIES times on IncompleteRead, URLError,
-    or ConnectionError before re-raising the exception.
-
-    Parameters:
-        stream_url (str): URL of the m3u8 playlist to load.
-
-    Returns:
-        m3u8.M3U8: Parsed m3u8 object.
-    """
-    last_exception: Exception = RuntimeError("No attempts made")
-    for attempt in range(MAX_DOWNLOAD_RETRIES + 1):
-        try:
-            return m3u8.load(stream_url)
-        except (http.client.IncompleteRead, urllib.error.URLError, ConnectionError) as e:
-            last_exception = e
-            if attempt < MAX_DOWNLOAD_RETRIES:
-                print(f"  Retry {attempt + 1} of {MAX_DOWNLOAD_RETRIES} for {stream_url}: {e}")
-                time.sleep(DOWNLOAD_RETRY_DELAY_SECONDS)
-    raise last_exception
+            return scraper.download_from_url(dl_url, dl_dir)
+        except (
+            requests.exceptions.ConnectionError,
+            requests.exceptions.ChunkedEncodingError,
+            urllib.error.URLError,
+            http.client.IncompleteRead,
+        ) as error:
+            (Path(dl_dir) / os.path.basename(dl_url)).unlink(missing_ok=True)
+            if attempt == 2 or (
+                isinstance(error, urllib.error.HTTPError)
+                and error.code < 500
+                and error.code != 429
+            ):
+                raise
+            time.sleep(1)
 
 
 def format_timestamp_pacific(dt: datetime) -> str:
@@ -351,6 +266,21 @@ def format_utc_iso_z(dt: datetime) -> str:
     return dt.astimezone(UTC_TZ).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def _segments_cover_interval(segments, start_time: float, end_time: float) -> bool:
+    """Return whether segment timestamps continuously cover the requested interval."""
+    covered_until = start_time
+    for segment in segments:
+        segment_end = segment.start + segment.duration
+        if segment_end <= covered_until:
+            continue
+        if segment.start > covered_until + 1e-6:
+            return False
+        covered_until = segment_end
+        if covered_until >= end_time - 1e-6:
+            return True
+    return False
+
+
 def download_audio_from_start_utc(
     node_name: str,
     start_time_utc: datetime,
@@ -358,95 +288,126 @@ def download_audio_from_start_utc(
     duration_seconds: float,
 ) -> Optional[str]:
     """Download a clip beginning at start_time_utc and lasting for duration_seconds."""
-    end_time_utc = start_time_utc + timedelta(seconds=duration_seconds)
-    start_unix_time = int(start_time_utc.timestamp())
-    end_unix_time = int(end_time_utc.timestamp())
-
-    hydrophone_stream_url = f"https://s3-us-west-2.amazonaws.com/audio-orcasound-net/{node_name}"
-    bucket_folder = hydrophone_stream_url.split("https://s3-us-west-2.amazonaws.com/")[1]
-    tokens = bucket_folder.split("/")
-    s3_bucket = tokens[0]
-    folder_name = tokens[1]
-    prefix = folder_name + "/hls/"
-
     try:
-        all_hydrophone_folders = get_cached_folders(s3_bucket, prefix=prefix)
-        print(f"  Found {len(all_hydrophone_folders)} folders in total for {node_name}")
-        valid_folders = get_folders_between_timestamp(all_hydrophone_folders, start_unix_time, end_unix_time)
-        print(f"  Found {len(valid_folders)} folders in date range")
+        # Normalize the requested start and calculate the interval to crop.
+        start_time_utc = (
+            start_time_utc.replace(tzinfo=UTC_TZ)
+            if start_time_utc.tzinfo is None
+            else start_time_utc.astimezone(UTC_TZ)
+        )
+        padding_seconds = 10
+        start_timestamp = start_time_utc.timestamp()
+        end_timestamp = start_timestamp + duration_seconds
+        stream_base = (
+            "https://s3-us-west-2.amazonaws.com/"
+            f"audio-orcasound-net/{node_name}"
+        )
+        # Limit the search to HLS folders that may contain the requested interval.
+        valid_folders = s3_utils.get_folders_between_timestamp(
+            get_cached_folders("audio-orcasound-net", f"{node_name}/hls/"),
+            str(int(start_timestamp)),
+            str(int(end_timestamp)),
+        )
         if not valid_folders:
-            print(f"  Warning: No folders found for timestamp {start_time_utc}")
-            return None
-        current_folder = int(valid_folders[0])
-    except Exception as e:
-        print(f"  ERROR: Failed to query S3 bucket: {e}")
-        return None
-
-    stream_url = f"{hydrophone_stream_url}/hls/{current_folder}/live.m3u8"
-    try:
-        stream_obj = load_m3u8_with_retry(stream_url)
-    except Exception as e:
-        print(f"  ERROR: Failed to load m3u8 file: {e}")
-        return None
-
-    num_total_segments = len(stream_obj.segments)
-    if num_total_segments == 0:
-        print("  ERROR: No segments found in m3u8 file")
-        return None
-
-    target_duration_exact = sum(item.duration for item in stream_obj.segments) / num_total_segments
-    target_duration = max(target_duration_exact, MIN_SEGMENT_DURATION)
-
-    time_since_folder_start_for_start = get_difference_between_times_in_seconds(start_unix_time, current_folder)
-    time_since_folder_start_for_end = get_difference_between_times_in_seconds(end_unix_time, current_folder)
-
-    segment_start_index = max(
-        0,
-        math.floor((time_since_folder_start_for_start + FLOAT_TOLERANCE) / target_duration),
-    )
-    segment_end_index = min(
-        num_total_segments,
-        math.ceil((time_since_folder_start_for_end - FLOAT_TOLERANCE) / target_duration),
-    )
-    if segment_end_index <= segment_start_index:
-        segment_end_index = min(num_total_segments, segment_start_index + 1)
-
-    print(
-        f"Segment: folder={current_folder}, indices=[{segment_start_index}:{segment_end_index}), "
-        f"start={format_utc_iso_z(start_time_utc)}, duration={duration_seconds:.1f}s"
-    )
-
-    try:
-        file_names = []
-        for i in range(segment_start_index, segment_end_index):
-            audio_segment = stream_obj.segments[i]
-            base_path = audio_segment.base_uri
-            file_name = audio_segment.uri
-            audio_url = base_path + file_name
-            download_from_url(audio_url, tmp_dir)
-            file_names.append(file_name)
-
-        if not file_names:
-            print("  ERROR: No segments were successfully downloaded")
+            print(f"  Warning: No audio found for {start_time_utc}")
             return None
 
-        clip_id = _build_clip_id(start_time_utc)
-        clipname = f"temp_{duration_seconds:g}s_{node_name}_{clip_id}"
-        if len(file_names) > 1:
-            hls_file = str(Path(tmp_dir) / f"{clipname}.ts")
-            with open(hls_file, "wb") as wfd:
-                for f in file_names:
-                    with open(Path(tmp_dir) / f, "rb") as fd:
-                        shutil.copyfileobj(fd, wfd)
+        # Load candidate playlists, build their timelines, and select full coverage.
+        selected_segments = None
+        for folder in valid_folders:
+            archive = live = None
+            for attempt in range(3):
+                try:
+                    archive, live = playlist_utils.load_archive_and_live(
+                        stream_base, folder
+                    )
+                    break
+                except Exception:
+                    if attempt < 2:
+                        time.sleep(1)
+            if archive is None and live is None:
+                continue
+            playlist = (
+                archive
+                if archive is not None and archive.segments
+                else live
+            )
+            if playlist is None or not playlist.segments:
+                continue
+
+            timeline = playlist_utils.get_playlist_timeline(
+                playlist, folder, 0
+            )
+            if archive is not None and live is not None:
+                timeline = playlist_utils.merge_timelines(
+                    playlist_utils.get_playlist_timeline(archive, folder, 0),
+                    playlist_utils.get_playlist_timeline(live, folder, 0),
+                )
+            if not timeline:
+                continue
+
+            padding_seconds = max(
+                padding_seconds, max(segment.duration for segment in timeline)
+            )
+            request_start = start_timestamp - padding_seconds
+            timeline = playlist_utils.fill_timeline_gaps(
+                timeline,
+                request_start,
+                end_timestamp,
+                playlist_utils.url_exists,
+                extrapolate_start=(
+                    timeline[0].start - request_start <= 180
+                ),
+            )
+            selection_start = next(
+                (
+                    segment.start
+                    for segment in timeline
+                    if segment.start >= request_start - 1e-6
+                ),
+                None,
+            )
+            if selection_start is None or selection_start >= end_timestamp:
+                continue
+            selected_segments = playlist_utils.select_segments_from_start(
+                timeline, selection_start, end_timestamp - selection_start
+            )
+            if _segments_cover_interval(
+                selected_segments, start_timestamp, end_timestamp
+            ):
+                break
+            selected_segments = None
+
+        if not selected_segments:
+            print(f"  Warning: No audio found for {start_time_utc}")
+            return None
+
+        # Download and concatenate the selected transport-stream segments.
+        downloaded_segments = []
+        for segment in selected_segments:
+            download_from_url(segment.url, tmp_dir)
+            downloaded_segments.append(
+                Path(tmp_dir) / segment.url.rsplit("/", 1)[-1]
+            )
+
+        if len(downloaded_segments) == 1:
+            source_path = downloaded_segments[0]
         else:
-            hls_file = str(Path(tmp_dir) / file_names[0])
+            source_path = Path(tmp_dir) / (
+                f"temp_{duration_seconds:g}s_{node_name}_segments.ts"
+            )
+            with open(source_path, "wb") as output_file:
+                for segment_path in downloaded_segments:
+                    with open(segment_path, "rb") as input_file:
+                        shutil.copyfileobj(input_file, output_file)
 
-        wav_file_path = str(Path(tmp_dir) / f"{clipname}.wav")
-        ss_offset = time_since_folder_start_for_start - (segment_start_index * target_duration)
-        if ss_offset < 0:
-            ss_offset = 0.0
-
-        stream = ffmpeg.input(hls_file, ss=ss_offset)
+        ss_offset = start_timestamp - selected_segments[0].start
+        clip_id = _build_clip_id(start_time_utc)
+        wav_file_path = str(
+            Path(tmp_dir) / f"temp_{duration_seconds:g}s_{node_name}_{clip_id}.wav"
+        )
+        # Convert the segment stream into exactly the requested WAV interval.
+        stream = ffmpeg.input(source_path, ss=ss_offset)
         stream = ffmpeg.output(
             stream,
             wav_file_path,
