@@ -30,6 +30,7 @@ from pytz import timezone as pytz_tz
 from run_inference import PODSAI_MODEL_ID, build_tags_list, normalize_detection_result
 from model.types import DetectorInferenceConfig
 from model.inference import OrcaHelloSRKWDetectorV1
+from orcasound_hls import OrcasoundHLSClient, OrcasoundHLSSegment
 
 AZURE_STORAGE_ACCOUNT_NAME = "livemlaudiospecstorage"
 AZURE_STORAGE_AUDIO_CONTAINER_NAME = "audiowavs"
@@ -415,20 +416,8 @@ def setup_azure_clients(orch_config: dict[str, Any]) -> tuple[Any, Any]:
     return blob_service_client, cosmos_client
 
 
-def build_orcasound_client(orch_config: dict[str, Any]) -> Any:
+def build_orcasound_client(orch_config: dict[str, Any]) -> OrcasoundHLSClient:
     """Return an OrcasoundHLSClient from orch_config."""
-    external_src = (
-        Path(__file__).resolve().parents[1]
-        / "external"
-        / "orcahello"
-        / "InferenceSystem"
-        / "src"
-    )
-    if external_src.exists() and str(external_src) not in sys.path:
-        sys.path.insert(0, str(external_src))
-
-    from orcasound_hls import OrcasoundHLSClient
-
     return OrcasoundHLSClient(
         bucket=ORCASOUND_S3_BUCKET,
         hydrophone_id=orch_config["hls_hydrophone_id"],
@@ -504,6 +493,36 @@ def upload_detection_to_azure(
     return audio_clip_name, spectrogram_name, metadata["id"]
 
 
+def cleanup_azure_uploads(
+    uploaded_items: list[tuple[str, str, str]],
+    blob_service_client: Any,
+    cosmos_client: Any,
+    source_guid: str,
+    logger: logging.Logger,
+) -> None:
+    """Delete Azure assets created during a run after explicit confirmation."""
+    database = cosmos_client.get_database_client(COSMOSDB_DATABASE_NAME)
+    container = database.get_container_client(COSMOSDB_CONTAINER_NAME)
+    for audio_name, spectrogram_name, cosmos_id in uploaded_items:
+        print(
+            f"\nAbout to delete: {audio_name}, {spectrogram_name}, CosmosDB id={cosmos_id}"
+        )
+        if input("Confirm deletion? [y/N]: ").strip().lower() != "y":
+            logger.debug(f"Skipped cleanup for cosmos_id={cosmos_id}")
+            continue
+        blob_service_client.get_blob_client(
+            container=AZURE_STORAGE_AUDIO_CONTAINER_NAME, blob=audio_name
+        ).delete_blob()
+        logger.debug(f"Deleted audio blob: {audio_name}")
+        blob_service_client.get_blob_client(
+            container=AZURE_STORAGE_SPECTROGRAM_CONTAINER_NAME,
+            blob=spectrogram_name,
+        ).delete_blob()
+        logger.debug(f"Deleted spectrogram blob: {spectrogram_name}")
+        container.delete_item(item=cosmos_id, partition_key=source_guid)
+        logger.debug(f"Deleted CosmosDB doc: id={cosmos_id}")
+
+
 def count_positive_segments(
     result: dict[str, Any],
     id2label: Optional[dict[int, str]] = None,
@@ -520,7 +539,7 @@ def count_positive_segments(
 
 
 def _process_segment(
-    segment: Any,
+    segment: OrcasoundHLSSegment,
     model: Any,
     model_config: Any,
     orch_config: Optional[dict[str, Any]] = None,
@@ -531,9 +550,9 @@ def _process_segment(
     model_id: Optional[str] = None,
     local_dir: str = ".",
 ) -> None:
-    from LiveInferenceOrchestrator import cleanup_azure_uploads
-    import spectrogram_visualizer
     """Process a single HLS segment: download, inference, upload."""
+    import spectrogram_visualizer
+
     if orch_config is None:
         orch_config = model_config if isinstance(model_config, dict) else {}
     if args:
@@ -624,7 +643,7 @@ def _process_segment(
 
 
 def run_loop(
-    orcasound_client: Any,
+    orcasound_client: OrcasoundHLSClient,
     model: Any,
     model_config: Any,
     orch_config: dict[str, Any],

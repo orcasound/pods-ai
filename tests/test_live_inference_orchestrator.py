@@ -5,11 +5,11 @@
 from unittest.mock import Mock, patch
 
 import LiveInferenceOrchestrator as orchestrator
+from model.types import DetectorInferenceConfig
 from run_inference import build_tags_list
 from external.orcahello.InferenceSystem.src.model.types import (
     DetectionMetadata,
     DetectionResult,
-    DetectorInferenceConfig,
     SegmentPrediction,
 )
 
@@ -157,7 +157,7 @@ def test_load_model_uses_yaml_config_loader_and_applies_overrides(tmp_path) -> N
         _dtype = "float32"
 
     with patch(
-        "external.orcahello.InferenceSystem.src.model.inference.OrcaHelloSRKWDetectorV1.from_pretrained",
+        "LiveInferenceOrchestrator.OrcaHelloSRKWDetectorV1.from_pretrained",
         return_value=DummyModel(),
     ) as mock_from_pretrained:
         model, model_config = orchestrator.load_model(orch_config, logger)
