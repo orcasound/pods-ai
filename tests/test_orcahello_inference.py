@@ -1,3 +1,5 @@
+# Copyright (c) PODS-AI contributors
+# SPDX-License-Identifier: MIT
 """Tests for OrcaHello/pods-ai inference configuration compatibility."""
 
 from dataclasses import dataclass

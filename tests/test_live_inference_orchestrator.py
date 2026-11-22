@@ -5,7 +5,13 @@
 from unittest.mock import Mock, patch
 
 import LiveInferenceOrchestrator as orchestrator
-from external.orcahello.InferenceSystem.src.model.types import DetectorInferenceConfig
+from run_inference import build_tags_list
+from external.orcahello.InferenceSystem.src.model.types import (
+    DetectionMetadata,
+    DetectionResult,
+    DetectorInferenceConfig,
+    SegmentPrediction,
+)
 
 
 @patch("LiveInferenceOrchestrator.requests.get")
@@ -262,6 +268,57 @@ def test_build_cosmosdb_metadata_includes_multiclass_fields() -> None:
     assert len(metadata["predictions"]) == 1
     assert metadata["predictions"][0]["label"] == "transient"
     assert metadata["tags"] == "transient;water"
+
+
+def test_build_cosmosdb_metadata_accepts_orcahello_detection_result() -> None:
+    """OrcaHello results should preserve positive segment timing and SRKW metadata."""
+    result = DetectionResult(
+        local_predictions=[1, 0, 1],
+        local_confidences=[0.9, 0.2, 0.8],
+        segment_predictions=[
+            SegmentPrediction(start_time_s=0.5, duration_s=2.0, confidence=0.9),
+            SegmentPrediction(start_time_s=1.5, duration_s=2.0, confidence=0.2),
+            SegmentPrediction(start_time_s=3.0, duration_s=1.0, confidence=0.8),
+        ],
+        global_prediction=1,
+        global_confidence=0.85,
+        metadata=DetectionMetadata(
+            wav_file_path="clip.wav",
+            file_duration_s=4.0,
+            processing_time_s=0.5,
+        ),
+    )
+
+    metadata = orchestrator.build_cosmosdb_metadata(
+        audio_uri="audio-uri",
+        image_uri="image-uri",
+        result=result,
+        timestamp_in_iso="2026-01-01T00:00:00Z",
+        source_guid="unknown_feed",
+        model_id="orcahello-model",
+    )
+
+    assert metadata["globalPredictionLabel"] == "resident"
+    assert metadata["whaleFoundConfidence"] == 85.0
+    assert metadata["tags"] == "srkw;other"
+    assert orchestrator.build_prediction_list(result)[0]["startTime"] == 0.5
+    assert build_tags_list(result) == ["srkw", "other"]
+    assert metadata["predictions"] == [
+        {
+            "id": 0,
+            "label": "resident",
+            "startTime": 0.5,
+            "duration": 2.0,
+            "confidence": 0.9,
+        },
+        {
+            "id": 2,
+            "label": "resident",
+            "startTime": 3.0,
+            "duration": 1.0,
+            "confidence": 0.8,
+        },
+    ]
 
 
 def test_build_cosmosdb_metadata_comments_appends_dominant_extra_class() -> None:

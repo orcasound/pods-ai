@@ -27,7 +27,7 @@ if external_src.exists() and str(external_src) not in sys.path:
     sys.path.append(str(external_src))
 
 from pytz import timezone as pytz_tz
-from run_inference import build_tags_list
+from run_inference import build_tags_list, normalize_detection_result
 from external.orcahello.InferenceSystem.src.model.types import DetectorInferenceConfig
 from external.orcahello.InferenceSystem.src.model.inference import OrcaHelloSRKWDetectorV1
 
@@ -43,7 +43,7 @@ ORCASOUND_S3_BUCKET = "audio-orcasound-net"
 
 NEGATIVE_LABELS = {"abiotic", "other", "water", "vessel", "jingle", "human", "bird"}
 
-PODSAI_MODEL_ID = "davethaler/whale-call-detector"
+ORCAHELLO_MODEL_ID = "orcasound/orcahello-srkw-detector-v1"
 
 
 def apply_model_config_overrides(
@@ -59,6 +59,7 @@ def apply_model_config_overrides(
 
     def _deep_merge(base: dict[str, Any], incoming: dict[str, Any]) -> dict[str, Any]:
         merged = dict(base)
+        """Recursively merge two dictionaries so custom config options are combined with defaults."""
         for key, value in incoming.items():
             if isinstance(value, dict) and isinstance(merged.get(key), dict):
                 merged[key] = _deep_merge(merged[key], value)
@@ -149,17 +150,20 @@ def is_positive_label(label: str, negative_labels: Optional[set[str]] = None) ->
 
 
 def build_prediction_list(
-    result: dict[str, Any],
+    result: Any,
     id2label: Optional[dict[int, str]] = None,
     negative_labels: Optional[set[str]] = None,
 ) -> list[dict[str, Any]]:
     """Build CosmosDB prediction rows from PODS-AI per-segment output."""
+    result = normalize_detection_result(result)
     prediction_list: list[dict[str, Any]] = []
 
     local_predictions = result.get("local_predictions", [])
     local_confidences = result.get("local_confidences", [])
     hop_duration = float(result.get("hop_duration", 2.0))
     segment_duration = float(result.get("segment_duration", 3.0))
+    segment_start_times = result.get("segment_start_times")
+    segment_durations = result.get("segment_durations")
 
     for idx, (local_prediction, local_confidence) in enumerate(
         zip(local_predictions, local_confidences)
@@ -170,8 +174,16 @@ def build_prediction_list(
                 {
                     "id": idx,
                     "label": label,
-                    "startTime": idx * hop_duration,
-                    "duration": segment_duration,
+                    "startTime": (
+                        segment_start_times[idx]
+                        if segment_start_times is not None
+                        else idx * hop_duration
+                    ),
+                    "duration": (
+                        segment_durations[idx]
+                        if segment_durations is not None
+                        else segment_duration
+                    ),
                     "confidence": float(local_confidence),
                 }
             )
@@ -182,7 +194,7 @@ def build_prediction_list(
 def build_cosmosdb_metadata(
     audio_uri: str,
     image_uri: str,
-    result: dict[str, Any],
+    result: Any,
     timestamp_in_iso: str,
     source_guid: str,
     model_id: str,
@@ -190,6 +202,7 @@ def build_cosmosdb_metadata(
     negative_labels: Optional[set[str]] = None,
 ) -> dict[str, Any]:
     """Build a CosmosDB metadata document for PODS-AI multiclass output."""
+    result = normalize_detection_result(result)
     prediction_list = build_prediction_list(
         result,
         id2label=id2label,
@@ -237,7 +250,7 @@ def parse_args() -> argparse.Namespace:
         "--orch_config",
         type=str,
         required=False,
-        help="Path to orchestrator config YAML (default: ./LiveInferenceSystem/config.yml).",
+        help="Path to orchestrator config YAML (default: /config/config.yml).",
     )
     parser.add_argument(
         "--max_live_iterations",
@@ -330,8 +343,7 @@ def _normalize_yaml_payload(raw_text: str) -> str:
 def _load_model_config(config_path: str) -> DetectorInferenceConfig:
     """Load DetectorInferenceConfig from YAML while tolerating indented block strings."""
     if not os.path.exists(config_path):
-        raise FileNotFoundError(f"model_config_path does not exist: {config_path}")
-
+        return DetectorInferenceConfig.from_dict({})
     try:
         return DetectorInferenceConfig.from_yaml(config_path)
     except Exception:
@@ -356,9 +368,7 @@ def load_model(orch_config: dict[str, Any], logger: logging.Logger) -> Any:
         logger.info(f"Applying model config overrides: {overrides}")
         model_config = apply_model_config_overrides(model_config, overrides, logger)
 
-    repo_id = orch_config.get(
-        "model_hf_repo_id", "orcasound/orcahello-srkw-detector-v1"
-    )
+    repo_id = orch_config.get("model_hf_repo_id", ORCAHELLO_MODEL_ID)
     if os.getenv("HF_HUB_OFFLINE", "0") == "1":
         logger.debug(
             f"Loading model from local HuggingFace cache (HF_HUB_OFFLINE=1): {repo_id}"
@@ -743,7 +753,7 @@ def main() -> int:
     model, model_config = load_model(orch_config, logger)
 
     model_id = orch_config.get("model_id") or orch_config.get(
-        "model_hf_repo_id", PODSAI_MODEL_ID
+        "model_hf_repo_id", ORCAHELLO_MODEL_ID
     )
 
     blob_service_client, cosmos_client = setup_azure_clients(orch_config)
