@@ -87,27 +87,30 @@ def test_download_audio_crops_and_concatenates_released_playlist_segments(tmp_pa
 
 
 @pytest.mark.parametrize("has_pdt", [False, True])
-def test_rolling_playlist_requires_timestamp(tmp_path, has_pdt):
+@pytest.mark.parametrize("sequence", [None, 0, 1])
+def test_playlist_start_timestamp(tmp_path, has_pdt, sequence):
     start = datetime(2025, 1, 1, 0, 0, 15, tzinfo=timezone.utc)
-    folder = int(start.timestamp()) - 15
+    folder = int(start.timestamp())
     pdt = "#EXT-X-PROGRAM-DATE-TIME:2025-01-01T00:00:10Z\n" if has_pdt else ""
-    playlist = m3u8.loads(
-        f"#EXTM3U\n#EXT-X-MEDIA-SEQUENCE:1\n{pdt}#EXTINF:10,\nlive001.ts\n",
-        uri="https://example.org/hls/live.m3u8",
+    sequence_tag = f"#EXT-X-MEDIA-SEQUENCE:{sequence}\n" if sequence is not None else ""
+    content = (
+        f"#EXTM3U\n{sequence_tag}{pdt}#EXTINF:10,\nlive001.ts\n"
     )
     with (
         patch("audio_utils.get_cached_folders", return_value=[str(folder)]),
-        patch("audio_utils.m3u8.load", return_value=playlist),
+        patch("audio_utils.m3u8.load", side_effect=lambda url, **kwargs: m3u8.loads(
+            content, uri="https://example.org/hls/live.m3u8", **kwargs
+        )),
         patch("audio_utils.scraper.download_from_url") as download,
         patch("audio_utils.ffmpeg.input", return_value="input") as ffmpeg_input,
         patch("audio_utils.ffmpeg.output", return_value="output"),
         patch("audio_utils.ffmpeg.run"),
     ):
         result = download_audio_from_start_utc("node", start, str(tmp_path), 3)
-    assert (result is not None) == has_pdt
-    if has_pdt:
+    assert (result is not None) == (has_pdt or sequence is None)
+    if result is not None:
         download.assert_called_once_with("https://example.org/hls/live001.ts", str(tmp_path))
-        ffmpeg_input.assert_called_once_with(tmp_path / "live001.ts", ss=5)
+        ffmpeg_input.assert_called_once_with(tmp_path / "live001.ts", ss=5 if has_pdt else 0)
     else:
         download.assert_not_called()
 
@@ -227,7 +230,8 @@ def test_segment_filenames_do_not_define_media_sequence():
     start = datetime(2025, 1, 1, tzinfo=timezone.utc).timestamp()
     timeline = audio_utils._playlist_timeline(playlist, int(start))
 
-    assert [segment.media_sequence for segment in playlist.segments] == [10, 11]
+    assert playlist.media_sequence == 10
+    assert [segment.uri for segment in playlist.segments] == ["live10.ts", "live12.ts"]
     assert audio_utils._segments_cover_interval(timeline, start, start + 20)
 
 

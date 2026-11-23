@@ -287,13 +287,21 @@ class _TimedSegment:
     gap: bool
 
 
+def _track_media_sequence_tag(line, lineno, data, state):
+    # m3u8 defaults an absent media sequence to zero, losing tag presence.
+    if line.startswith("#EXT-X-MEDIA-SEQUENCE:"):
+        data["has_media_sequence_tag"] = True
+
+
 def _playlist_timeline(playlist, folder: int):
     """Build a timeline only when the playlist has a reliable starting time."""
     if not playlist.segments:
         return []
     first = playlist.segments[0]
     timestamp = first.program_date_time or first.current_program_date_time
-    if timestamp is None and playlist.media_sequence:
+    if timestamp is None and (
+        playlist.media_sequence or playlist.data.get("has_media_sequence_tag")
+    ):
         return []
     start = timestamp.timestamp() if timestamp else float(folder)
     timeline = []
@@ -352,7 +360,7 @@ def download_audio_from_start_utc(
                 url = f"{stream_base}/hls/{folder}/{manifest}"
                 for attempt in range(3):
                     try:
-                        playlist = m3u8.load(url)
+                        playlist = m3u8.load(url, custom_tags_parser=_track_media_sequence_tag)
                         break
                     except urllib.error.HTTPError as error:
                         if error.code == 404:
