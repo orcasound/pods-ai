@@ -11,7 +11,9 @@
   to the training set.
 
 Key dependencies:
-- `orca-hls-utils` (submodule): Shared Orcasound S3 and HLS audio access.
+- `orca-hls-utils` 0.0.4 (submodule): Shared Orcasound S3 listing and segment downloads.
+  Audio downloads use archive or live playlists separately; rolling playlists without
+  program date-time and clips spanning playlist gaps are not supported.
 - `boto3`, `m3u8`, `beautifulsoup4`, and `tqdm`: Runtime dependencies of the shared HLS utility
 - `ffmpeg-python`: For audio processing
 - `librosa>=0.10.0`: For audio analysis

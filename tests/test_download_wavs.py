@@ -490,8 +490,7 @@ class TestCacheAndCleanup:
 
         folder_time = int(datetime(2025, 1, 1, 9, 0, tzinfo=timezone.utc).timestamp())
         with patch("audio_utils.get_cached_folders", return_value=[str(folder_time)]) as get_folders, \
-                patch("audio_utils.s3_utils.get_folders_between_timestamp", return_value=[folder_time]), \
-                patch("audio_utils.playlist_utils.load_archive_and_live", return_value=(Mock(segments=[]), None)):
+                patch("audio_utils.m3u8.load", return_value=Mock(segments=[])):
             download_wavs.download_audio_segment(
                 "resident", "rpi_andrews_bay", timestamp, output_root, cache_root=cache_root
             )

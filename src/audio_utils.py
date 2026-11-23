@@ -19,16 +19,16 @@ import urllib.error
 
 from azure.cosmos import CosmosClient
 import ffmpeg
+import m3u8
 import requests
 try:
     from orcasite_feeds import OrcasiteFeed
 except ImportError:  # pragma: no cover
     from src.orcasite_feeds import OrcasiteFeed
-from orca_hls import get_playlist_utils, get_scraper, get_s3_utils
+from orca_hls import get_scraper, get_s3_utils
 from pytz import timezone
 
 scraper = get_scraper()
-playlist_utils = get_playlist_utils()
 s3_utils = get_s3_utils()
 
 # Simple in-memory cache for S3 folder listings keyed by "bucket::prefix"
@@ -255,9 +255,6 @@ def download_60s_audio_from_start(
     return download_audio_from_start_utc(node_name, start_time_utc, tmp_dir, 60)
 
 
-MIN_SEGMENT_DURATION = 0.001
-FLOAT_TOLERANCE = 1e-9
-
 def _build_clip_id(start_time_utc: datetime) -> str:
     return start_time_utc.astimezone(PACIFIC_TZ).strftime("%Y_%m_%d_%H_%M_%S_%Z")
 
@@ -281,6 +278,34 @@ def _segments_cover_interval(segments, start_time: float, end_time: float) -> bo
     return False
 
 
+@dataclass
+class _TimedSegment:
+    start: float
+    duration: float
+    url: str
+
+
+def _playlist_timeline(playlist, folder: int):
+    """Build a timeline only when the playlist has a reliable starting time."""
+    if not playlist.segments:
+        return []
+    first = playlist.segments[0]
+    timestamp = first.program_date_time or first.current_program_date_time
+    if timestamp is None and playlist.media_sequence:
+        return []
+    start = timestamp.timestamp() if timestamp else float(folder)
+    timeline = []
+    for segment in playlist.segments:
+        timestamp = segment.program_date_time or segment.current_program_date_time
+        if timestamp:
+            start = timestamp.timestamp()
+        if segment.duration <= 0:
+            return []
+        timeline.append(_TimedSegment(start, segment.duration, segment.absolute_uri))
+        start += segment.duration
+    return timeline
+
+
 def download_audio_from_start_utc(
     node_name: str,
     start_time_utc: datetime,
@@ -295,7 +320,6 @@ def download_audio_from_start_utc(
             if start_time_utc.tzinfo is None
             else start_time_utc.astimezone(UTC_TZ)
         )
-        padding_seconds = 10
         start_timestamp = start_time_utc.timestamp()
         end_timestamp = start_timestamp + duration_seconds
         stream_base = (
@@ -303,10 +327,11 @@ def download_audio_from_start_utc(
             f"audio-orcasound-net/{node_name}"
         )
         # Limit the search to HLS folders that may contain the requested interval.
-        valid_folders = s3_utils.get_folders_between_timestamp(
-            get_cached_folders("audio-orcasound-net", f"{node_name}/hls/"),
-            str(int(start_timestamp)),
-            str(int(end_timestamp)),
+        valid_folders = sorted(
+            (int(folder) for folder in get_cached_folders(
+                "audio-orcasound-net", f"{node_name}/hls/"
+            ) if int(folder) <= start_timestamp),
+            reverse=True,
         )
         if not valid_folders:
             print(f"  Warning: No audio found for {start_time_utc}")
@@ -315,68 +340,40 @@ def download_audio_from_start_utc(
         # Load candidate playlists, build their timelines, and select full coverage.
         selected_segments = None
         for folder in valid_folders:
-            archive = live = None
-            for attempt in range(3):
-                try:
-                    archive, live = playlist_utils.load_archive_and_live(
-                        stream_base, folder
-                    )
+            for manifest in ("archive.m3u8", "live.m3u8"):
+                url = f"{stream_base}/hls/{folder}/{manifest}"
+                for attempt in range(3):
+                    try:
+                        playlist = m3u8.load(url)
+                        break
+                    except urllib.error.HTTPError as error:
+                        if error.code == 404:
+                            playlist = None
+                            break
+                        if attempt == 2:
+                            playlist = None
+                        else:
+                            time.sleep(1)
+                    except Exception:
+                        if attempt == 2:
+                            playlist = None
+                        else:
+                            time.sleep(1)
+                if playlist is None:
+                    continue
+                timeline = _playlist_timeline(playlist, folder)
+                selected_segments = [
+                    segment for segment in timeline
+                    if segment.start < end_timestamp
+                    and segment.start + segment.duration > start_timestamp
+                ]
+                if _segments_cover_interval(
+                    selected_segments, start_timestamp, end_timestamp
+                ):
                     break
-                except Exception:
-                    if attempt < 2:
-                        time.sleep(1)
-            if archive is None and live is None:
-                continue
-            playlist = (
-                archive
-                if archive is not None and archive.segments
-                else live
-            )
-            if playlist is None or not playlist.segments:
-                continue
-
-            timeline = playlist_utils.get_playlist_timeline(
-                playlist, folder, 0
-            )
-            if archive is not None and live is not None:
-                timeline = playlist_utils.merge_timelines(
-                    playlist_utils.get_playlist_timeline(archive, folder, 0),
-                    playlist_utils.get_playlist_timeline(live, folder, 0),
-                )
-            if not timeline:
-                continue
-
-            padding_seconds = max(
-                padding_seconds, max(segment.duration for segment in timeline)
-            )
-            request_start = start_timestamp - padding_seconds
-            timeline = playlist_utils.fill_timeline_gaps(
-                timeline,
-                request_start,
-                end_timestamp,
-                playlist_utils.url_exists,
-                extrapolate_start=(
-                    timeline[0].start - request_start <= 180
-                ),
-            )
-            selection_start = next(
-                (
-                    segment.start
-                    for segment in timeline
-                    if segment.start >= request_start - 1e-6
-                ),
-                None,
-            )
-            if selection_start is None or selection_start >= end_timestamp:
-                continue
-            selected_segments = playlist_utils.select_segments_from_start(
-                timeline, selection_start, end_timestamp - selection_start
-            )
-            if _segments_cover_interval(
-                selected_segments, start_timestamp, end_timestamp
-            ):
+                selected_segments = None
+            if selected_segments:
                 break
-            selected_segments = None
 
         if not selected_segments:
             print(f"  Warning: No audio found for {start_time_utc}")
