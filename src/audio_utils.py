@@ -265,7 +265,11 @@ def format_utc_iso_z(dt: datetime) -> str:
 
 def _segments_cover_interval(segments, start_time: float, end_time: float) -> bool:
     """Return whether segment timestamps continuously cover the requested interval."""
-    if not segments or segments[0].start > start_time + 1e-6:
+    if (
+        not segments
+        or any(segment.gap for segment in segments)
+        or segments[0].start > start_time + 1e-6
+    ):
         return False
     covered_until = segments[0].start + segments[0].duration
     for segment in segments[1:]:
@@ -280,6 +284,7 @@ class _TimedSegment:
     start: float
     duration: float
     url: str
+    gap: bool
 
 
 def _playlist_timeline(playlist, folder: int):
@@ -302,7 +307,9 @@ def _playlist_timeline(playlist, folder: int):
             start = timestamp.timestamp()
         if segment.duration <= 0:
             return []
-        timeline.append(_TimedSegment(start, segment.duration, segment.absolute_uri))
+        timeline.append(
+            _TimedSegment(start, segment.duration, segment.absolute_uri, bool(segment.gap_tag))
+        )
         start += segment.duration
     return timeline
 

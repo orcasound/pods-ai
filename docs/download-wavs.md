@@ -5,6 +5,11 @@ and `output/csv/dclde_60s_samples.csv` to download wav files. It keeps
 `output/wav/humpback/signals-humpback_*.wav` segments from the `signals-humpback`
 submodule (those rows are not in the CSVs).
 
+Audio downloads reject playlist intervals marked by `EXT-X-GAP` or exhibiting
+timestamp gaps or overlaps. A segment omitted without a gap marker or
+timestamp discontinuity cannot be detected from media sequence numbers or
+filenames alone.
+
 ```
 usage: download_wavs.py [-h] [--validate-only] [--training-csv-path TRAINING_CSV_PATH]
                         [--testing-csv-path TESTING_CSV_PATH] [--dclde-manifest DCLDE_MANIFEST]

@@ -156,6 +156,81 @@ def test_download_rejects_timestamp_gap_or_overlap(tmp_path, second_start):
     download.assert_not_called()
 
 
+@pytest.mark.parametrize(
+    ("offset", "duration", "expected_uri"),
+    [
+        (5, 6, None),
+        (12, 2, None),
+        (19, 3, None),
+        (0, 10, "live10.ts"),
+        (20, 2, "live12.ts"),
+    ],
+)
+def test_download_respects_gap_tags(tmp_path, offset, duration, expected_uri):
+    start = datetime(2025, 1, 1, tzinfo=timezone.utc)
+    playlist = m3u8.loads(
+        "#EXTM3U\n#EXT-X-PROGRAM-DATE-TIME:2025-01-01T00:00:00Z\n"
+        "#EXTINF:10,\nlive10.ts\n"
+        "#EXT-X-GAP\n#EXTINF:10,\nlive11.ts\n"
+        "#EXTINF:10,\nlive12.ts\n",
+        uri="https://example.org/hls/live.m3u8",
+    )
+    with (
+        patch("audio_utils.get_cached_folders", return_value=[str(int(start.timestamp()))]),
+        patch("audio_utils.m3u8.load", return_value=playlist),
+        patch("audio_utils.scraper.download_from_url") as download,
+        patch("audio_utils.ffmpeg.input", return_value="input"),
+        patch("audio_utils.ffmpeg.output", return_value="output"),
+        patch("audio_utils.ffmpeg.run"),
+    ):
+        result = download_audio_from_start_utc(
+            "node", start + timedelta(seconds=offset), str(tmp_path), duration
+        )
+
+    assert (result is not None) == (expected_uri is not None)
+    if expected_uri is None:
+        download.assert_not_called()
+    else:
+        download.assert_called_once_with(f"https://example.org/hls/{expected_uri}", str(tmp_path))
+
+
+def test_download_falls_back_when_archive_has_gap(tmp_path):
+    start = datetime(2025, 1, 1, tzinfo=timezone.utc)
+    gap = m3u8.loads(
+        "#EXTM3U\n#EXT-X-GAP\n#EXTINF:10,\nmissing.ts\n",
+        uri="https://example.org/hls/archive.m3u8",
+    )
+    live = m3u8.loads(
+        "#EXTM3U\n#EXTINF:10,\navailable.ts\n",
+        uri="https://example.org/hls/live.m3u8",
+    )
+    with (
+        patch("audio_utils.get_cached_folders", return_value=[str(int(start.timestamp()))]),
+        patch("audio_utils.m3u8.load", side_effect=[gap, live]) as load,
+        patch("audio_utils.scraper.download_from_url") as download,
+        patch("audio_utils.ffmpeg.input", return_value="input"),
+        patch("audio_utils.ffmpeg.output", return_value="output"),
+        patch("audio_utils.ffmpeg.run"),
+    ):
+        assert download_audio_from_start_utc("node", start, str(tmp_path), 3) is not None
+    assert load.call_count == 2
+    download.assert_called_once_with("https://example.org/hls/available.ts", str(tmp_path))
+
+
+def test_segment_filenames_do_not_define_media_sequence():
+    playlist = m3u8.loads(
+        "#EXTM3U\n#EXT-X-MEDIA-SEQUENCE:10\n"
+        "#EXT-X-PROGRAM-DATE-TIME:2025-01-01T00:00:00Z\n"
+        "#EXTINF:10,\nlive10.ts\n#EXTINF:10,\nlive12.ts\n",
+        uri="https://example.org/hls/live.m3u8",
+    )
+    start = datetime(2025, 1, 1, tzinfo=timezone.utc).timestamp()
+    timeline = audio_utils._playlist_timeline(playlist, int(start))
+
+    assert [segment.media_sequence for segment in playlist.segments] == [10, 11]
+    assert audio_utils._segments_cover_interval(timeline, start, start + 20)
+
+
 def test_download_checks_older_folders_and_empty_list(tmp_path):
     start = datetime(2025, 1, 1, tzinfo=timezone.utc)
     folder = int(start.timestamp()) - 20
