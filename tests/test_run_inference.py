@@ -171,7 +171,10 @@ def model_inference_helper(label: str, wav_file: str, model_type: str, model_pat
     category_dir = output_root / label
     wav_path = category_dir / wav_file
     print(f"\nProcessing {wav_path}...")
-    download_testing_file(wav_path, output_root)
+    try:
+        download_testing_file(wav_path, output_root)
+    except AssertionError as exc:
+        pytest.skip(f"Testing audio is unavailable for {label}/{wav_file}: {exc}")
     result = run_inference(str(wav_path), model_type=model_type, model_path=model_path)
     return result
 
@@ -1311,7 +1314,10 @@ class TestIntegrationWithRealModels:
 
         # Try each row until one downloads successfully.
         for row in category_rows:
-            download_testing_sample(row, output_root)
+            try:
+                download_testing_sample(row, output_root)
+            except AssertionError:
+                continue
             candidates = sorted(category_dir.glob("*.wav"))
             if candidates:
                 return str(candidates[0])

@@ -1,3 +1,5 @@
+# Copyright (c) PODS-AI contributors
+# SPDX-License-Identifier: MIT
 FROM ubuntu:26.04
 
 # System deps
@@ -24,21 +26,18 @@ ENV UV_PROJECT_ENVIRONMENT=/usr/src/venv
 ENV UV_PYTHON=3.12
 RUN uv python install 3.12 && uv sync --no-dev
 
-# Bake HuggingFace model into image cache at build time
-COPY ./src/model_revisions.py ./model_revisions.py
+# Bake the OrcaHello detector into the HuggingFace cache at build time.
 ENV HF_HOME=/usr/src/hf_cache
 ENV TRANSFORMERS_CACHE=/usr/src/hf_cache
 
 RUN <<'EOF'
 /usr/src/venv/bin/python - <<'PYCODE'
 from huggingface_hub import snapshot_download
-from model_revisions import LATEST_PODSAI_MODEL_REVISION
 
 snapshot_download(
-    repo_id="davethaler/whale-call-detector",
+    repo_id="orcasound/orcahello-srkw-detector-v1",
     local_dir="/usr/src/hf_cache",
     local_dir_use_symlinks=False,
-    revision=LATEST_PODSAI_MODEL_REVISION,
     ignore_patterns=[
         "checkpoint-*",
     ],
@@ -48,6 +47,7 @@ EOF
 
 # At runtime, never hit the network for the model
 ENV HF_HUB_OFFLINE=1
+ENV PYTHONPATH=/usr/src/app:${PYTHONPATH}
 
 # App working directory
 ARG PODSAI_RELEASE_VERSION
@@ -58,8 +58,9 @@ WORKDIR /usr/src/app
 # PODS-AI source code
 COPY ./src/ ./src/
 
-# OrcaHello HLS client (required by LiveInferenceOrchestrator.py)
-COPY ./external/orcahello/InferenceSystem/src/orcasound_hls/ ./external/orcahello/InferenceSystem/src/orcasound_hls/
+# OrcaHello runtime modules (model, HLS client, and helpers used by the orchestrator)
+COPY ./external/orcahello/InferenceSystem/src/ ./external/orcahello/InferenceSystem/src/
+COPY ./external/orcahello/InferenceSystem/model/config.yaml ./model/config.yaml
 COPY ./external/orca-hls-utils/src/orca_hls_utils/ ./external/orca-hls-utils/src/orca_hls_utils/
 
 ENTRYPOINT ["/usr/src/venv/bin/python3", "-u", "./src/LiveInferenceOrchestrator.py"]

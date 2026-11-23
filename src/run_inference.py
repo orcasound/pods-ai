@@ -48,6 +48,44 @@ PROPOSED_DESCRIPTION_EXTRA_CLASSES = {"vessel", "human", "jingle", "bird"}
 NEGATIVE_LABELS = {"abiotic", "other", "water", "vessel", "jingle", "human", "bird"}
 
 
+def normalize_detection_result(result: Any) -> dict[str, Any]:
+    """Adapt OrcaHello DetectionResult objects to the shared mapping contract."""
+    if isinstance(result, dict):
+        return result
+
+    required_attributes = (
+        "local_predictions",
+        "local_confidences",
+        "segment_predictions",
+        "global_prediction",
+        "global_confidence",
+    )
+    if not all(hasattr(result, attribute) for attribute in required_attributes):
+        raise TypeError("result must be a mapping or an OrcaHello DetectionResult")
+
+    local_predictions = [
+        "resident" if prediction == 1 else "other"
+        for prediction in result.local_predictions
+    ]
+    return {
+        "local_predictions": local_predictions,
+        "local_confidences": result.local_confidences,
+        "segment_start_times": [
+            segment.start_time_s for segment in result.segment_predictions
+        ],
+        "segment_durations": [
+            segment.duration_s for segment in result.segment_predictions
+        ],
+        "global_prediction_label": (
+            "resident" if result.global_prediction == 1 else "other"
+        ),
+        "global_prediction_labels": (
+            ["resident"] if result.global_prediction == 1 else []
+        ),
+        "global_confidence": result.global_confidence,
+    }
+
+
 def parse_utc_start_timestamp(timestamp_str: str) -> datetime:
     """Parse UTC start timestamp format YYYY-MM-DDTHH:MM:SSZ."""
     return datetime.strptime(timestamp_str, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=UTC_TZ)
@@ -59,7 +97,7 @@ def _format_pacific_timestamp(dt: datetime) -> str:
 
 # Get global positive tags plus the most common non-whale context tag.
 def build_tags_list(
-    result: dict[str, Any],
+    result: Any,
     id2label: Optional[dict[int, str]] = None,
     negative_labels: Optional[set[str]] = None,
 ) -> list[str]:
@@ -79,6 +117,7 @@ def build_tags_list(
     """
     from LiveInferenceOrchestrator import is_positive_label
 
+    result = normalize_detection_result(result)
     effective_negative_labels = (
         negative_labels if negative_labels is not None else NEGATIVE_LABELS
     )
