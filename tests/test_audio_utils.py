@@ -137,12 +137,13 @@ def test_download_retries_and_falls_back_to_live_playlist(tmp_path):
     sleep.assert_called_once_with(1)
 
 
-def test_download_rejects_timestamp_gap(tmp_path):
+@pytest.mark.parametrize("second_start", ["00:00:20", "00:00:09"])
+def test_download_rejects_timestamp_gap_or_overlap(tmp_path, second_start):
     start = datetime(2025, 1, 1, 0, 0, 8, tzinfo=timezone.utc)
     playlist = m3u8.loads(
         "#EXTM3U\n#EXT-X-PROGRAM-DATE-TIME:2025-01-01T00:00:00Z\n"
         "#EXTINF:10,\nlive000.ts\n"
-        "#EXT-X-PROGRAM-DATE-TIME:2025-01-01T00:00:20Z\n"
+        f"#EXT-X-PROGRAM-DATE-TIME:2025-01-01T{second_start}Z\n"
         "#EXTINF:10,\nlive001.ts\n",
         uri="https://example.org/hls/live.m3u8",
     )
@@ -163,8 +164,12 @@ def test_download_checks_older_folders_and_empty_list(tmp_path):
         uri="https://example.org/hls/live.m3u8",
     )
     with (
-        patch("audio_utils.get_cached_folders", return_value=[str(folder), str(folder + 10)]),
-        patch("audio_utils.m3u8.load", side_effect=[m3u8.loads("#EXTM3U"), m3u8.loads("#EXTM3U"), playlist]),
+        patch("audio_utils.get_cached_folders", return_value=[
+            str(folder - 86400), str(folder), str(folder + 10),
+        ]),
+        patch("audio_utils.m3u8.load", side_effect=[
+            m3u8.loads("#EXTM3U"), m3u8.loads("#EXTM3U"), playlist,
+        ]) as load,
         patch("audio_utils.scraper.download_from_url"),
         patch("audio_utils.ffmpeg.input", return_value="input") as ffmpeg_input,
         patch("audio_utils.ffmpeg.output", return_value="output"),
@@ -172,6 +177,7 @@ def test_download_checks_older_folders_and_empty_list(tmp_path):
     ):
         assert download_audio_from_start_utc("node", start, str(tmp_path), 3) is not None
         ffmpeg_input.assert_called_once_with(tmp_path / "live000.ts", ss=20)
+        assert load.call_count == 3
     with patch("audio_utils.get_cached_folders", return_value=[]):
         assert download_audio_from_start_utc("node", start, str(tmp_path), 3) is None
 

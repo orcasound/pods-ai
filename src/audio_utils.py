@@ -265,17 +265,14 @@ def format_utc_iso_z(dt: datetime) -> str:
 
 def _segments_cover_interval(segments, start_time: float, end_time: float) -> bool:
     """Return whether segment timestamps continuously cover the requested interval."""
-    covered_until = start_time
-    for segment in segments:
-        segment_end = segment.start + segment.duration
-        if segment_end <= covered_until:
-            continue
-        if segment.start > covered_until + 1e-6:
+    if not segments or segments[0].start > start_time + 1e-6:
+        return False
+    covered_until = segments[0].start + segments[0].duration
+    for segment in segments[1:]:
+        if abs(segment.start - covered_until) > 1e-6:
             return False
-        covered_until = segment_end
-        if covered_until >= end_time - 1e-6:
-            return True
-    return False
+        covered_until = segment.start + segment.duration
+    return covered_until >= end_time - 1e-6
 
 
 @dataclass
@@ -297,7 +294,11 @@ def _playlist_timeline(playlist, folder: int):
     timeline = []
     for segment in playlist.segments:
         timestamp = segment.program_date_time or segment.current_program_date_time
+        if segment.discontinuity and not segment.program_date_time:
+            return []
         if timestamp:
+            if timestamp.utcoffset() is None:
+                return []
             start = timestamp.timestamp()
         if segment.duration <= 0:
             return []
@@ -330,7 +331,7 @@ def download_audio_from_start_utc(
         valid_folders = sorted(
             (int(folder) for folder in get_cached_folders(
                 "audio-orcasound-net", f"{node_name}/hls/"
-            ) if int(folder) <= start_timestamp),
+            ) if start_timestamp - 86400 <= int(folder) <= end_timestamp),
             reverse=True,
         )
         if not valid_folders:
