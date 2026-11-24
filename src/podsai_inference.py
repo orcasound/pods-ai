@@ -68,7 +68,6 @@ def meets_min_positive_event_threshold(
         >= min_num_positive_calls_threshold
     )
 
-
 def _positive_event_ids(positive_mask: Sequence[bool | int]) -> list[Optional[int]]:
     """Assign segments to global positive events, capped at two segments each."""
     event_ids: list[Optional[int]] = []
@@ -84,6 +83,37 @@ def _positive_event_ids(positive_mask: Sequence[bool | int]) -> list[Optional[in
         event_ids.append(event_id)
         run_length += 1
     return event_ids
+
+def aggregate_class_probabilities(
+    segment_probs: Sequence[np.ndarray],
+    class_id: int,
+    strategy: str,
+    threshold: float,
+    mean_top_k: int,
+) -> float:
+    """Aggregate segment probabilities for one class."""
+
+    probabilities = np.asarray(
+        [probs[class_id] for probs in segment_probs],
+        dtype=float,
+    )
+
+    if probabilities.size == 0:
+        return 0.0
+
+    if strategy == "mean_thresholded":
+        selected = probabilities[probabilities >= threshold]
+        if selected.size == 0:
+            return 0.0
+        return float(np.mean(selected))
+
+    if strategy == "mean_top_k":
+        top_k = np.sort(probabilities)[-mean_top_k:]
+        return float(np.mean(top_k))
+
+    raise ValueError(
+        f"Unsupported aggregation strategy: {strategy}"
+    )
 
 # HuggingFace model_type value for the Audio Spectrogram Transformer architecture.
 # AST models expect a pre-computed mel spectrogram; raw-audio models (e.g. Wav2Vec2)
@@ -104,10 +134,16 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
     This class implements the interface expected by model_inference.py.
     """
 
-    def __init__(self, model_path: str, device: Optional[str] = None,
-                 threshold: float = 0.5, min_num_positive_calls_threshold: int = 2,
+    def __init__(self, 
+                 model_path: str, 
+                 device: Optional[str] = None,
+                 threshold: float = 0.5, 
+                 min_num_positive_calls_threshold: int = 2,
                  model_revision: Optional[str] = None,
-                 inference_batch_size: int = 8) -> None:
+                 inference_batch_size: int = 8,
+                 aggregation_strategy: Optional[str] = "default",
+                 mean_top_k: int = 2,
+                ) -> None:
         """
         Initialize the inference model.
 
@@ -128,11 +164,45 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
             inference_batch_size: Number of spectrogram windows processed per model forward pass
                                   (default: 8). Smaller values reduce peak attention-matrix memory
                                   at the cost of more forward passes; tune for your hardware.
+            aggregation_strategy:
+                            Strategy for calculating global class probabilities.
+                            "default" preserves existing event-count aggregation.
+                            "mean_thresholded" averages segment probabilities above threshold.
+                            "mean_top_k" averages the top K segment probabilities.
+
+            mean_top_k:
+                            Number of highest segment probabilities to average when using mean_top_k. 
+                            Default: 2.
         """
         super().__init__(model_path)  # Call parent constructor
         self.threshold = threshold
         self.min_num_positive_calls_threshold = min_num_positive_calls_threshold
         self.inference_batch_size = inference_batch_size
+
+        # Validate aggregation configuration.
+        aggregation_strategy = aggregation_strategy or "default"
+
+        valid_strategies = {
+            "default",
+            "mean_thresholded",
+            "mean_top_k",
+        }
+
+        if aggregation_strategy not in valid_strategies:
+            raise ValueError(
+                f"Invalid aggregation_strategy: {aggregation_strategy}. "
+                f"Expected one of {sorted(valid_strategies)}."
+            )
+
+        if (
+            not isinstance(mean_top_k, int)
+            or isinstance(mean_top_k, bool)
+            or mean_top_k <= 0
+        ):
+            raise ValueError("mean_top_k must be a positive integer.")
+
+        self.aggregation_strategy = aggregation_strategy
+        self.mean_top_k = mean_top_k
 
         # Auto-detect device. Default to GPU if available, otherwise CPU. Allow override via argument.
         if device is None:
@@ -462,8 +532,13 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
 
         return input_values
 
-    def predict(self, wav_path: str, segment_duration: int = 3, hop_duration: int = 2,
-                threshold: Optional[float] = None, min_num_positive_calls_threshold: Optional[int] = None) -> dict[str, object]:
+    def predict(self, 
+                wav_path: str, 
+                segment_duration: int = 3, 
+                hop_duration: int = 2,
+                threshold: Optional[float] = None, 
+                min_num_positive_calls_threshold: Optional[int] = None
+                ) -> dict[str, object]:
         """
         Run inference on a wav file using sliding window.
 
@@ -664,6 +739,20 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
             local_predictions.append(predicted_class)
             local_confidences.append(float(call_likelihood))
 
+        # Calculate per-class aggregation scores.
+        # The default strategy retains the existing event-based calculation below.
+        aggregation_scores: dict[int, float] = {}
+
+        if self.aggregation_strategy != "default":
+            for class_id in self.id2label:
+                aggregation_scores[class_id] = aggregate_class_probabilities(
+                    segment_probs=segment_probs,
+                    class_id=class_id,
+                    strategy=self.aggregation_strategy,
+                    threshold=threshold,
+                    mean_top_k=self.mean_top_k,
+                )
+
         # Determine global prediction based on voting among high-confidence predictions.
         # For positive (whale) classes, we require multiple high-confidence predictions.
         # For negative (background) classes, we use the most common prediction.
@@ -712,12 +801,18 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
                 qualifying_classes,
                 key=lambda cid: (
                     -len(qualifying_classes[cid]),
-                    -float(np.mean(qualifying_classes[cid])),
+                    -(aggregation_scores[cid]
+                        if self.aggregation_strategy != "default"
+                        else float(np.mean(qualifying_classes[cid]))
+                    ),
                     self.id2label[cid],
                 ),
             )
             global_prediction_id = ordered_classes[0]
-            global_confidence = float(np.mean(qualifying_classes[global_prediction_id]))
+            global_confidence = (aggregation_scores[global_prediction_id]
+                                    if self.aggregation_strategy != "default"
+                                    else float(np.mean(qualifying_classes[global_prediction_id]))
+                                )
         else:
             # Preserve the legacy majority-vote result when aggregate evidence
             # reaches the threshold but no individual class does.
@@ -731,11 +826,17 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
                     class_votes,
                     key=lambda cid: (
                         -len(class_votes[cid]),
-                        -float(np.mean(class_votes[cid])),
+                        -(aggregation_scores[cid]
+                            if self.aggregation_strategy != "default"
+                            else float(np.mean(class_votes[cid]))
+                        ),
                         self.id2label[cid],
                     ),
                 )[0]
-                global_confidence = float(np.mean(class_votes[global_prediction_id]))
+                global_confidence = (aggregation_scores[global_prediction_id]
+                                        if self.aggregation_strategy != "default"
+                                        else float(np.mean(class_votes[global_prediction_id]))
+                                    )    
                 ordered_classes = [global_prediction_id]
             else:
                 ordered_classes = []
@@ -781,11 +882,14 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
                 if predicted_id == class_id
             ]
 
-            class_mean = (
-                float(np.mean(matching_confidences))
-                if matching_confidences
-                else 0.0
-            )
+            if self.aggregation_strategy != "default":
+                class_mean = aggregation_scores[class_id]
+            else:
+                class_mean = (
+                    float(np.mean(matching_confidences))
+                    if matching_confidences
+                    else 0.0
+                )
 
             class_means[class_id] = class_mean
             per_class_probabilities[label] = class_mean
@@ -857,9 +961,12 @@ class PodsAIInference(ModelInference):  # Inherit from ModelInference
             global_prediction_id = ordered_ids[0]
             global_prediction_label = self.id2label.get(global_prediction_id, str(global_prediction_id))
             if global_prediction_id in self.negative_class_ids:
-                global_confidence = float(np.mean([
-                    probs[global_prediction_id] for probs in segment_probs
-                ]))
+                global_confidence = (aggregation_scores[global_prediction_id]
+                                        if self.aggregation_strategy != "default"
+                                        else float(np.mean([
+                                            probs[global_prediction_id] for probs in segment_probs
+                                        ]))
+                                    )
             else:
                 global_confidence = class_means.get(global_prediction_id, 0.0)
         # else keep previously computed global_prediction_id/global_prediction_label.
