@@ -1482,12 +1482,14 @@ class TestIntegrationWithRealModels:
         request: pytest.FixtureRequest
     ) -> None:
         """Test CLI integration with various audio types and models."""
+        from download_wavs import download_testing_file
         from run_inference import main
 
         output_root = Path("output/testing-wav")
         category_dir = output_root / label
         wav_path = category_dir / wav_file
         model_path = request.getfixturevalue(model_path_fixture)
+        download_testing_file(wav_path, output_root)
 
         with patch("sys.argv", [
             "run_inference.py",

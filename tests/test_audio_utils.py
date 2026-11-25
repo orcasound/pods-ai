@@ -436,14 +436,21 @@ def test_download_from_url_removes_partial_file_before_retry(tmp_path):
     assert destination.read_bytes() == b"complete"
 
 
-def test_download_60s_audio_rounds_end_then_subtracts_clip_offset():
+@pytest.mark.parametrize(
+    ("end_timestamp", "expected_start"),
+    [
+        ("2025_01_01_00_01_02_PST", datetime(2025, 1, 1, 8, 0, 10, tzinfo=timezone.utc)),
+        ("2025_01_01_00_01_00_PST", datetime(2025, 1, 1, 8, 0, 0, tzinfo=timezone.utc)),
+    ],
+)
+def test_download_60s_audio_aligns_end_without_offset(end_timestamp, expected_start):
     with patch("audio_utils.download_audio_from_start_utc", return_value="clip.wav") as download:
-        result = download_60s_audio("rpi_test", "2025_01_01_00_01_00_PST", "tmp")
+        result = download_60s_audio("rpi_test", end_timestamp, "tmp")
 
     assert result == "clip.wav"
     download.assert_called_once_with(
         "rpi_test",
-        datetime(2025, 1, 1, 8, 0, 8, tzinfo=timezone.utc),
+        expected_start,
         "tmp",
         60,
     )

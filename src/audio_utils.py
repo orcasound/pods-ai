@@ -35,7 +35,6 @@ s3_utils = get_s3_utils()
 _FOLDERS_CACHE = {}
 PACIFIC_TZ = timezone('America/Los_Angeles')
 UTC_TZ = timezone('UTC')
-AUDIO_OFFSET_SECONDS = 2
 COSMOS_URL = os.environ.get("COSMOS_URL", "").strip() or "https://aifororcasmetadatastore.documents.azure.com:443/"
 COSMOS_KEY = os.environ.get("COSMOS_KEY", "").strip()
 COSMOS_DB = os.environ.get("COSMOS_DB", "predictions")
@@ -230,15 +229,14 @@ def _get_aligned_end_time(timestamp_pst_str: str) -> datetime:
 
 def download_60s_audio(node_name: str, min_end_timestamp_pst_str: str, tmp_dir: str) -> Optional[str]:
     """
-    Download 60 seconds of audio ending at the next 10-second boundary after min_end_timestamp_str.
-    Note that min_end_timestamp_str is the Orcasite time, which is off by ~2 seconds from real time.
+    Download 60 seconds of audio ending at the next 10-second boundary at or after the corrected timestamp.
     """
     # Compute the aligned end time and derive the 60s clip start UTC to reuse
     # the download_audio_from_start_utc implementation which handles the
     # HLS folder/segment logic. This reduces duplication and keeps behavior
     # consistent between callers that request clips by end-time vs start-time.
     end_time = _get_aligned_end_time(min_end_timestamp_pst_str)
-    start_time = end_time - timedelta(seconds=60 + AUDIO_OFFSET_SECONDS)
+    start_time = end_time - timedelta(seconds=60)
     start_time_utc = start_time.astimezone(UTC_TZ)
 
     return download_audio_from_start_utc(node_name, start_time_utc, tmp_dir, 60)
@@ -249,9 +247,8 @@ def download_60s_audio_from_start(
     start_timestamp_pst_str: str,
     tmp_dir: str,
 ) -> Optional[str]:
-    """Download from the corrected start, translated to the Orcasite HLS timeline."""
+    """Download 60 seconds of audio from the corrected start timestamp."""
     start_time_utc = parse_timestamp_pacific(start_timestamp_pst_str).astimezone(UTC_TZ)
-    start_time_utc -= timedelta(seconds=AUDIO_OFFSET_SECONDS)
     return download_audio_from_start_utc(node_name, start_time_utc, tmp_dir, 60)
 
 
