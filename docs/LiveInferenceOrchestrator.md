@@ -88,9 +88,25 @@ Similar to [aifororcas-livesystem config files](https://github.com/orcasound/aif
 
 ```yaml
 model_hf_repo_id: "davethaler/whale-call-detector"
-threshold: 0.5
-min_num_positive_calls_threshold: 2
+pred_local_threshold: 0.5
+pred_global_threshold: 0.5
+require_n_positive_segments: 2
+use_strict_require_n: false
+aggregation_strategy: mean_thresholded
 ```
+
+`pred_local_threshold` selects scores for `mean_thresholded` aggregation and
+counts positive segments. `pred_global_threshold` is applied to the continuous
+aggregated confidence. `aggregation_strategy` also accepts `mean_top_k` with a
+positive `mean_top_k` value.
+
+When omitted, split thresholds fall back to `pred_threshold`, then the legacy
+`threshold`, then `0.5`. `min_num_positive_calls_threshold` maps to
+`require_n_positive_segments` unless that key is explicit. The legacy key does
+not enable strict gating; `use_strict_require_n` defaults to `false`.
+For uploaded detections, `globalPredictionLabel` and `tags` use the detected
+positive class. `modelGlobalPredictionLabel` and
+`modelGlobalPredictionLabels` retain the model's raw global classes.
 
 ## GitHub CI configuration
 

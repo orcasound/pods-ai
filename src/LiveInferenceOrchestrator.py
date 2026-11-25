@@ -15,6 +15,7 @@ from typing import Any, Optional
 import requests
 
 from model_inference import get_model_inference
+from model_revisions import LATEST_PODSAI_MODEL_REVISION
 from pytz import timezone as pytz_tz
 from run_inference import build_tags_list
 
@@ -32,7 +33,6 @@ ORCASOUND_S3_BUCKET = "audio-orcasound-net"
 NEGATIVE_LABELS = {"abiotic", "other", "water", "vessel", "jingle", "human", "bird"}
 
 PODSAI_MODEL_ID = "davethaler/whale-call-detector"
-from model_revisions import LATEST_PODSAI_MODEL_REVISION
 
 def get_hydro_attributes_from_feed() -> dict:
     hydrophone_location_data = {}
@@ -158,14 +158,25 @@ def build_cosmosdb_metadata(
     )
 
     global_label = result.get("global_prediction_label", "")
-    local_labels = [
-        prediction_to_label(p, id2label)
-        for p in result.get("local_predictions", [])
-    ]
+    if result.get("global_detection"):
+        tag_result = {
+            "global_prediction_label": global_label,
+            "global_prediction_labels": result.get(
+                "global_prediction_labels", [global_label]
+            ),
+            "local_predictions": result.get(
+                "global_prediction_labels", [global_label]
+            ),
+        }
+        tags = build_tags_list(
+            tag_result, id2label=id2label, negative_labels=negative_labels
+        )
+    else:
+        tags = build_tags_list(
+            result, id2label=id2label, negative_labels=negative_labels
+        )
 
-    tags = build_tags_list(result, id2label=id2label, negative_labels=negative_labels)
-
-    return {
+    metadata = {
         "id": str(uuid.uuid4()),
         "modelId": model_id,
         "audioUri": audio_uri,
@@ -179,6 +190,17 @@ def build_cosmosdb_metadata(
         "predictions": prediction_list,
         "tags": ";".join(tags),
     }
+    if "raw_global_prediction_label" in result:
+        metadata["modelGlobalPredictionLabel"] = result[
+            "raw_global_prediction_label"
+        ]
+    if "raw_global_prediction_labels" in result:
+        metadata["modelGlobalPredictionLabels"] = result[
+            "raw_global_prediction_labels"
+        ]
+    if "num_local_positives" in result:
+        metadata["numLocalPositives"] = int(result["num_local_positives"])
+    return metadata
 
 
 def parse_args() -> argparse.Namespace:
@@ -249,11 +271,125 @@ def setup_logger(connection_string: Optional[str], log_level: str = "DEBUG") -> 
     return logger
 
 
+def resolve_detection_config(orch_config: dict[str, Any]) -> dict[str, Any]:
+    """Resolve split thresholds and positive-segment settings from config."""
+    single_threshold = float(
+        orch_config.get("pred_threshold", orch_config.get("threshold", 0.5))
+    )
+    legacy_minimum = orch_config.get("min_num_positive_calls_threshold")
+    require_n = int(
+        orch_config.get(
+            "require_n_positive_segments",
+            legacy_minimum if legacy_minimum is not None else 2,
+        )
+    )
+    if require_n < 0:
+        raise ValueError("require_n_positive_segments must be non-negative")
+
+    global_prediction_config = orch_config.get("global_prediction", {})
+    return {
+        "pred_local_threshold": float(
+            orch_config.get("pred_local_threshold", single_threshold)
+        ),
+        "pred_global_threshold": float(
+            orch_config.get("pred_global_threshold", single_threshold)
+        ),
+        "require_n_positive_segments": require_n,
+        "use_strict_require_n": bool(orch_config.get("use_strict_require_n", False)),
+        "aggregation_strategy": orch_config.get(
+            "aggregation_strategy",
+            global_prediction_config.get("aggregation_strategy", "mean_thresholded"),
+        ),
+        "mean_top_k": orch_config.get(
+            "mean_top_k", global_prediction_config.get("mean_top_k")
+        ),
+    }
+
+
+def aggregate_local_scores(
+    local_scores: list[float], detection_config: dict[str, Any]
+) -> float:
+    """Aggregate continuous local scores for the global confidence."""
+    if not local_scores:
+        return 0.0
+
+    strategy = detection_config["aggregation_strategy"]
+    if strategy == "mean_thresholded":
+        threshold = detection_config["pred_local_threshold"]
+        selected_scores = [score for score in local_scores if score >= threshold]
+    elif strategy == "mean_top_k":
+        top_k = detection_config["mean_top_k"]
+        if top_k is None or int(top_k) <= 0:
+            raise ValueError("mean_top_k aggregation requires a positive mean_top_k")
+        selected_scores = sorted(local_scores, reverse=True)[: int(top_k)]
+    else:
+        raise ValueError(f"Unsupported aggregation_strategy: {strategy!r}")
+
+    return sum(selected_scores) / len(selected_scores) if selected_scores else 0.0
+
+
+def evaluate_global_detection(
+    local_scores: list[float], detection_config: dict[str, Any]
+) -> dict[str, Any]:
+    """Return global confidence, threshold count, and the configured decision."""
+    global_confidence = aggregate_local_scores(local_scores, detection_config)
+    num_local_positives = sum(
+        score >= detection_config["pred_local_threshold"] for score in local_scores
+    )
+    global_detection = bool(local_scores) and (
+        global_confidence >= detection_config["pred_global_threshold"]
+    )
+    if detection_config["use_strict_require_n"]:
+        global_detection = global_detection and (
+            num_local_positives >= detection_config["require_n_positive_segments"]
+        )
+
+    return {
+        "global_confidence": global_confidence,
+        "num_local_positives": num_local_positives,
+        "global_detection": global_detection,
+    }
+
+
+def detection_labels(
+    result: dict[str, Any],
+    raw_global_label: str,
+    id2label: Optional[dict[int, str]] = None,
+) -> list[str]:
+    """Return positive class labels to attach to a score-based detection."""
+    labels = []
+    for prediction in result.get("global_prediction_labels", []):
+        label = prediction_to_label(prediction, id2label)
+        if is_positive_label(label) and label not in labels:
+            labels.append(label)
+    if labels:
+        return labels
+
+    scored_labels = []
+    for index, (prediction, score) in enumerate(
+        zip(result.get("local_predictions", []), result.get("local_confidences", []))
+    ):
+        label = prediction_to_label(prediction, id2label)
+        if is_positive_label(label):
+            scored_labels.append((float(score), index, label))
+    for _score, _index, label in sorted(
+        scored_labels, key=lambda item: (-item[0], item[1])
+    ):
+        if label not in labels:
+            labels.append(label)
+    if labels:
+        return labels
+    if is_positive_label(raw_global_label):
+        return [raw_global_label]
+    return ["whale"]
+
+
 def load_model(orch_config: dict[str, Any], logger: logging.Logger) -> Any:
     """Load PODS-AI model using the model_inference factory."""
     model_path = orch_config.get("model_hf_repo_id", PODSAI_MODEL_ID)
     model_revision = orch_config.get("model_hf_repo_revision", LATEST_PODSAI_MODEL_REVISION)
-    threshold = float(orch_config.get("threshold", 0.5))
+    detection_config = resolve_detection_config(orch_config)
+    threshold = detection_config["pred_local_threshold"]
     min_num_positive_calls_threshold = int(
         orch_config.get("min_num_positive_calls_threshold", 2)
     )
@@ -432,14 +568,32 @@ def _process_segment(
         result.get("global_prediction_label", ""),
         id2label,
     )
-    global_confidence = float(result.get("global_confidence", 0.0))
+    detection_metrics = evaluate_global_detection(
+        [float(score) for score in result.get("local_confidences", [])],
+        resolve_detection_config(orch_config),
+    )
+    global_confidence = detection_metrics["global_confidence"]
+    result["global_confidence"] = global_confidence
+    result["num_local_positives"] = detection_metrics["num_local_positives"]
+    detected = detection_metrics["global_detection"]
+    if detected:
+        result["raw_global_prediction_label"] = global_prediction_label
+        result["raw_global_prediction_labels"] = result.get(
+            "global_prediction_labels", []
+        )
+        result["global_prediction_labels"] = detection_labels(
+            result, global_prediction_label, id2label
+        )
+        result["global_prediction_label"] = result["global_prediction_labels"][0]
+    result["global_detection"] = detected
     positive_segments = count_positive_segments(result, id2label=id2label)
-    detected = is_positive_label(global_prediction_label)
+    detection_label = result.get("global_prediction_label", global_prediction_label)
 
     logger.info(
         f"Inference: prediction={global_prediction_label}, "
         f"confidence={global_confidence:.3f}, "
-        f"positive_segments={positive_segments}/{len(result.get('local_predictions', []))}",
+        f"positive_segments={positive_segments}/{len(result.get('local_predictions', []))}, "
+        f"num_local_positives={detection_metrics['num_local_positives']}/{len(result.get('local_confidences', []))}",
         extra={"custom_dimensions": {"Hydrophone ID": hls_hydrophone_id}},
     )
 
@@ -452,7 +606,7 @@ def _process_segment(
 
     if detected:
         logger.info(
-            f"Whale call detected ({global_prediction_label}, confidence={global_confidence:.3f})",
+            f"Whale call detected ({detection_label}, confidence={global_confidence:.3f})",
             extra={"custom_dimensions": {"Hydrophone ID": hls_hydrophone_id}},
         )
         if orch_config["upload_to_azure"] and spectrogram_path is not None:
