@@ -436,9 +436,9 @@ def test_download_from_url_removes_partial_file_before_retry(tmp_path):
     assert destination.read_bytes() == b"complete"
 
 
-def test_download_60s_audio_rounds_end_then_subtracts_clip_and_startup_offset():
+def test_download_60s_audio_rounds_end_then_subtracts_clip_offset():
     with patch("audio_utils.download_audio_from_start_utc", return_value="clip.wav") as download:
-        result = download_60s_audio("rpi_test", "2025_01_01_00_01_02_PST", "tmp")
+        result = download_60s_audio("rpi_test", "2025_01_01_00_01_00_PST", "tmp")
 
     assert result == "clip.wav"
     download.assert_called_once_with(
@@ -449,10 +449,10 @@ def test_download_60s_audio_rounds_end_then_subtracts_clip_and_startup_offset():
     )
 
 
-def test_download_60s_audio_from_start_applies_orcasite_hls_offset():
+def test_download_60s_audio_from_start_applies_no_offset():
     with patch("audio_utils.download_audio_from_start_utc", return_value="clip.wav") as download:
         result = download_60s_audio_from_start(
-            "rpi_test", "2025_01_01_00_00_02_PST", "tmp"
+            "rpi_test", "2025_01_01_00_00_00_PST", "tmp"
         )
 
     assert result == "clip.wav"
