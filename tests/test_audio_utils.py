@@ -5,11 +5,10 @@ import os
 import time
 import urllib.error
 from datetime import datetime, timedelta, timezone
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 import pytest
 import requests
-import m3u8
 
 import audio_utils
 from audio_utils import (
@@ -54,211 +53,36 @@ def test_s3_folder_listing_delegates_to_orca_hls_utils():
     )
 
 
-def test_download_audio_crops_and_concatenates_released_playlist_segments(tmp_path):
+def test_download_audio_uses_date_range_hls_stream(tmp_path):
     start = datetime(2025, 1, 1, 0, 0, 5, tzinfo=timezone.utc)
-    folder = int(start.timestamp()) - 5
-    playlist = m3u8.loads(
-        "#EXTM3U\n#EXTINF:10,\nlive000.ts\n#EXTINF:10,\nlive001.ts\n",
-        uri="https://example.org/hls/live.m3u8",
-    )
+    wav_path = str(tmp_path / "clip.wav")
+    with patch("audio_utils.DateRangeHLSStream") as stream_class:
+        stream_class.return_value.get_next_clip.return_value = (wav_path, "clip", None)
 
-    def download_segment(url, directory):
-        (tmp_path / url.rsplit("/", 1)[-1]).write_bytes(url[-6:].encode())
-
-    with (
-        patch("audio_utils.get_cached_folders", return_value=[str(folder)]),
-        patch("audio_utils.m3u8.load", return_value=playlist) as load,
-        patch("audio_utils.scraper.download_from_url", side_effect=download_segment) as download,
-        patch("audio_utils.ffmpeg.input", return_value="input") as ffmpeg_input,
-        patch("audio_utils.ffmpeg.output", return_value="output") as ffmpeg_output,
-        patch("audio_utils.ffmpeg.run") as ffmpeg_run,
-    ):
-        result = download_audio_from_start_utc("rpi_orcasound_lab", start, str(tmp_path), 8)
-
-    assert load.call_args.args[0].endswith(f"/{folder}/archive.m3u8")
-    assert download.call_count == 2
-    ffmpeg_input.assert_called_once_with(
-        tmp_path / "temp_8s_rpi_orcasound_lab_segments.ts", ss=5
-    )
-    assert (tmp_path / "temp_8s_rpi_orcasound_lab_segments.ts").read_bytes() == b"000.ts001.ts"
-    assert ffmpeg_output.call_args.kwargs["t"] == 8
-    ffmpeg_run.assert_called_once_with("output", overwrite_output=True, quiet=True)
-    assert result == str(tmp_path / "temp_8s_rpi_orcasound_lab_2024_12_31_16_00_05_PST.wav")
-
-
-@pytest.mark.parametrize("has_pdt", [False, True])
-@pytest.mark.parametrize("sequence", [None, 0, 1])
-def test_playlist_start_timestamp(tmp_path, has_pdt, sequence):
-    start = datetime(2025, 1, 1, 0, 0, 15, tzinfo=timezone.utc)
-    folder = int(start.timestamp())
-    pdt = "#EXT-X-PROGRAM-DATE-TIME:2025-01-01T00:00:10Z\n" if has_pdt else ""
-    sequence_tag = f"#EXT-X-MEDIA-SEQUENCE:{sequence}\n" if sequence is not None else ""
-    content = (
-        f"#EXTM3U\n{sequence_tag}{pdt}#EXTINF:10,\nlive001.ts\n"
-    )
-    with (
-        patch("audio_utils.get_cached_folders", return_value=[str(folder)]),
-        patch("audio_utils.m3u8.load", side_effect=lambda url, **kwargs: m3u8.loads(
-            content, uri="https://example.org/hls/live.m3u8", **kwargs
-        )),
-        patch("audio_utils.scraper.download_from_url") as download,
-        patch("audio_utils.ffmpeg.input", return_value="input") as ffmpeg_input,
-        patch("audio_utils.ffmpeg.output", return_value="output"),
-        patch("audio_utils.ffmpeg.run"),
-    ):
-        result = download_audio_from_start_utc("node", start, str(tmp_path), 3)
-    assert (result is not None) == (has_pdt or sequence is None)
-    if result is not None:
-        download.assert_called_once_with("https://example.org/hls/live001.ts", str(tmp_path))
-        ffmpeg_input.assert_called_once_with(tmp_path / "live001.ts", ss=5 if has_pdt else 0)
-    else:
-        download.assert_not_called()
-
-
-def test_download_retries_and_falls_back_to_live_playlist(tmp_path):
-    start = datetime(2025, 1, 1, tzinfo=timezone.utc)
-    playlist = m3u8.loads(
-        "#EXTM3U\n#EXTINF:10,\nlive000.ts\n",
-        uri="https://example.org/hls/live.m3u8",
-    )
-    missing = urllib.error.HTTPError("url", 404, "missing", None, None)
-    with (
-        patch("audio_utils.get_cached_folders", return_value=[str(int(start.timestamp()))]),
-        patch("audio_utils.m3u8.load", side_effect=[
-            missing, requests.exceptions.ConnectionError("temporary"), playlist,
-        ]) as load,
-        patch("audio_utils.time.sleep") as sleep,
-        patch("audio_utils.scraper.download_from_url"),
-        patch("audio_utils.ffmpeg.input", return_value="input"),
-        patch("audio_utils.ffmpeg.output", return_value="output"),
-        patch("audio_utils.ffmpeg.run"),
-    ):
-        result = download_audio_from_start_utc("node", start, str(tmp_path), 3)
-    assert result is not None
-    assert load.call_count == 3
-    assert load.call_args.args[0].endswith("/live.m3u8")
-    sleep.assert_called_once_with(1)
-
-
-@pytest.mark.parametrize("second_start", ["00:00:20", "00:00:09"])
-def test_download_rejects_timestamp_gap_or_overlap(tmp_path, second_start):
-    start = datetime(2025, 1, 1, 0, 0, 8, tzinfo=timezone.utc)
-    playlist = m3u8.loads(
-        "#EXTM3U\n#EXT-X-PROGRAM-DATE-TIME:2025-01-01T00:00:00Z\n"
-        "#EXTINF:10,\nlive000.ts\n"
-        f"#EXT-X-PROGRAM-DATE-TIME:2025-01-01T{second_start}Z\n"
-        "#EXTINF:10,\nlive001.ts\n",
-        uri="https://example.org/hls/live.m3u8",
-    )
-    with (
-        patch("audio_utils.get_cached_folders", return_value=[str(int(start.timestamp()) - 8)]),
-        patch("audio_utils.m3u8.load", return_value=playlist),
-        patch("audio_utils.scraper.download_from_url") as download,
-    ):
-        assert download_audio_from_start_utc("node", start, str(tmp_path), 15) is None
-    download.assert_not_called()
-
-
-@pytest.mark.parametrize(
-    ("offset", "duration", "expected_uri"),
-    [
-        (5, 6, None),
-        (12, 2, None),
-        (19, 3, None),
-        (0, 10, "live10.ts"),
-        (20, 2, "live12.ts"),
-    ],
-)
-def test_download_respects_gap_tags(tmp_path, offset, duration, expected_uri):
-    start = datetime(2025, 1, 1, tzinfo=timezone.utc)
-    playlist = m3u8.loads(
-        "#EXTM3U\n#EXT-X-PROGRAM-DATE-TIME:2025-01-01T00:00:00Z\n"
-        "#EXTINF:10,\nlive10.ts\n"
-        "#EXT-X-GAP\n#EXTINF:10,\nlive11.ts\n"
-        "#EXTINF:10,\nlive12.ts\n",
-        uri="https://example.org/hls/live.m3u8",
-    )
-    with (
-        patch("audio_utils.get_cached_folders", return_value=[str(int(start.timestamp()))]),
-        patch("audio_utils.m3u8.load", return_value=playlist),
-        patch("audio_utils.scraper.download_from_url") as download,
-        patch("audio_utils.ffmpeg.input", return_value="input"),
-        patch("audio_utils.ffmpeg.output", return_value="output"),
-        patch("audio_utils.ffmpeg.run"),
-    ):
         result = download_audio_from_start_utc(
-            "node", start + timedelta(seconds=offset), str(tmp_path), duration
+            "rpi_orcasound_lab", start, str(tmp_path), 8
         )
 
-    assert (result is not None) == (expected_uri is not None)
-    if expected_uri is None:
-        download.assert_not_called()
-    else:
-        download.assert_called_once_with(f"https://example.org/hls/{expected_uri}", str(tmp_path))
+    assert result == wav_path
+    stream_class.assert_called_once_with(
+        "https://s3-us-west-2.amazonaws.com/audio-orcasound-net/rpi_orcasound_lab",
+        8,
+        start.timestamp(),
+        start.timestamp() + 8,
+        str(tmp_path),
+        overwrite_output=True,
+    )
+    stream_class.return_value.get_next_clip.assert_called_once_with()
 
 
-def test_download_falls_back_when_archive_has_gap(tmp_path):
+def test_download_audio_returns_none_when_date_range_has_no_clip(tmp_path):
     start = datetime(2025, 1, 1, tzinfo=timezone.utc)
-    gap = m3u8.loads(
-        "#EXTM3U\n#EXT-X-GAP\n#EXTINF:10,\nmissing.ts\n",
-        uri="https://example.org/hls/archive.m3u8",
-    )
-    live = m3u8.loads(
-        "#EXTM3U\n#EXTINF:10,\navailable.ts\n",
-        uri="https://example.org/hls/live.m3u8",
-    )
-    with (
-        patch("audio_utils.get_cached_folders", return_value=[str(int(start.timestamp()))]),
-        patch("audio_utils.m3u8.load", side_effect=[gap, live]) as load,
-        patch("audio_utils.scraper.download_from_url") as download,
-        patch("audio_utils.ffmpeg.input", return_value="input"),
-        patch("audio_utils.ffmpeg.output", return_value="output"),
-        patch("audio_utils.ffmpeg.run"),
-    ):
-        assert download_audio_from_start_utc("node", start, str(tmp_path), 3) is not None
-    assert load.call_count == 2
-    download.assert_called_once_with("https://example.org/hls/available.ts", str(tmp_path))
+    with patch("audio_utils.DateRangeHLSStream") as stream_class:
+        stream_class.return_value.get_next_clip.return_value = (None, None, None)
 
+        result = download_audio_from_start_utc("node", start, str(tmp_path), 3)
 
-def test_segment_filenames_do_not_define_media_sequence():
-    playlist = m3u8.loads(
-        "#EXTM3U\n#EXT-X-MEDIA-SEQUENCE:10\n"
-        "#EXT-X-PROGRAM-DATE-TIME:2025-01-01T00:00:00Z\n"
-        "#EXTINF:10,\nlive10.ts\n#EXTINF:10,\nlive12.ts\n",
-        uri="https://example.org/hls/live.m3u8",
-    )
-    start = datetime(2025, 1, 1, tzinfo=timezone.utc).timestamp()
-    timeline = audio_utils._playlist_timeline(playlist, int(start))
-
-    assert playlist.media_sequence == 10
-    assert [segment.uri for segment in playlist.segments] == ["live10.ts", "live12.ts"]
-    assert audio_utils._segments_cover_interval(timeline, start, start + 20)
-
-
-def test_download_checks_older_folders_and_empty_list(tmp_path):
-    start = datetime(2025, 1, 1, tzinfo=timezone.utc)
-    folder = int(start.timestamp()) - 20
-    playlist = m3u8.loads(
-        "#EXTM3U\n#EXTINF:30,\nlive000.ts\n",
-        uri="https://example.org/hls/live.m3u8",
-    )
-    with (
-        patch("audio_utils.get_cached_folders", return_value=[
-            str(folder - 86400), str(folder), str(folder + 10),
-        ]),
-        patch("audio_utils.m3u8.load", side_effect=[
-            m3u8.loads("#EXTM3U"), m3u8.loads("#EXTM3U"), playlist,
-        ]) as load,
-        patch("audio_utils.scraper.download_from_url"),
-        patch("audio_utils.ffmpeg.input", return_value="input") as ffmpeg_input,
-        patch("audio_utils.ffmpeg.output", return_value="output"),
-        patch("audio_utils.ffmpeg.run"),
-    ):
-        assert download_audio_from_start_utc("node", start, str(tmp_path), 3) is not None
-        ffmpeg_input.assert_called_once_with(tmp_path / "live000.ts", ss=20)
-        assert load.call_count == 3
-    with patch("audio_utils.get_cached_folders", return_value=[]):
-        assert download_audio_from_start_utc("node", start, str(tmp_path), 3) is None
+    assert result is None
 
 
 def test_download_from_url_retries_transient_network_failures(tmp_path):

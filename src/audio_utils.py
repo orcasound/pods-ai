@@ -13,19 +13,17 @@ import http.client
 from pathlib import Path
 from typing import List, Optional
 import os
-import shutil
 import time
 import urllib.error
 
 from azure.cosmos import CosmosClient
-import ffmpeg
-import m3u8
 import requests
 try:
     from orcasite_feeds import OrcasiteFeed
 except ImportError:  # pragma: no cover
     from src.orcasite_feeds import OrcasiteFeed
 from orca_hls import get_scraper, get_s3_utils
+from orca_hls_utils.DateRangeHLSStream import DateRangeHLSStream
 from pytz import timezone
 
 scraper = get_scraper()
@@ -255,71 +253,8 @@ def download_60s_audio_from_start(
     return download_audio_from_start_utc(node_name, start_time_utc, tmp_dir, 60)
 
 
-def _build_clip_id(start_time_utc: datetime) -> str:
-    return start_time_utc.astimezone(PACIFIC_TZ).strftime("%Y_%m_%d_%H_%M_%S_%Z")
-
-
 def format_utc_iso_z(dt: datetime) -> str:
     return dt.astimezone(UTC_TZ).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-
-def _segments_cover_interval(segments, start_time: float, end_time: float) -> bool:
-    """Return whether segment timestamps continuously cover the requested interval."""
-    if (
-        not segments
-        or any(segment.gap for segment in segments)
-        or segments[0].start > start_time + 1e-6
-    ):
-        return False
-    covered_until = segments[0].start + segments[0].duration
-    for segment in segments[1:]:
-        if abs(segment.start - covered_until) > 1e-6:
-            return False
-        covered_until = segment.start + segment.duration
-    return covered_until >= end_time - 1e-6
-
-
-@dataclass
-class _TimedSegment:
-    start: float
-    duration: float
-    url: str
-    gap: bool
-
-
-def _track_media_sequence_tag(line, lineno, data, state):
-    # m3u8 defaults an absent media sequence to zero, losing tag presence.
-    if line.startswith("#EXT-X-MEDIA-SEQUENCE:"):
-        data["has_media_sequence_tag"] = True
-
-
-def _playlist_timeline(playlist, folder: int):
-    """Build a timeline only when the playlist has a reliable starting time."""
-    if not playlist.segments:
-        return []
-    first = playlist.segments[0]
-    timestamp = first.program_date_time or first.current_program_date_time
-    if timestamp is None and (
-        playlist.media_sequence or playlist.data.get("has_media_sequence_tag")
-    ):
-        return []
-    start = timestamp.timestamp() if timestamp else float(folder)
-    timeline = []
-    for segment in playlist.segments:
-        timestamp = segment.program_date_time or segment.current_program_date_time
-        if segment.discontinuity and not segment.program_date_time:
-            return []
-        if timestamp:
-            if timestamp.utcoffset() is None:
-                return []
-            start = timestamp.timestamp()
-        if segment.duration <= 0:
-            return []
-        timeline.append(
-            _TimedSegment(start, segment.duration, segment.absolute_uri, bool(segment.gap_tag))
-        )
-        start += segment.duration
-    return timeline
 
 
 def download_audio_from_start_utc(
@@ -330,106 +265,24 @@ def download_audio_from_start_utc(
 ) -> Optional[str]:
     """Download a clip beginning at start_time_utc and lasting for duration_seconds."""
     try:
-        # Normalize the requested start and calculate the interval to crop.
         start_time_utc = (
             start_time_utc.replace(tzinfo=UTC_TZ)
             if start_time_utc.tzinfo is None
             else start_time_utc.astimezone(UTC_TZ)
         )
         start_timestamp = start_time_utc.timestamp()
-        end_timestamp = start_timestamp + duration_seconds
-        stream_base = (
-            "https://s3-us-west-2.amazonaws.com/"
-            f"audio-orcasound-net/{node_name}"
+        stream = DateRangeHLSStream(
+            f"https://s3-us-west-2.amazonaws.com/audio-orcasound-net/{node_name}",
+            duration_seconds,
+            start_timestamp,
+            start_timestamp + duration_seconds,
+            tmp_dir,
+            overwrite_output=True,
         )
-        # Limit the search to HLS folders that may contain the requested interval.
-        valid_folders = sorted(
-            (int(folder) for folder in get_cached_folders(
-                "audio-orcasound-net", f"{node_name}/hls/"
-            ) if start_timestamp - 86400 <= int(folder) <= end_timestamp),
-            reverse=True,
-        )
-        if not valid_folders:
+        wav_file_path, _, _ = stream.get_next_clip()
+        if wav_file_path is None:
             print(f"  Warning: No audio found for {start_time_utc}")
             return None
-
-        # Load candidate playlists, build their timelines, and select full coverage.
-        selected_segments = None
-        for folder in valid_folders:
-            for manifest in ("archive.m3u8", "live.m3u8"):
-                url = f"{stream_base}/hls/{folder}/{manifest}"
-                for attempt in range(3):
-                    try:
-                        playlist = m3u8.load(url, custom_tags_parser=_track_media_sequence_tag)
-                        break
-                    except urllib.error.HTTPError as error:
-                        if error.code == 404:
-                            playlist = None
-                            break
-                        if attempt == 2:
-                            playlist = None
-                        else:
-                            time.sleep(1)
-                    except Exception:
-                        if attempt == 2:
-                            playlist = None
-                        else:
-                            time.sleep(1)
-                if playlist is None:
-                    continue
-                timeline = _playlist_timeline(playlist, folder)
-                selected_segments = [
-                    segment for segment in timeline
-                    if segment.start < end_timestamp
-                    and segment.start + segment.duration > start_timestamp
-                ]
-                if _segments_cover_interval(
-                    selected_segments, start_timestamp, end_timestamp
-                ):
-                    break
-                selected_segments = None
-            if selected_segments:
-                break
-
-        if not selected_segments:
-            print(f"  Warning: No audio found for {start_time_utc}")
-            return None
-
-        # Download and concatenate the selected transport-stream segments.
-        downloaded_segments = []
-        for segment in selected_segments:
-            download_from_url(segment.url, tmp_dir)
-            downloaded_segments.append(
-                Path(tmp_dir) / segment.url.rsplit("/", 1)[-1]
-            )
-
-        if len(downloaded_segments) == 1:
-            source_path = downloaded_segments[0]
-        else:
-            source_path = Path(tmp_dir) / (
-                f"temp_{duration_seconds:g}s_{node_name}_segments.ts"
-            )
-            with open(source_path, "wb") as output_file:
-                for segment_path in downloaded_segments:
-                    with open(segment_path, "rb") as input_file:
-                        shutil.copyfileobj(input_file, output_file)
-
-        ss_offset = start_timestamp - selected_segments[0].start
-        clip_id = _build_clip_id(start_time_utc)
-        wav_file_path = str(
-            Path(tmp_dir) / f"temp_{duration_seconds:g}s_{node_name}_{clip_id}.wav"
-        )
-        # Convert the segment stream into exactly the requested WAV interval.
-        stream = ffmpeg.input(source_path, ss=ss_offset)
-        stream = ffmpeg.output(
-            stream,
-            wav_file_path,
-            t=duration_seconds,
-            acodec="pcm_s16le",
-            ar=44100,
-            ac=1,
-        )
-        ffmpeg.run(stream, overwrite_output=True, quiet=True)
         print(f"  Downloaded {duration_seconds:g}s audio: {wav_file_path}")
         return wav_file_path
     except Exception as e:
