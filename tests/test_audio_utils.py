@@ -25,6 +25,13 @@ from audio_utils import (
 )
 
 
+@pytest.fixture(autouse=True)
+def isolate_folder_cache():
+    """Keep folder listings isolated between tests."""
+    with patch.dict(audio_utils._FOLDERS_CACHE, {}, clear=True):
+        yield
+
+
 def _write_segment(url, directory):
     (Path(directory) / os.path.basename(url)).write_bytes(b"segment")
 
@@ -292,6 +299,7 @@ def test_download_falls_back_to_live_playlist(tmp_path):
 
 
 def test_download_refreshes_folders_and_accepts_old_folder(tmp_path):
+    """Refresh an empty cached listing and reuse it for subsequent clips."""
     start = datetime(2025, 1, 2, tzinfo=timezone.utc)
     playlist = m3u8.loads(
         "#EXTM3U\n#EXT-X-PROGRAM-DATE-TIME:2025-01-02T00:00:00Z\n"
@@ -299,16 +307,54 @@ def test_download_refreshes_folders_and_accepts_old_folder(tmp_path):
         uri="https://s3-us-west-2.amazonaws.com/audio-orcasound-net/hls/archive.m3u8",
     )
     with (
-        patch("audio_utils.get_all_folders", side_effect=[[], [str(int(start.timestamp()) - 90000)]]),
+        patch("audio_utils.get_all_folders", side_effect=[[], [str(int(start.timestamp()) - 90000)]]) as folders,
         patch("audio_utils.m3u8.load", return_value=playlist) as load,
         patch("audio_utils.scraper.download_from_url", side_effect=_write_segment),
         patch("audio_utils.ffmpeg.input", return_value="input"),
         patch("audio_utils.ffmpeg.output", return_value="output"),
         patch("audio_utils.ffmpeg.run"),
     ):
-        assert download_audio_from_start_utc("node", start, str(tmp_path), 3) is None
+        assert audio_utils.get_cached_folders("audio-orcasound-net", "node/hls/") == []
         assert download_audio_from_start_utc("node", start, str(tmp_path), 3) is not None
+        assert download_audio_from_start_utc("node", start, str(tmp_path), 3) is not None
+    assert folders.call_count == 2
     assert f"/{int(start.timestamp()) - 90000}/" in load.call_args.args[0]
+
+
+def test_download_reuses_cached_folders(tmp_path):
+    """Share the batch folder listing across repeated clip downloads."""
+    start = datetime(2025, 1, 1, tzinfo=timezone.utc)
+    playlist = m3u8.loads(
+        "#EXTM3U\n#EXTINF:10,\nlive.ts\n",
+        uri="https://s3-us-west-2.amazonaws.com/audio-orcasound-net/hls/live.m3u8",
+    )
+    with (
+        patch("audio_utils.get_all_folders", return_value=[str(int(start.timestamp()) - 2)]) as folders,
+        patch("audio_utils.m3u8.load", return_value=playlist),
+        patch("audio_utils.scraper.download_from_url", side_effect=_write_segment),
+        patch("audio_utils.ffmpeg.input", return_value="input"),
+        patch("audio_utils.ffmpeg.output", return_value="output"),
+        patch("audio_utils.ffmpeg.run"),
+    ):
+        audio_utils.get_cached_folders("audio-orcasound-net", "node/hls/")
+        for _ in range(2):
+            assert download_audio_from_start_utc("node", start, str(tmp_path), 3) is not None
+    folders.assert_called_once_with("audio-orcasound-net", "node/hls/")
+
+
+@pytest.mark.parametrize("cached_folders", [[], ["1900000000"]])
+def test_download_refreshes_only_once_without_candidate(tmp_path, cached_folders):
+    """Bound refreshes when neither listing contains a candidate folder."""
+    audio_utils._FOLDERS_CACHE["audio-orcasound-net::node/hls/"] = cached_folders
+    with (
+        patch("audio_utils.get_all_folders", return_value=cached_folders) as folders,
+        patch("audio_utils.m3u8.load") as load,
+    ):
+        assert download_audio_from_start_utc(
+            "node", datetime(2025, 1, 1, tzinfo=timezone.utc), str(tmp_path), 3
+        ) is None
+    folders.assert_called_once_with("audio-orcasound-net", "node/hls/")
+    load.assert_not_called()
 
 
 def test_download_rejects_untrusted_segment_url(tmp_path):

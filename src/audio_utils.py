@@ -74,13 +74,13 @@ def get_all_folders(bucket: str, prefix: str) -> List[str]:
     return s3_utils.get_all_folders(bucket, prefix)
 
 
-def get_cached_folders(bucket: str, prefix: str) -> List[str]:
+def get_cached_folders(bucket: str, prefix: str, refresh: bool = False) -> List[str]:
     """
     Return cached folder list for (bucket, prefix). If absent, call get_all_folders()
-    to populate the cache, then return the cached value.
+    to populate the cache, then return the cached value. Set refresh to reload it.
     """
     key = f"{bucket}::{prefix}"
-    if key not in _FOLDERS_CACHE:
+    if refresh or key not in _FOLDERS_CACHE:
         _FOLDERS_CACHE[key] = get_all_folders(bucket, prefix)
     return _FOLDERS_CACHE[key]
 
@@ -350,13 +350,16 @@ def download_audio_from_start_utc(
         start_timestamp = start_time_utc.timestamp()
         end_timestamp = start_timestamp + duration_seconds
         stream_base = f"https://s3-us-west-2.amazonaws.com/audio-orcasound-net/{node_name}"
-        folders = sorted(int(folder) for folder in get_all_folders(
-            "audio-orcasound-net", f"{node_name}/hls/"
-        ))
-        preceding = [folder for folder in folders if folder <= start_timestamp]
-        valid_folders = [folder for folder in folders if start_timestamp < folder <= end_timestamp]
-        if preceding:
-            valid_folders.insert(0, preceding[-1])
+        for refresh in (False, True):
+            folders = sorted(int(folder) for folder in get_cached_folders(
+                "audio-orcasound-net", f"{node_name}/hls/", refresh=refresh
+            ))
+            preceding = [folder for folder in folders if folder <= start_timestamp]
+            valid_folders = [folder for folder in folders if start_timestamp < folder <= end_timestamp]
+            if preceding:
+                valid_folders.insert(0, preceding[-1])
+            if valid_folders:
+                break
 
         selected_segments = None
         for folder in valid_folders:
