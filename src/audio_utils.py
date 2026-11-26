@@ -360,35 +360,32 @@ def download_audio_from_start_utc(
 
         selected_segments = None
         for folder in valid_folders:
-            for manifest in ("archive.m3u8", "live.m3u8"):
-                url = f"{stream_base}/hls/{folder}/{manifest}"
-                for attempt in range(3):
-                    try:
-                        playlist = m3u8.load(url, custom_tags_parser=_track_media_sequence_tag)
-                        break
-                    except urllib.error.HTTPError as error:
-                        if error.code == 404 or attempt == 2:
-                            playlist = None
-                            break
-                        time.sleep(1)
-                    except Exception:
-                        if attempt == 2:
-                            playlist = None
-                        else:
-                            time.sleep(1)
-                if playlist is None:
-                    continue
-                timeline = _playlist_timeline(playlist, folder)
-                selected_segments = [
-                    segment for segment in timeline
-                    if segment.start < end_timestamp
-                    and segment.start + segment.duration > start_timestamp
-                ]
-                if _segments_cover_interval(selected_segments, start_timestamp, end_timestamp):
+            url = f"{stream_base}/hls/{folder}/live.m3u8"
+            for attempt in range(3):
+                try:
+                    playlist = m3u8.load(url, custom_tags_parser=_track_media_sequence_tag)
                     break
-                selected_segments = None
-            if selected_segments:
+                except urllib.error.HTTPError as error:
+                    if error.code == 404 or attempt == 2:
+                        playlist = None
+                        break
+                    time.sleep(1)
+                except Exception:
+                    if attempt == 2:
+                        playlist = None
+                    else:
+                        time.sleep(1)
+            if playlist is None:
+                continue
+            timeline = _playlist_timeline(playlist, folder)
+            selected_segments = [
+                segment for segment in timeline
+                if segment.start < end_timestamp
+                and segment.start + segment.duration > start_timestamp
+            ]
+            if _segments_cover_interval(selected_segments, start_timestamp, end_timestamp):
                 break
+            selected_segments = None
 
         if not selected_segments:
             print(f"  Warning: No audio found for {start_time_utc}")
