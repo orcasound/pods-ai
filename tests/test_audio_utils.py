@@ -66,7 +66,7 @@ def test_download_audio_crops_and_concatenates_playlist_segments(tmp_path):
     start = datetime(2025, 1, 1, 0, 0, 5, tzinfo=timezone.utc)
     playlist = m3u8.loads(
         "#EXTM3U\n#EXTINF:10,\nlive000.ts\n#EXTINF:10,\nlive001.ts\n",
-        uri="https://example.org/hls/archive.m3u8",
+        uri="https://s3-us-west-2.amazonaws.com/audio-orcasound-net/hls/archive.m3u8",
     )
 
     def download_segment(url, directory):
@@ -77,7 +77,7 @@ def test_download_audio_crops_and_concatenates_playlist_segments(tmp_path):
         return "input"
 
     with (
-        patch("audio_utils.get_cached_folders", return_value=[str(int(start.timestamp()) - 5)]),
+        patch("audio_utils.get_all_folders", return_value=[str(int(start.timestamp()) - 5)]),
         patch("audio_utils.m3u8.load", return_value=playlist),
         patch("audio_utils.scraper.download_from_url", side_effect=download_segment) as download,
         patch("audio_utils.ffmpeg.input", side_effect=open_input) as ffmpeg_input,
@@ -101,7 +101,7 @@ def test_download_does_not_reuse_segments_with_the_same_basename(tmp_path):
     start = datetime(2025, 1, 1, tzinfo=timezone.utc)
     playlist = m3u8.loads(
         "#EXTM3U\n#EXTINF:10,\nfirst/live.ts\n#EXTINF:10,\nsecond/live.ts\n",
-        uri="https://example.org/hls/archive.m3u8",
+        uri="https://s3-us-west-2.amazonaws.com/audio-orcasound-net/hls/archive.m3u8",
     )
 
     def download_segment(url, directory):
@@ -112,7 +112,7 @@ def test_download_does_not_reuse_segments_with_the_same_basename(tmp_path):
         return "input"
 
     with (
-        patch("audio_utils.get_cached_folders", return_value=[str(int(start.timestamp()) - 2)]),
+        patch("audio_utils.get_all_folders", return_value=[str(int(start.timestamp()) - 2)]),
         patch("audio_utils.m3u8.load", return_value=playlist),
         patch("audio_utils.scraper.download_from_url", side_effect=download_segment),
         patch("audio_utils.ffmpeg.input", side_effect=open_input),
@@ -132,10 +132,10 @@ def test_download_audio_crops_real_audio_to_requested_interval(tmp_path):
     start = datetime(2025, 1, 1, 0, 0, 5, tzinfo=timezone.utc)
     playlist = m3u8.loads(
         "#EXTM3U\n#EXTINF:10,\nlive000.ts\n",
-        uri="https://example.org/hls/archive.m3u8",
+        uri="https://s3-us-west-2.amazonaws.com/audio-orcasound-net/hls/archive.m3u8",
     )
     with (
-        patch("audio_utils.get_cached_folders", return_value=[str(int(start.timestamp()) - 5)]),
+        patch("audio_utils.get_all_folders", return_value=[str(int(start.timestamp()) - 5)]),
         patch("audio_utils.m3u8.load", return_value=playlist),
         patch("audio_utils.scraper.download_from_url", side_effect=lambda url, directory: shutil.copyfile(
             source, Path(directory) / "live000.ts"
@@ -158,10 +158,10 @@ def test_download_rejects_timestamp_gap_or_overlap(tmp_path, second_start):
         "#EXTINF:10,\nlive000.ts\n"
         f"#EXT-X-PROGRAM-DATE-TIME:2025-01-01T{second_start}Z\n"
         "#EXTINF:10,\nlive001.ts\n",
-        uri="https://example.org/hls/archive.m3u8",
+        uri="https://s3-us-west-2.amazonaws.com/audio-orcasound-net/hls/archive.m3u8",
     )
     with (
-        patch("audio_utils.get_cached_folders", return_value=[str(int(start.timestamp()) - 8)]),
+        patch("audio_utils.get_all_folders", return_value=[str(int(start.timestamp()) - 8)]),
         patch("audio_utils.m3u8.load", return_value=playlist),
         patch("audio_utils.scraper.download_from_url") as download,
     ):
@@ -181,11 +181,11 @@ def test_thirty_second_request_requires_continuous_segments(tmp_path, third_time
         "#EXTINF:10,\nlive000.ts\n#EXTINF:10,\nlive001.ts\n"
         f"#EXT-X-PROGRAM-DATE-TIME:2025-01-01T{third_time}Z\n"
         "#EXTINF:10,\nlive002.ts\n",
-        uri="https://example.org/hls/archive.m3u8",
+        uri="https://s3-us-west-2.amazonaws.com/audio-orcasound-net/hls/archive.m3u8",
     )
 
     with (
-        patch("audio_utils.get_cached_folders", return_value=[str(int(start.timestamp()) - 2)]),
+        patch("audio_utils.get_all_folders", return_value=[str(int(start.timestamp()) - 2)]),
         patch("audio_utils.m3u8.load", return_value=playlist),
         patch("audio_utils.scraper.download_from_url", side_effect=_write_segment) as download,
         patch("audio_utils.ffmpeg.input", return_value="input"),
@@ -206,10 +206,10 @@ def test_download_respects_gap_tags(tmp_path, offset, duration, accepted):
         "#EXTM3U\n#EXT-X-PROGRAM-DATE-TIME:2025-01-01T00:00:00Z\n"
         "#EXTINF:10,\nlive000.ts\n#EXT-X-GAP\n#EXTINF:10,\nlive001.ts\n"
         "#EXTINF:10,\nlive002.ts\n",
-        uri="https://example.org/hls/archive.m3u8",
+        uri="https://s3-us-west-2.amazonaws.com/audio-orcasound-net/hls/archive.m3u8",
     )
     with (
-        patch("audio_utils.get_cached_folders", return_value=[str(int(start.timestamp()))]),
+        patch("audio_utils.get_all_folders", return_value=[str(int(start.timestamp()))]),
         patch("audio_utils.m3u8.load", return_value=playlist),
         patch("audio_utils.scraper.download_from_url", side_effect=_write_segment) as download,
         patch("audio_utils.ffmpeg.input", return_value="input"),
@@ -231,9 +231,9 @@ def test_playlist_start_timestamp(tmp_path, sequence, has_pdt):
     pdt = "#EXT-X-PROGRAM-DATE-TIME:2025-01-01T00:00:10Z\n" if has_pdt else ""
     content = f"#EXTM3U\n{sequence_tag}{pdt}#EXTINF:10,\nlive001.ts\n"
     with (
-        patch("audio_utils.get_cached_folders", return_value=[str(int(start.timestamp()) - 5)]),
+        patch("audio_utils.get_all_folders", return_value=[str(int(start.timestamp()) - 5)]),
         patch("audio_utils.m3u8.load", side_effect=lambda url, **kwargs: m3u8.loads(
-            content, uri="https://example.org/hls/live.m3u8", **kwargs
+            content, uri="https://s3-us-west-2.amazonaws.com/audio-orcasound-net/hls/live.m3u8", **kwargs
         )),
         patch("audio_utils.scraper.download_from_url", side_effect=_write_segment) as download,
         patch("audio_utils.ffmpeg.input", return_value="input") as ffmpeg_input,
@@ -255,10 +255,10 @@ def test_later_program_date_time_anchors_earlier_segment(tmp_path):
         "#EXTM3U\n#EXTINF:10,\nlive000.ts\n"
         "#EXT-X-PROGRAM-DATE-TIME:2025-01-01T00:00:20Z\n"
         "#EXTINF:10,\nlive001.ts\n",
-        uri="https://example.org/hls/archive.m3u8",
+        uri="https://s3-us-west-2.amazonaws.com/audio-orcasound-net/hls/archive.m3u8",
     )
     with (
-        patch("audio_utils.get_cached_folders", return_value=[str(int(start.timestamp()) - 12)]),
+        patch("audio_utils.get_all_folders", return_value=[str(int(start.timestamp()) - 12)]),
         patch("audio_utils.m3u8.load", return_value=playlist),
         patch("audio_utils.scraper.download_from_url", side_effect=_write_segment),
         patch("audio_utils.ffmpeg.input", return_value="input") as ffmpeg_input,
@@ -273,14 +273,14 @@ def test_download_falls_back_to_live_playlist(tmp_path):
     start = datetime(2025, 1, 1, tzinfo=timezone.utc)
     gap = m3u8.loads(
         "#EXTM3U\n#EXT-X-GAP\n#EXTINF:10,\nmissing.ts\n",
-        uri="https://example.org/hls/archive.m3u8",
+        uri="https://s3-us-west-2.amazonaws.com/audio-orcasound-net/hls/archive.m3u8",
     )
     live = m3u8.loads(
         "#EXTM3U\n#EXTINF:10,\navailable.ts\n",
-        uri="https://example.org/hls/live.m3u8",
+        uri="https://s3-us-west-2.amazonaws.com/audio-orcasound-net/hls/live.m3u8",
     )
     with (
-        patch("audio_utils.get_cached_folders", return_value=[str(int(start.timestamp()) - 2)]),
+        patch("audio_utils.get_all_folders", return_value=[str(int(start.timestamp()) - 2)]),
         patch("audio_utils.m3u8.load", side_effect=[gap, live]),
         patch("audio_utils.scraper.download_from_url", side_effect=_write_segment) as download,
         patch("audio_utils.ffmpeg.input", return_value="input"),
@@ -288,12 +288,66 @@ def test_download_falls_back_to_live_playlist(tmp_path):
         patch("audio_utils.ffmpeg.run"),
     ):
         assert download_audio_from_start_utc("node", start, str(tmp_path), 3) is not None
-    assert download.call_args.args[0] == "https://example.org/hls/available.ts"
+    assert download.call_args.args[0] == "https://s3-us-west-2.amazonaws.com/audio-orcasound-net/hls/available.ts"
+
+
+def test_download_refreshes_folders_and_accepts_old_folder(tmp_path):
+    start = datetime(2025, 1, 2, tzinfo=timezone.utc)
+    playlist = m3u8.loads(
+        "#EXTM3U\n#EXT-X-PROGRAM-DATE-TIME:2025-01-02T00:00:00Z\n"
+        "#EXTINF:10,\nlive.ts\n",
+        uri="https://s3-us-west-2.amazonaws.com/audio-orcasound-net/hls/archive.m3u8",
+    )
+    with (
+        patch("audio_utils.get_all_folders", side_effect=[[], [str(int(start.timestamp()) - 90000)]]),
+        patch("audio_utils.m3u8.load", return_value=playlist) as load,
+        patch("audio_utils.scraper.download_from_url", side_effect=_write_segment),
+        patch("audio_utils.ffmpeg.input", return_value="input"),
+        patch("audio_utils.ffmpeg.output", return_value="output"),
+        patch("audio_utils.ffmpeg.run"),
+    ):
+        assert download_audio_from_start_utc("node", start, str(tmp_path), 3) is None
+        assert download_audio_from_start_utc("node", start, str(tmp_path), 3) is not None
+    assert f"/{int(start.timestamp()) - 90000}/" in load.call_args.args[0]
+
+
+def test_download_rejects_untrusted_segment_url(tmp_path):
+    start = datetime(2025, 1, 1, tzinfo=timezone.utc)
+    playlist = m3u8.loads(
+        "#EXTM3U\n#EXTINF:10,\nhttp://127.0.0.1/private\n",
+        uri="https://s3-us-west-2.amazonaws.com/audio-orcasound-net/hls/archive.m3u8",
+    )
+    with (
+        patch("audio_utils.get_all_folders", return_value=[str(int(start.timestamp()) - 2)]),
+        patch("audio_utils.m3u8.load", return_value=playlist),
+        patch("audio_utils.scraper.download_from_url") as download,
+    ):
+        assert download_audio_from_start_utc("node", start, str(tmp_path), 3) is None
+    download.assert_not_called()
+
+
+def test_download_accepts_clip_before_unanchored_discontinuity(tmp_path):
+    start = datetime(2025, 1, 1, tzinfo=timezone.utc)
+    playlist = m3u8.loads(
+        "#EXTM3U\n#EXTINF:10,\nlive000.ts\n"
+        "#EXT-X-DISCONTINUITY\n#EXTINF:10,\nlive001.ts\n",
+        uri="https://s3-us-west-2.amazonaws.com/audio-orcasound-net/hls/archive.m3u8",
+    )
+    with (
+        patch("audio_utils.get_all_folders", return_value=[str(int(start.timestamp()) - 2)]),
+        patch("audio_utils.m3u8.load", return_value=playlist),
+        patch("audio_utils.scraper.download_from_url", side_effect=_write_segment),
+        patch("audio_utils.ffmpeg.input", return_value="input"),
+        patch("audio_utils.ffmpeg.output", return_value="output"),
+        patch("audio_utils.ffmpeg.run"),
+    ):
+        assert download_audio_from_start_utc("node", start, str(tmp_path), 3) is not None
+        assert download_audio_from_start_utc("node", start, str(tmp_path), 15) is None
 
 
 @pytest.mark.parametrize("duration", [0, -1, float("nan"), float("inf")])
 def test_download_rejects_invalid_duration(tmp_path, duration):
-    with patch("audio_utils.get_cached_folders") as folders:
+    with patch("audio_utils.get_all_folders") as folders:
         assert download_audio_from_start_utc(
             "node", datetime(2025, 1, 1, tzinfo=timezone.utc), str(tmp_path), duration
         ) is None

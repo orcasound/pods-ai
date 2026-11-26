@@ -9,6 +9,8 @@ Audio downloads reject playlist intervals marked by `EXT-X-GAP` or exhibiting
 timestamp gaps or overlaps. A segment omitted without a gap marker or
 timestamp discontinuity cannot be detected from media sequence numbers or
 filenames alone.
+Clips must be covered by one archive or live playlist; rolling playlists with
+a media sequence tag require a timestamp on their first segment.
 
 ```
 usage: download_wavs.py [-h] [--validate-only] [--training-csv-path TRAINING_CSV_PATH]

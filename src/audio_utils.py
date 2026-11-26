@@ -18,6 +18,7 @@ import os
 import shutil
 import time
 import urllib.error
+from urllib.parse import urlsplit
 
 from azure.cosmos import CosmosClient
 import ffmpeg
@@ -301,7 +302,7 @@ def _playlist_timeline(playlist, folder: int):
     for segment in playlist.segments:
         timestamp = segment.program_date_time or segment.current_program_date_time
         if segment.discontinuity and not segment.program_date_time:
-            return []
+            break
         if timestamp:
             if timestamp.utcoffset() is None:
                 return []
@@ -349,12 +350,13 @@ def download_audio_from_start_utc(
         start_timestamp = start_time_utc.timestamp()
         end_timestamp = start_timestamp + duration_seconds
         stream_base = f"https://s3-us-west-2.amazonaws.com/audio-orcasound-net/{node_name}"
-        valid_folders = sorted(
-            (int(folder) for folder in get_cached_folders(
-                "audio-orcasound-net", f"{node_name}/hls/"
-            ) if start_timestamp - 86400 <= int(folder) <= end_timestamp),
-            reverse=True,
-        )
+        folders = sorted(int(folder) for folder in get_all_folders(
+            "audio-orcasound-net", f"{node_name}/hls/"
+        ))
+        preceding = [folder for folder in folders if folder <= start_timestamp]
+        valid_folders = [folder for folder in folders if start_timestamp < folder <= end_timestamp]
+        if preceding:
+            valid_folders.insert(0, preceding[-1])
 
         selected_segments = None
         for folder in valid_folders:
@@ -391,6 +393,15 @@ def download_audio_from_start_utc(
         if not selected_segments:
             print(f"  Warning: No audio found for {start_time_utc}")
             return None
+
+        for segment in selected_segments:
+            parsed_url = urlsplit(segment.url)
+            if (
+                parsed_url.scheme != "https"
+                or parsed_url.netloc != "s3-us-west-2.amazonaws.com"
+                or not parsed_url.path.startswith("/audio-orcasound-net/")
+            ):
+                raise ValueError("Unexpected segment URL")
 
         clip_id = start_time_utc.astimezone(PACIFIC_TZ).strftime("%Y_%m_%d_%H_%M_%S_%Z")
         Path(tmp_dir).mkdir(parents=True, exist_ok=True)
