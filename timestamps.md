@@ -15,6 +15,7 @@ day then 10 seconds is a useful approximation.
 
 RPIs running new code will write the local time of each 10-second audio clip into the HLS manifest using
 `#EXT-X-PROGRAM-DATE-TIME`, to not have to compute the time and deal with the 2-3 second correction:
+Audio downloads use these timestamps when available; otherwise they add 2 seconds to the folder time.
 
 | feed          | last audio before update | updated    |
 | ------------- | ------------------------ | ---------- |

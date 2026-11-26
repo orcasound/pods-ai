@@ -192,6 +192,62 @@ def test_download_audio_does_not_require_segments_after_requested_end(tmp_path):
     assert result is not None
 
 
+@pytest.mark.parametrize("archive_has_pdt", [False, True])
+@pytest.mark.parametrize("live_has_pdt", [False, True])
+def test_download_audio_merges_corrected_archive_and_live_timelines(
+    tmp_path, archive_has_pdt, live_has_pdt
+):
+    """Apply the folder offset independently to archive and live playlists."""
+    folder_time = datetime(2025, 1, 1, tzinfo=timezone.utc)
+    folder = int(folder_time.timestamp())
+    start = folder_time + timedelta(seconds=16)
+
+    def make_segment(sequence, program_date_time):
+        return SimpleNamespace(
+            duration=10,
+            uri=f"live{sequence:03d}.ts",
+            base_uri="https://example.org/hls/",
+            program_date_time=program_date_time,
+            current_program_date_time=None,
+        )
+
+    archive = SimpleNamespace(
+        segments=[make_segment(0, folder_time + timedelta(seconds=5) if archive_has_pdt else None)],
+        media_sequence=0,
+    )
+    live = SimpleNamespace(
+        segments=[make_segment(1, folder_time + timedelta(seconds=15) if live_has_pdt else None)],
+        media_sequence=1,
+    )
+
+    def download_segment(url, directory):
+        (tmp_path / url.rsplit("/", 1)[-1]).write_bytes(b"segment")
+
+    with (
+        patch("audio_utils.get_cached_folders", return_value=[folder]),
+        patch("audio_utils.s3_utils.get_folders_between_timestamp", return_value=[folder]),
+        patch("audio_utils.playlist_utils.load_archive_and_live", return_value=(archive, live)),
+        patch(
+            "audio_utils.playlist_utils.merge_timelines",
+            wraps=audio_utils.playlist_utils.merge_timelines,
+        ) as merge_timelines,
+        patch(
+            "audio_utils.playlist_utils.fill_timeline_gaps",
+            side_effect=lambda timeline, *_args, **_kwargs: timeline,
+        ),
+        patch("audio_utils.scraper.download_from_url", side_effect=download_segment),
+        patch("audio_utils.ffmpeg.input", return_value="input"),
+        patch("audio_utils.ffmpeg.output", return_value="output"),
+        patch("audio_utils.ffmpeg.run"),
+    ):
+        result = download_audio_from_start_utc("rpi_orcasound_lab", start, str(tmp_path), 3)
+
+    assert result is not None
+    archive_timeline, live_timeline = merge_timelines.call_args.args
+    assert archive_timeline[0].start == folder + (5 if archive_has_pdt else 2)
+    assert live_timeline[0].start == folder + (15 if live_has_pdt else 12)
+
+
 @pytest.mark.parametrize("has_pdt", [False, True])
 def test_download_audio_selects_nonzero_sequence_segments_with_or_without_pdt(
     tmp_path, has_pdt
@@ -235,7 +291,7 @@ def test_download_audio_selects_nonzero_sequence_segments_with_or_without_pdt(
             "audio_utils.scraper.download_from_url",
             side_effect=download_segment,
         ),
-        patch("audio_utils.ffmpeg.input", return_value="input"),
+        patch("audio_utils.ffmpeg.input", return_value="input") as ffmpeg_input,
         patch("audio_utils.ffmpeg.output", return_value="output"),
         patch("audio_utils.ffmpeg.run"),
     ):
@@ -244,6 +300,53 @@ def test_download_audio_selects_nonzero_sequence_segments_with_or_without_pdt(
         )
 
     assert result is not None
+    ffmpeg_input.assert_called_once_with(
+        tmp_path / "live001.ts", ss=5 if has_pdt else 3
+    )
+
+
+@pytest.mark.parametrize("date_attribute", ["program_date_time", "current_program_date_time"])
+def test_download_audio_uses_later_program_date_time_to_anchor_earlier_segment(
+    tmp_path, date_attribute
+):
+    """A later PDT anchors earlier segments without the folder correction."""
+    folder_time = datetime(2025, 1, 1, tzinfo=timezone.utc)
+    folder = int(folder_time.timestamp())
+    segments = [
+        SimpleNamespace(
+            duration=10,
+            uri=f"live{sequence:03d}.ts",
+            base_uri="https://example.org/hls/",
+            program_date_time=None,
+            current_program_date_time=None,
+        )
+        for sequence in range(2)
+    ]
+    setattr(segments[1], date_attribute, folder_time + timedelta(seconds=20))
+    playlist = SimpleNamespace(segments=segments, media_sequence=0)
+
+    def download_segment(url, directory):
+        (tmp_path / url.rsplit("/", 1)[-1]).write_bytes(b"segment")
+
+    with (
+        patch("audio_utils.get_cached_folders", return_value=[folder]),
+        patch("audio_utils.s3_utils.get_folders_between_timestamp", return_value=[folder]),
+        patch("audio_utils.playlist_utils.load_archive_and_live", return_value=(playlist, None)),
+        patch(
+            "audio_utils.playlist_utils.fill_timeline_gaps",
+            side_effect=lambda timeline, *_args, **_kwargs: timeline,
+        ),
+        patch("audio_utils.scraper.download_from_url", side_effect=download_segment),
+        patch("audio_utils.ffmpeg.input", return_value="input") as ffmpeg_input,
+        patch("audio_utils.ffmpeg.output", return_value="output"),
+        patch("audio_utils.ffmpeg.run"),
+    ):
+        result = download_audio_from_start_utc(
+            "rpi_orcasound_lab", folder_time + timedelta(seconds=12), str(tmp_path), 3
+        )
+
+    assert result is not None
+    ffmpeg_input.assert_called_once_with(tmp_path / "live000.ts", ss=2)
 
 
 def test_download_audio_retries_manifest_load_after_transient_failure(tmp_path):

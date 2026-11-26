@@ -254,6 +254,7 @@ def download_60s_audio_from_start(
 
 MIN_SEGMENT_DURATION = 0.001
 FLOAT_TOLERANCE = 1e-9
+FOLDER_AUDIO_OFFSET_SECONDS = 2
 
 def _build_clip_id(start_time_utc: datetime) -> str:
     return start_time_utc.astimezone(PACIFIC_TZ).strftime("%Y_%m_%d_%H_%M_%S_%Z")
@@ -333,12 +334,16 @@ def download_audio_from_start_utc(
                 continue
 
             timeline = playlist_utils.get_playlist_timeline(
-                playlist, folder, 0
+                playlist, folder, FOLDER_AUDIO_OFFSET_SECONDS
             )
             if archive is not None and live is not None:
                 timeline = playlist_utils.merge_timelines(
-                    playlist_utils.get_playlist_timeline(archive, folder, 0),
-                    playlist_utils.get_playlist_timeline(live, folder, 0),
+                    playlist_utils.get_playlist_timeline(
+                        archive, folder, FOLDER_AUDIO_OFFSET_SECONDS
+                    ),
+                    playlist_utils.get_playlist_timeline(
+                        live, folder, FOLDER_AUDIO_OFFSET_SECONDS
+                    ),
                 )
             if not timeline:
                 continue
