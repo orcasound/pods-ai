@@ -110,6 +110,7 @@ def download_from_url(dl_url: str, dl_dir: str):
             urllib.error.URLError,
             http.client.IncompleteRead,
         ) as error:
+            # Remove partial downloads before retrying; stop on permanent HTTP errors.
             (Path(dl_dir) / os.path.basename(dl_url)).unlink(missing_ok=True)
             if attempt == 2 or (
                 isinstance(error, urllib.error.HTTPError)
@@ -158,6 +159,7 @@ def get_machine_detections(
     cosmos_database = cosmos_client.get_database_client(COSMOS_DB)
     container = cosmos_database.get_container_client(COSMOS_CONTAINER)
 
+    # Scope the query to this node and any supplied time bounds.
     query = """
         SELECT * FROM c
         WHERE c.location.id = @node_name
@@ -179,6 +181,7 @@ def get_machine_detections(
 
     results = []
     for item in items:
+        # Translate the review outcome into a detection status.
         found = item.get("SRKWFound", "").lower()
         reviewed = item.get("reviewed", False)
         if reviewed and found == "yes":
@@ -188,6 +191,7 @@ def get_machine_detections(
         else:
             status = "unreviewed"
 
+        # Normalize optional metadata and tolerate malformed timestamps or confidence.
         modelId = item.get("modelId")
         modelId = modelId.lower() if isinstance(modelId, str) else ""
 
@@ -277,14 +281,17 @@ def _playlist_timeline(playlist, folder: int):
     """Build a timeline only when the playlist has a reliable starting time."""
     if not playlist.segments:
         return []
+    # Rolling playlists cannot use the folder timestamp to anchor their first segment.
     first = playlist.segments[0]
     timestamp = first.program_date_time or first.current_program_date_time
     if timestamp is None and (
         playlist.media_sequence or playlist.data.get("has_media_sequence_tag")
     ):
         return []
+    # Apply the folder's two-second correction unless a playlist timestamp overrides it.
     start = float(folder) + 2
     if timestamp is None:
+        # Backtrack from a later timestamp, but never across a discontinuity.
         elapsed = 0.0
         for segment in playlist.segments:
             if segment.discontinuity:
@@ -298,6 +305,7 @@ def _playlist_timeline(playlist, folder: int):
             if not math.isfinite(segment.duration) or segment.duration <= 0:
                 return []
             elapsed += segment.duration
+    # Preserve explicit timestamps and gaps, stopping at unanchored discontinuities.
     timeline = []
     for segment in playlist.segments:
         timestamp = segment.program_date_time or segment.current_program_date_time
@@ -324,6 +332,7 @@ def _segments_cover_interval(segments, start_time: float, end_time: float) -> bo
         or segments[0].start > start_time + 1e-6
     ):
         return False
+    # Reject gaps and overlaps between segments, allowing only floating-point tolerance.
     covered_until = segments[0].start + segments[0].duration
     for segment in segments[1:]:
         if abs(segment.start - covered_until) > 1e-6:
@@ -340,6 +349,7 @@ def download_audio_from_start_utc(
 ) -> Optional[str]:
     """Download a clip beginning at start_time_utc and lasting for duration_seconds."""
     try:
+        # Validate the duration and normalize both naive and aware start times to UTC.
         if not math.isfinite(duration_seconds) or duration_seconds <= 0:
             raise ValueError("duration_seconds must be finite and positive")
         start_time_utc = (
@@ -350,10 +360,12 @@ def download_audio_from_start_utc(
         start_timestamp = start_time_utc.timestamp()
         end_timestamp = start_timestamp + duration_seconds
         stream_base = f"https://s3-us-west-2.amazonaws.com/audio-orcasound-net/{node_name}"
+        # Reuse the batch folder cache, refreshing once only when no candidate exists.
         for refresh in (False, True):
             folders = sorted(int(folder) for folder in get_cached_folders(
                 "audio-orcasound-net", f"{node_name}/hls/", refresh=refresh
             ))
+            # Search the latest preceding folder and any folders beginning within the clip.
             preceding = [folder for folder in folders if folder <= start_timestamp]
             valid_folders = [folder for folder in folders if start_timestamp < folder <= end_timestamp]
             if preceding:
@@ -363,6 +375,7 @@ def download_audio_from_start_utc(
 
         selected_segments = None
         for folder in valid_folders:
+            # Retry playlist retrieval, but skip missing playlists without retrying.
             url = f"{stream_base}/hls/{folder}/live.m3u8"
             for attempt in range(3):
                 try:
@@ -380,6 +393,7 @@ def download_audio_from_start_utc(
                         time.sleep(1)
             if playlist is None:
                 continue
+            # Require one playlist to cover the entire clip without gaps or overlaps.
             timeline = _playlist_timeline(playlist, folder)
             selected_segments = [
                 segment for segment in timeline
@@ -394,6 +408,7 @@ def download_audio_from_start_utc(
             print(f"  Warning: No audio found for {start_time_utc}")
             return None
 
+        # Restrict playlist-provided segment URLs to the expected Orcasound S3 host and bucket.
         for segment in selected_segments:
             parsed_url = urlsplit(segment.url)
             if (
@@ -407,6 +422,7 @@ def download_audio_from_start_utc(
         Path(tmp_dir).mkdir(parents=True, exist_ok=True)
         wav_file_path = str(Path(tmp_dir) / f"temp_{duration_seconds:g}s_{node_name}_{clip_id}.wav")
         with TemporaryDirectory(dir=tmp_dir) as segment_dir:
+            # Concatenate segments in timeline order, isolating duplicate basenames.
             source_path = Path(segment_dir) / "segments.ts"
             with open(source_path, "wb") as output_file:
                 for index, segment in enumerate(selected_segments):
@@ -416,6 +432,7 @@ def download_audio_from_start_utc(
                     segment_path = download_dir / os.path.basename(segment.url)
                     with open(segment_path, "rb") as input_file:
                         shutil.copyfileobj(input_file, output_file)
+            # Crop relative to the first segment and encode exactly the requested duration.
             stream = ffmpeg.input(source_path, ss=start_timestamp - selected_segments[0].start)
             stream = ffmpeg.output(
                 stream, wav_file_path, t=duration_seconds, acodec="pcm_s16le", ar=44100, ac=1
