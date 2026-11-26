@@ -37,6 +37,7 @@ from model_revisions import (
     PODSAI_WAV2VEC2_MODEL_REVISION,
 )
 from run_inference import run_inference
+from testing_dataset import TestingDatasetMetadata, load_testing_dataset_metadata
 
 RESIDENT_LABEL = "resident"
 ABIOTIC_LABELS = {"abiotic", "water", "vessel", "jingle"}
@@ -610,7 +611,10 @@ def print_confusion_matrix(result: ModelResult) -> None:
         print()
 
 
-def print_summary(results: list[ModelResult]) -> None:
+def print_summary(
+    results: list[ModelResult],
+    dataset_metadata: Optional[TestingDatasetMetadata] = None,
+) -> None:
     """
     Print a formatted comparison table for all model results.
 
@@ -629,6 +633,14 @@ def print_summary(results: list[ModelResult]) -> None:
     print()
     print(separator)
     print("Model Comparison Summary")
+    if dataset_metadata is not None:
+        print(f"dataset_version: {dataset_metadata.dataset_version}")
+        if dataset_metadata.git_tag:
+            print(f"dataset_git_tag: {dataset_metadata.git_tag}")
+        if dataset_metadata.source_ids:
+            print(f"source_id: {', '.join(dataset_metadata.source_ids)}")
+        if dataset_metadata.hydrophone_sites:
+            print(f"hydrophone_site: {', '.join(dataset_metadata.hydrophone_sites)}")
     print(separator)
     print(header)
     print("-" * len(header))
@@ -690,6 +702,24 @@ def main() -> int:
         "--wav-dir",
         default="output/testing-wav",
         help="Root directory containing testing WAV files (default: output/testing-wav).",
+    )
+    parser.add_argument(
+        "--dataset-metadata",
+        default=None,
+        metavar="JSON_PATH",
+        help=(
+            "Optional JSON metadata sidecar containing dataset_version/version, "
+            "git_tag, source_id, and hydrophone_site."
+        ),
+    )
+    parser.add_argument(
+        "--dataset-manifest",
+        default=None,
+        metavar="CSV_PATH",
+        help=(
+            "Optional dataset CSV manifest. Version and source/site metadata "
+            "columns are read when present."
+        ),
     )
     parser.add_argument(
         "--models",
@@ -889,6 +919,37 @@ def main() -> int:
     if args.max_samples is not None:
         print(f"  (limited to first {args.max_samples} samples)")
     print(f"WAV directory: {wav_dir}")
+    default_wav_dir = Path("output/testing-wav")
+    uses_default_wav_dir = wav_dir.resolve() == default_wav_dir.resolve()
+    metadata_path = (
+        Path(args.dataset_metadata)
+        if args.dataset_metadata
+        else Path("output/csv/testing_60s_samples.metadata.json")
+        if uses_default_wav_dir
+        else wav_dir / "dataset.json"
+    )
+    manifest_path = (
+        Path(args.dataset_manifest)
+        if args.dataset_manifest
+        else Path("output/csv/testing_60s_samples.csv")
+        if uses_default_wav_dir
+        else None
+    )
+    dataset_metadata = load_testing_dataset_metadata(
+        metadata_path=metadata_path,
+        manifest_path=manifest_path,
+        repo_path=Path(__file__).resolve().parent.parent,
+        allow_head_tag=uses_default_wav_dir,
+    )
+    for warning in dataset_metadata.warnings:
+        print(f"Warning: {warning}", file=sys.stderr)
+    print(f"dataset_version: {dataset_metadata.dataset_version}")
+    if dataset_metadata.git_tag:
+        print(f"dataset_git_tag: {dataset_metadata.git_tag}")
+    if dataset_metadata.source_ids:
+        print(f"source_id: {', '.join(dataset_metadata.source_ids)}")
+    if dataset_metadata.hydrophone_sites:
+        print(f"hydrophone_site: {', '.join(dataset_metadata.hydrophone_sites)}")
     print(f"Models to evaluate: {', '.join(models)}")
     print()
 
@@ -985,7 +1046,7 @@ def main() -> int:
             results.append(model_result)
         print()
 
-    print_summary(results)
+    print_summary(results, dataset_metadata=dataset_metadata)
     return 0
 
 

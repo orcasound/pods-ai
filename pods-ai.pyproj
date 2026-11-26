@@ -56,6 +56,7 @@ MODEL_URL=https://trainedproductionmodels.blob.core.windows.net/dnnmodel/11-15-2
     <Compile Include="src\run_inference.py" />
     <Compile Include="src\spectrogram_visualizer.py" />
     <Compile Include="src\train_podsai_model.py" />
+    <Compile Include="src\testing_dataset.py" />
     <Compile Include="tests\conftest.py" />
     <Compile Include="tests\test_build_readme.py" />
     <Compile Include="tests\test_add_samples.py" />
@@ -73,6 +74,7 @@ MODEL_URL=https://trainedproductionmodels.blob.core.windows.net/dnnmodel/11-15-2
     <Compile Include="tests\test_spectrogram_visualizer.py" />
     <Compile Include="tests\test_run_inference.py" />
     <Compile Include="tests\test_train_podsai_model.py" />
+    <Compile Include="tests\test_testing_dataset.py" />
   </ItemGroup>
   <ItemGroup>
     <Folder Include="tests\" />

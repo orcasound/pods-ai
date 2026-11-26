@@ -20,6 +20,8 @@ python src/compare_models.py [options]
 | Option | Description |
 | --- | --- |
 | `--wav-dir PATH` | Root directory of category subdirectories. Default: `output/testing-wav`. |
+| `--dataset-metadata JSON_PATH` | Optional JSON sidecar. The default test set looks for `output/csv/testing_60s_samples.metadata.json`; custom WAV directories look for `dataset.json` inside the WAV directory. |
+| `--dataset-manifest CSV_PATH` | Optional CSV manifest to read dataset version and provenance columns from. The default test set uses `output/csv/testing_60s_samples.csv`. |
 | `--models MODEL_LIST` | Comma-separated built-in names. Include `custom` to evaluate the custom PODS-AI model. Default: `orcahello,oldpodsai,podsai`. |
 | `--custom-model-path PATH_OR_HF_ID` | Local custom model file/directory, PODS-AI-compatible ONNX file, or Hugging Face repository ID. Required when `custom` is in `--models`; supplying it without `custom` adds `custom` automatically. |
 | `--custom-model-revision REVISION` | Optional revision for a custom Hugging Face model. Ignored for local paths. |
@@ -43,6 +45,33 @@ Unknown names cause an error before model loading. The WAV directory must
 exist and contain at least one category WAV file. Supported background
 categories include `other`, `abiotic`, `water`, `vessel`, `jingle`, `human`,
 and `bird`.
+
+Each run prints `dataset_version` in its log and comparison summary. The
+default is `unversioned`, so older datasets and manifests continue to run
+without changes. A JSON sidecar may declare `dataset_version` (or `version`),
+`git_tag`, `source_id`, and `hydrophone_site`; the CSV manifest can also include
+`dataset_version` or `version`, `git_tag`, `source_id`, and `hydrophone_site`
+columns. Source and site values are optional and are reported when available.
+
+Use semantic versions in `MAJOR.MINOR.PATCH` form (optionally prefixed with
+`v`). To bind a dataset version to a repository commit, create an annotated
+Git tag named `TestingDataset.vMAJOR.MINOR.PATCH` on the commit containing
+that dataset. For example, `TestingDataset.v1.0.0` identifies the commit
+containing version `v1.0.0`. When a version is stored in JSON, include the
+matching `git_tag` so evaluation reports both values. An exact dataset tag at
+the checked-out commit is also detected automatically when no version is
+declared. Content hashes are not part of the dataset version identifier.
+
+Example sidecar:
+
+```json
+{
+  "dataset_version": "v1.0.0",
+  "git_tag": "TestingDataset.v1.0.0",
+  "source_id": "orcasound-lab-2026",
+  "hydrophone_site": "rpi_orcasound_lab"
+}
+```
 
 ## Custom model specification
 

@@ -23,3 +23,11 @@ The columns are as follows:
 The first three fields identify the audio window; scripts also use URI, Description, and Notes
 for validation, matching, and processing decisions.
 
+The testing manifest may optionally include `dataset_version` (or `version`),
+`git_tag`, `source_id`, and `hydrophone_site` columns. A corresponding JSON
+sidecar at `output/csv/testing_60s_samples.metadata.json` may provide the same
+dataset-level metadata. Version values use semantic `MAJOR.MINOR.PATCH` form;
+the Git tag convention is `TestingDataset.vMAJOR.MINOR.PATCH`, attached to the
+commit that contains that dataset. These fields are optional, so existing CSVs
+remain valid. See [compare-models.md](compare-models.md) for details.
+
