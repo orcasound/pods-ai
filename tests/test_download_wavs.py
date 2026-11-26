@@ -63,14 +63,14 @@ class TestDownloadTestingSample:
 
             mock_download.assert_called_once_with(
                 node_name="rpi_andrews_bay",
-                start_time_utc=datetime(2025, 1, 1, 8, 0, 0, tzinfo=timezone.utc),
+                start_time_utc=datetime(2025, 1, 1, 8, 0, 2, tzinfo=timezone.utc),
                 tmp_dir=ANY,
                 duration_seconds=60,
             )
             expected = output_root / "resident" / "rpi-andrews-bay_2025_01_01_00_00_02_PST.wav"
             assert expected.exists()
             assert download_wavs._has_audio_start_marker(
-                expected, download_wavs.parse_timestamp_pacific("2025_01_01_00_00_00_PST")
+                expected, download_wavs.parse_timestamp_pacific("2025_01_01_00_00_02_PST")
             )
 
     def test_tp_machine_only_downloads_60s_clip_from_start_timestamp(self):
@@ -106,14 +106,14 @@ class TestDownloadTestingSample:
 
             mock_download.assert_called_once_with(
                 node_name="rpi_orcasound_lab",
-                start_time_utc=datetime(2025, 1, 1, 8, 0, 1, tzinfo=timezone.utc),
+                start_time_utc=datetime(2025, 1, 1, 8, 0, 3, tzinfo=timezone.utc),
                 tmp_dir=ANY,
                 duration_seconds=60,
             )
             expected = output_root / "humpback" / "rpi-orcasound-lab_2025_01_01_00_00_03_PST.wav"
             assert expected.exists()
 
-    def test_subtracts_offset_in_utc_across_dst_transition(self, tmp_path):
+    def test_uses_corrected_start_across_dst_transition(self, tmp_path):
         timestamp = "2025_03_09_03_00_01_PDT"
         expected = tmp_path / "resident" / f"rpi-test_{timestamp}.wav"
         expected.parent.mkdir(parents=True)
@@ -131,13 +131,13 @@ class TestDownloadTestingSample:
 
         download.assert_called_once_with(
             node_name="rpi_test",
-            start_time_utc=datetime(2025, 3, 9, 9, 59, 59, tzinfo=timezone.utc),
+            start_time_utc=datetime(2025, 3, 9, 10, 0, 1, tzinfo=timezone.utc),
             tmp_dir=ANY,
             duration_seconds=60,
         )
         assert download_wavs._has_audio_start_marker(
             expected,
-            download_wavs.parse_timestamp_pacific("2025_03_09_01_59_59_PST"),
+            download_wavs.parse_timestamp_pacific(timestamp),
         )
 
 
@@ -159,24 +159,24 @@ class TestTimestampHelpers:
         (
             "2025_01_01_00_00_05_PST",
             "2025-01-01T08:00:03Z",
-            datetime(2025, 1, 1, 8, 0, 3, tzinfo=timezone.utc),
+            datetime(2025, 1, 1, 8, 0, 5, tzinfo=timezone.utc),
         ),
         (
             "2025_07_01_00_00_05_PDT",
             "2025-07-01T07:00:03Z",
-            datetime(2025, 7, 1, 7, 0, 3, tzinfo=timezone.utc),
+            datetime(2025, 7, 1, 7, 0, 5, tzinfo=timezone.utc),
         ),
         (
             "2025_03_09_03_00_01_PDT",
             "2025-03-09T09:59:59Z",
-            datetime(2025, 3, 9, 9, 59, 59, tzinfo=timezone.utc),
+            datetime(2025, 3, 9, 10, 0, 1, tzinfo=timezone.utc),
         ),
     ],
 )
-def test_training_sample_download_applies_corrected_timestamp_offset(
+def test_training_sample_download_uses_corrected_timestamp(
     tmp_path, row_timestamp, uri_timestamp, expected_start
 ):
-    """Translate corrected manifest timestamps to the Orcasite HLS timeline."""
+    """Use the corrected manifest timestamp rather than the Orcasite URI time."""
     wav_dir = tmp_path / "training-wav"
     source_path = tmp_path / "source.wav"
     source_path.write_bytes(b"wav")
@@ -208,10 +208,10 @@ def test_training_sample_download_applies_corrected_timestamp_offset(
     assert expected.read_bytes() == b"wav"
 
 
-def test_training_sample_without_uri_applies_corrected_timestamp_offset(
+def test_training_sample_without_uri_uses_corrected_timestamp(
     tmp_path,
 ):
-    """Apply the corrected timestamp offset even when the row has no URI."""
+    """Use the corrected timestamp even when the row has no URI."""
     timestamp = "2025_01_01_00_00_03_PST"
     source_path = tmp_path / "source.wav"
     source_path.write_bytes(b"wav")
@@ -225,7 +225,7 @@ def test_training_sample_without_uri_applies_corrected_timestamp_offset(
         )
 
     assert download.call_args.kwargs["start_time_utc"] == datetime(
-        2025, 1, 1, 8, 0, 1, tzinfo=timezone.utc
+        2025, 1, 1, 8, 0, 3, tzinfo=timezone.utc
     )
 
 
@@ -470,7 +470,7 @@ class TestCacheAndCleanup:
             cached_file.parent.mkdir(parents=True, exist_ok=True)
             cached_file.write_bytes(b"cached")
             cached_file.with_name(f"{cached_file.name}.audio-start").write_text(
-                "2025_01_01_00_00_00_PST", encoding="utf-8"
+                "2025_01_01_00_00_02_PST", encoding="utf-8"
             )
 
             with patch("audio_utils.get_cached_folders", side_effect=AssertionError("should not download")):
@@ -514,7 +514,7 @@ class TestCacheAndCleanup:
             expected.parent.mkdir(parents=True, exist_ok=True)
             expected.write_bytes(b"keep")
             expected.with_name(f"{expected.name}.audio-start").write_text(
-                "2025_01_01_00_00_00_PST", encoding="utf-8"
+                "2025_01_01_00_00_02_PST", encoding="utf-8"
             )
             stale.write_bytes(b"remove")
 
@@ -544,7 +544,7 @@ class TestCacheAndCleanup:
             humpback_signal.parent.mkdir(parents=True, exist_ok=True)
             expected.write_bytes(b"keep")
             expected.with_name(f"{expected.name}.audio-start").write_text(
-                "2025_01_01_00_00_00_PST", encoding="utf-8"
+                "2025_01_01_00_00_02_PST", encoding="utf-8"
             )
             humpback_signal.write_bytes(b"humpback")
             noise.write_bytes(b"noise")
@@ -586,10 +586,10 @@ class TestCacheAndCleanup:
             cached_file.parent.mkdir(parents=True, exist_ok=True)
             cached_file.write_bytes(b"cached")
             cached_file.with_name(f"{cached_file.name}.audio-start").write_text(
-                "2025_01_01_00_00_00_PST", encoding="utf-8"
+                "2025_01_01_00_00_02_PST", encoding="utf-8"
             )
 
-            with patch("audio_utils.download_60s_audio", side_effect=AssertionError("should not download")):
+            with patch("audio_utils.download_audio_from_start_utc", side_effect=AssertionError("should not download")):
                 process_testing_csv(csv_path, output_root, cache_root=cache_root)
 
             expected = output_root / "resident" / "rpi-andrews-bay_2025_01_01_00_00_02_PST.wav"
@@ -603,9 +603,9 @@ class TestCacheAndCleanup:
         cache_root = tmp_path / "cache-testing-wav"
         stale_cache = cache_root / "resident" / f"rpi-andrews-bay_{timestamp}.wav"
         stale_cache.parent.mkdir(parents=True)
-        stale_cache.write_bytes(b"pre-offset audio")
+        stale_cache.write_bytes(b"old offset audio")
         stale_cache.with_name(f"{stale_cache.name}.audio-start").write_text(
-            "2025_01_01_00_00_02_PST", encoding="utf-8"
+            "2025_01_01_00_00_00_PST", encoding="utf-8"
         )
 
         def fake_download_audio_from_start_utc(node_name, start_time_utc, tmp_dir, duration_seconds):
@@ -623,7 +623,7 @@ class TestCacheAndCleanup:
         download.assert_called_once()
         assert expected.read_bytes() == b"corrected audio"
         assert download_wavs._has_audio_start_marker(
-            expected, download_wavs.parse_timestamp_pacific("2025_01_01_00_00_00_PST")
+            expected, download_wavs.parse_timestamp_pacific(timestamp)
         )
 
     def test_failed_testing_refresh_preserves_unverified_file_without_serving_it(self, tmp_path):
@@ -806,7 +806,7 @@ class TestUriTimestampValidation:
         with pytest.raises(ValueError, match="Timestamp mismatch"):
             validate_uri_timestamps(rows)
 
-def test_download_audio_segment_uses_orcasite_time_for_hls_lookup(tmp_path):
+def test_download_audio_segment_uses_corrected_time_for_hls_lookup(tmp_path):
     row_timestamp = "2025_01_01_01_00_02_PST"
     source_path = tmp_path / "source.wav"
     source_path.write_bytes(b"wav")
@@ -823,7 +823,7 @@ def test_download_audio_segment_uses_orcasite_time_for_hls_lookup(tmp_path):
             uri="https://live.orcasound.net/bouts/new/andrews-bay?time=2025-01-01T09%3A00%3A00.000Z",
         )
 
-    expected_start = datetime(2025, 1, 1, 9, 0, 0, tzinfo=timezone.utc)
+    expected_start = datetime(2025, 1, 1, 9, 0, 2, tzinfo=timezone.utc)
     download.assert_called_once_with(
         node_name="rpi_andrews_bay",
         start_time_utc=expected_start,
@@ -837,7 +837,7 @@ def test_download_audio_segment_uses_orcasite_time_for_hls_lookup(tmp_path):
     )
     assert expected_wav.read_bytes() == b"wav"
     assert download_wavs._has_audio_start_marker(
-        expected_wav, download_wavs.parse_timestamp_pacific("2025_01_01_01_00_00_PST")
+        expected_wav, download_wavs.parse_timestamp_pacific(row_timestamp)
     )
 
 class TestValidateOnly:
