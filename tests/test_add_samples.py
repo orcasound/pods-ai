@@ -685,7 +685,7 @@ class TestAddSamples:
             "https://live.orcasound.net/bouts/new/test?time=2025-01-01T08%3A00%3A00.000Z"
         )
 
-    def test_uri_download_applies_orcasite_hls_offset_to_corrected_timestamp(self, tmp_path):
+    def test_uri_download_uses_corrected_timestamp(self, tmp_path):
         corrected_timestamp = "2025_01_01_00_00_02_PST"
         segment_path = tmp_path / f"rpi-test_{corrected_timestamp}.wav"
         segment_path.write_bytes(b"")
@@ -716,7 +716,7 @@ class TestAddSamples:
         mock_download.assert_called_once()
         assert mock_download.call_args.args[0] == "rpi_test"
         assert mock_download.call_args.args[1] == datetime(
-            2025, 1, 1, 8, 0, 0, tzinfo=timezone.utc
+            2025, 1, 1, 8, 0, 2, tzinfo=timezone.utc
         )
         assert mock_download.call_args.args[3] == 60
         assert mock_split.call_args.kwargs["source_uri"] == source_uri
