@@ -488,16 +488,13 @@ class TestCacheAndCleanup:
         stale_cache.parent.mkdir(parents=True)
         stale_cache.write_bytes(b"pre-offset audio")
 
-        folder_time = int(datetime(2025, 1, 1, 9, 0, tzinfo=timezone.utc).timestamp())
-        with patch("audio_utils.get_cached_folders", return_value=[str(folder_time)]) as get_folders, \
-                patch("audio_utils.s3_utils.get_folders_between_timestamp", return_value=[folder_time]), \
-                patch("audio_utils.playlist_utils.load_archive_and_live", return_value=(Mock(segments=[]), None)):
+        with patch("download_wavs.download_audio_from_start_utc", return_value=None) as download:
             download_wavs.download_audio_segment(
                 "resident", "rpi_andrews_bay", timestamp, output_root, cache_root=cache_root
             )
 
         expected = output_root / "resident" / f"rpi-andrews-bay_{timestamp}.wav"
-        get_folders.assert_called_once()
+        download.assert_called_once()
         assert not expected.exists()
 
     def test_process_csv_deletes_stale_wavs(self):

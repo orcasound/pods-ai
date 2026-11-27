@@ -16,12 +16,6 @@ def get_scraper():
     return scraper
 
 
-def get_playlist_utils():
-    from orca_hls_utils import playlist_utils
-
-    return playlist_utils
-
-
 def get_s3_utils():
     from orca_hls_utils import s3_utils
 

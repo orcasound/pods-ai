@@ -1360,15 +1360,15 @@ class TestIntegrationWithRealModels:
 
     # Parametrized tests for FastAI model on different audio types.
     @pytest.mark.parametrize("label,wav_file,xfail_reason", [
-        ("resident", "rpi-sunset-bay_2026_01_08_01_52_39_PST.wav", None),
-        ("transient", "rpi-orcasound-lab_2024_12_29_13_37_23_PST.wav",
+        ("resident", "rpi-sunset-bay_2026_01_08_01_52_41_PST.wav", None),
+        ("transient", "rpi-orcasound-lab_2024_12_29_13_37_25_PST.wav",
          "FastAI binary model may predict resident on transient clips"),
-        ("humpback", "rpi-orcasound-lab_2023_10_28_08_08_03_PST.wav", None),
-        ("vessel", "rpi-orcasound-lab_2025_11_30_12_53_54_PST.wav", "FastAI binary model may predict vessel as resident"),
-        ("water", "rpi-andrews-bay_2026_08_30_02_22_52_PST.wav", None),
-        ("human", "rpi-sunset-bay_2024_07_19_12_50_08_PST.wav", None),
-        ("jingle", "rpi-bush-point_2026_07_19_09_54_48_PST.wav", "FastAI binary model may predict jingle as resident"),
-        ("bird", "rpi-bush-point_2026_08_09_17_36_48_PST.wav", None),
+        ("humpback", "rpi-orcasound-lab_2023_10_28_08_08_05_PST.wav", None),
+        ("vessel", "rpi-orcasound-lab_2025_11_30_12_53_56_PST.wav", "FastAI binary model may predict vessel as resident"),
+        ("water", "rpi-andrews-bay_2026_08_30_02_22_54_PST.wav", None),
+        ("human", "rpi-sunset-bay_2024_07_19_12_50_10_PST.wav", None),
+        ("jingle", "rpi-bush-point_2026_07_19_09_54_50_PST.wav", "FastAI binary model may predict jingle as resident"),
+        ("bird", "rpi-bush-point_2026_08_09_17_36_50_PST.wav", None),
     ])
     def test_fastai_model_inference(
         self,
@@ -1392,14 +1392,14 @@ class TestIntegrationWithRealModels:
 
     # Parametrized tests for PODS-AI model on different audio types.
     @pytest.mark.parametrize("label,wav_file,xfail_reason", [
-        ("resident", "rpi-sunset-bay_2026_01_08_01_52_39_PST.wav", None),
-        ("transient", "rpi-orcasound-lab_2025_01_02_10_12_24_PST.wav", None),
-        ("humpback", "rpi-orcasound-lab_2025_01_05_21_18_05_PST.wav", None),
-        ("vessel", "rpi-orcasound-lab_2025_11_30_12_53_54_PST.wav", None),
-        ("water", "rpi-bush-point_2025_06_29_18_23_17_PST.wav", "PODS-AI model may misclassify water as vessel"),
-        ("human", "rpi-sunset-bay_2024_07_19_12_50_08_PST.wav", None),
-        ("jingle", "rpi-bush-point_2026_07_19_09_54_48_PST.wav", None),
-        ("bird", "rpi-bush-point_2026_08_09_17_36_48_PST.wav", "PODS-AI model may misclassify bird as jingle"),
+        ("resident", "rpi-sunset-bay_2026_01_08_01_52_41_PST.wav", None),
+        ("transient", "rpi-orcasound-lab_2025_01_02_10_12_26_PST.wav", None),
+        ("humpback", "rpi-orcasound-lab_2025_01_05_21_18_07_PST.wav", None),
+        ("vessel", "rpi-orcasound-lab_2025_11_30_12_53_56_PST.wav", None),
+        ("water", "rpi-bush-point_2025_06_29_18_23_19_PST.wav", "PODS-AI model may misclassify water as vessel"),
+        ("human", "rpi-sunset-bay_2024_07_19_12_50_10_PST.wav", None),
+        ("jingle", "rpi-bush-point_2026_07_19_09_54_50_PST.wav", None),
+        ("bird", "rpi-bush-point_2026_08_09_17_36_50_PST.wav", "PODS-AI model may misclassify bird as jingle"),
     ])
     def test_podsai_model_inference(
         self,
@@ -1424,14 +1424,14 @@ class TestIntegrationWithRealModels:
 
     # Parametrized tests for the exported PODS-AI ONNX model on different audio types.
     @pytest.mark.parametrize("label,wav_file,xfail_reason", [
-        ("resident", "rpi-sunset-bay_2026_01_08_01_52_39_PST.wav", None),
-        ("transient", "rpi-orcasound-lab_2025_01_02_10_12_24_PST.wav", None),
-        ("humpback", "rpi-orcasound-lab_2025_01_05_21_18_05_PST.wav", None),
-        ("vessel", "rpi-orcasound-lab_2025_11_30_12_53_54_PST.wav", None),
-        ("water", "rpi-bush-point_2025_06_29_18_23_17_PST.wav", "PODS-AI model may misclassify water as vessel"),
-        ("human", "rpi-sunset-bay_2024_07_19_12_50_08_PST.wav", None),
-        ("jingle", "rpi-bush-point_2026_07_19_09_54_48_PST.wav", None),
-        ("bird", "rpi-bush-point_2026_08_09_17_36_48_PST.wav", "PODS-AI model may misclassify bird as jingle"),
+        ("resident", "rpi-sunset-bay_2026_01_08_01_52_41_PST.wav", None),
+        ("transient", "rpi-orcasound-lab_2025_01_02_10_12_26_PST.wav", None),
+        ("humpback", "rpi-orcasound-lab_2025_01_05_21_18_07_PST.wav", None),
+        ("vessel", "rpi-orcasound-lab_2025_11_30_12_53_56_PST.wav", None),
+        ("water", "rpi-bush-point_2025_06_29_18_23_19_PST.wav", "PODS-AI model may misclassify water as vessel"),
+        ("human", "rpi-sunset-bay_2024_07_19_12_50_10_PST.wav", None),
+        ("jingle", "rpi-bush-point_2026_07_19_09_54_50_PST.wav", None),
+        ("bird", "rpi-bush-point_2026_08_09_17_36_50_PST.wav", "PODS-AI model may misclassify bird as jingle"),
     ])
     def test_podsai_onnx_model_inference(
         self,
@@ -1517,18 +1517,18 @@ class TestIntegrationWithRealModels:
         return hub_id
 
     @pytest.mark.parametrize("label,wav_file,xfail_reason", [
-        ("resident", "rpi-sunset-bay_2026_01_08_01_52_39_PST.wav", None),
-        ("transient", "rpi-orcasound-lab_2024_12_29_13_37_23_PST.wav",
+        ("resident", "rpi-sunset-bay_2026_01_08_01_52_41_PST.wav", None),
+        ("transient", "rpi-orcasound-lab_2024_12_29_13_37_25_PST.wav",
          "OrcaHello SRKW detector may predict resident on transient clips"),
-        ("humpback", "rpi-orcasound-lab_2023_10_28_08_08_03_PST.wav", None),
-        ("vessel", "rpi-orcasound-lab_2025_11_30_12_53_54_PST.wav",
+        ("humpback", "rpi-orcasound-lab_2023_10_28_08_08_05_PST.wav", None),
+        ("vessel", "rpi-orcasound-lab_2025_11_30_12_53_56_PST.wav",
          "OrcaHello SRKW detector may predict resident on vessel noise clips"),
-        ("water", "rpi-andrews-bay_2026_08_30_02_22_52_PST.wav", None),
-        ("human", "rpi-sunset-bay_2024_07_19_12_50_08_PST.wav",
+        ("water", "rpi-andrews-bay_2026_08_30_02_22_54_PST.wav", None),
+        ("human", "rpi-sunset-bay_2024_07_19_12_50_10_PST.wav",
          "OrcaHello SRKW detector may predict resident on human voice clips"),
-        ("jingle", "rpi-bush-point_2026_07_19_09_54_48_PST.wav",
+        ("jingle", "rpi-bush-point_2026_07_19_09_54_50_PST.wav",
          "OrcaHello SRKW detector may predict resident on jingle clips"),
-        ("bird", "rpi-bush-point_2026_08_09_17_36_48_PST.wav", None),
+        ("bird", "rpi-bush-point_2026_08_09_17_36_50_PST.wav", None),
     ])
     def test_orcahello_model_inference(
         self,
