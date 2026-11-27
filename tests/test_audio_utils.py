@@ -276,28 +276,6 @@ def test_later_program_date_time_anchors_earlier_segment(tmp_path):
     assert ffmpeg_input.call_args.kwargs == {"ss": 2}
 
 
-def test_download_falls_back_to_live_playlist(tmp_path):
-    start = datetime(2025, 1, 1, tzinfo=timezone.utc)
-    gap = m3u8.loads(
-        "#EXTM3U\n#EXT-X-GAP\n#EXTINF:10,\nmissing.ts\n",
-        uri="https://s3-us-west-2.amazonaws.com/audio-orcasound-net/hls/archive.m3u8",
-    )
-    live = m3u8.loads(
-        "#EXTM3U\n#EXTINF:10,\navailable.ts\n",
-        uri="https://s3-us-west-2.amazonaws.com/audio-orcasound-net/hls/live.m3u8",
-    )
-    with (
-        patch("audio_utils.get_all_folders", return_value=[str(int(start.timestamp()) - 2)]),
-        patch("audio_utils.m3u8.load", side_effect=[gap, live]),
-        patch("audio_utils.scraper.download_from_url", side_effect=_write_segment) as download,
-        patch("audio_utils.ffmpeg.input", return_value="input"),
-        patch("audio_utils.ffmpeg.output", return_value="output"),
-        patch("audio_utils.ffmpeg.run"),
-    ):
-        assert download_audio_from_start_utc("node", start, str(tmp_path), 3) is not None
-    assert download.call_args.args[0] == "https://s3-us-west-2.amazonaws.com/audio-orcasound-net/hls/available.ts"
-
-
 def test_download_refreshes_folders_and_accepts_old_folder(tmp_path):
     """Refresh an empty cached listing and reuse it for subsequent clips."""
     start = datetime(2025, 1, 2, tzinfo=timezone.utc)

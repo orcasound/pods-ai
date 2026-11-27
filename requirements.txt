@@ -1,4 +1,6 @@
 azure-cosmos
+azure-storage-blob>=12.19.0
+opencensus-ext-azure>=1.1.9
 pytest
 boto3
 beautifulsoup4
@@ -16,7 +18,11 @@ pytz
 requests
 scipy
 soundfile
-setuptools>=84,<85
+
+# FastAI 1.0.61 requires pkg_resources.
+# setuptools 84.x no longer provides pkg_resources in a compatible way.
+setuptools<81
+
 spacy>=3.5.4
 fastai==1.0.61
 torch>=2.1.0
