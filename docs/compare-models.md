@@ -30,6 +30,7 @@ python src/compare_models.py [options]
 | `--max-samples N` | Evaluate at most `N` WAV files. `N` must be positive. |
 | `--category NAME` | Evaluate only the named category. |
 | `--orcahello-variant` | Optional configuration to compare orcahello model with different aggregation strategies. |
+| `--podsai-variant` | Optional configuration to compare podsai model with different aggregation strategies. |
 
 Built-in model names map to these inference backends:
 
