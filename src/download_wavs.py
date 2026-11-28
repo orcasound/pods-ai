@@ -409,11 +409,11 @@ def _generate_testing_uri(row: CSVRow, timestamp_pst: str) -> str:
     else:
         node_slug = _default_slug_from_node_name(row.node_name)
         base_uri = f"https://live.orcasound.net/bouts/new/{node_slug}"
-    timestamp_utc = (
+    orcasite_timestamp_utc = (
         parse_timestamp_pacific(timestamp_pst).astimezone(dt_timezone.utc)
         - timedelta(seconds=AUDIO_OFFSET_SECONDS)
     )
-    encoded_time = quote(timestamp_utc.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z", safe="")
+    encoded_time = quote(orcasite_timestamp_utc.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z", safe="")
     return f"{base_uri}?time={encoded_time}"
 
 
@@ -580,6 +580,7 @@ def _get_corrected_detection_timestamp(node_name: str, detection_timestamp: date
         _CORRECTED_TIMESTAMP_CACHE[cache_key] = detection_timestamp
         return detection_timestamp
 
+    # Prior to the current epoch, detection timestamps were wrong and need to be corrected.
     from audio_utils import get_cached_folders
 
     folder_prefix = f"{node_name}/hls/"
@@ -849,7 +850,7 @@ def download_audio_segment(
     label_dir = output_root / category
     label_dir.mkdir(parents=True, exist_ok=True)
     timestamp_pst = parse_timestamp_pacific(timestamp_str)
-    start_time = PACIFIC_TZ.normalize(timestamp_pst - timedelta(seconds=AUDIO_OFFSET_SECONDS))
+    start_time = PACIFIC_TZ.normalize(timestamp_pst)
 
     # Check if the file already exists.
     wav_filename = _get_wav_filename(node_name, timestamp_str)
@@ -935,9 +936,7 @@ def download_testing_file(expected_path: Path, output_root: Path, cache_root: Pa
 
     node_name, timestamp_pst = parse_node_and_timestamp_from_filename(expected_path)
     audio_start = parse_timestamp_pacific(timestamp_pst)
-    start_time_utc = audio_start.astimezone(dt_timezone.utc) - timedelta(
-        seconds=AUDIO_OFFSET_SECONDS
-    )
+    start_time_utc = audio_start.astimezone(dt_timezone.utc)
     requested_audio_start = start_time_utc.astimezone(PACIFIC_TZ)
     if expected_path.exists():
         if _has_audio_start_marker(expected_path, requested_audio_start):

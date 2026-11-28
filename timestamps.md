@@ -15,6 +15,7 @@ day then 10 seconds is a useful approximation.
 
 RPIs running new code will write the local time of each 10-second audio clip into the HLS manifest using
 `#EXT-X-PROGRAM-DATE-TIME`, to not have to compute the time and deal with the 2-3 second correction:
+Audio downloads use these timestamps when available; otherwise they add 2 seconds to the folder time.
 
 | feed          | last audio before update | updated    |
 | ------------- | ------------------------ | ---------- |
@@ -40,8 +41,8 @@ The URIs in the csv files in this repository go to the Orcasite bouts interface 
 are intentionally off by 2 seconds.  That is, the URIs do not use the detection time, they show "Orcasite" time.
 The `StartTimestamp` column in `training_3s_samples.csv` and `testing_60s_samples.csv` uses the corrected
 start time. It is 2 seconds later than the timestamp in its Orcasite URI. The `dclde_60s_samples.csv`
-manifest retains its source timestamps and URI semantics. In this repository, `download_audio_segment()`
-in `download_wavs.py` accounts for the HLS audio-start offset when locating the audio to download.
+manifest retains its source timestamps and URI semantics. The download APIs use corrected recording
+times directly; Orcasite URI generation still subtracts the two-second offset.
 
 ## OrcaHello database
 
