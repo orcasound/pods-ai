@@ -298,7 +298,7 @@ def parse_orcahello_variant(spec: str) -> tuple[str, dict]:
 
     if "=" not in spec:
         raise ValueError(
-            f"invalid OrcaHello variant {spec!r}; "
+            f"invalid variant {spec!r}; "
             "expected NAME=STRATEGY[:TOP_K]"
         )
 
@@ -307,7 +307,7 @@ def parse_orcahello_variant(spec: str) -> tuple[str, dict]:
     settings = settings.strip()
 
     if not name or name == "default":
-        raise ValueError("OrcaHello variant name must not be empty or 'default'")
+        raise ValueError("Variant name must not be empty or 'default'")
 
     parts = settings.split(":")
     strategy = parts[0].strip()
@@ -349,6 +349,25 @@ def parse_orcahello_variant(spec: str) -> tuple[str, dict]:
         }
 
     return name, {"global_prediction": global_config}
+
+def parse_podsai_variant(spec: str) -> tuple[str, Optional[dict]]:
+    """Parse a PODS-AI aggregation configuration variant.
+
+    Supported formats:
+        default
+        NAME=mean_thresholded
+        NAME=mean_top_k:TOP_K
+
+    Returns:
+        Variant name and keyword arguments for PodsAIInference.
+        None is returned for the default configuration.
+    """
+    name, config = parse_orcahello_variant(spec)
+
+    if config is None:
+        return name, None
+
+    return name, config["global_prediction"]
 
 def resolve_custom_model_path(model_path: str) -> tuple[str, bool]:
     """Validate and normalize a custom model path or Hugging Face ID.
@@ -750,6 +769,20 @@ def main() -> int:
         ),
     )
     parser.add_argument(
+        "--podsai-variant",
+        action="append",
+        default=None,
+        metavar="NAME=STRATEGY[:TOP_K]",
+        help=(
+            "PODS-AI configuration variant to evaluate. "
+            "Can be specified multiple times. "
+            "Use '--podsai-variant default' to include "
+            "the default config in the comparison. "
+            "Examples: thresholded=mean_thresholded, "
+            "top3=mean_top_k:3."
+        ),
+    )
+    parser.add_argument(
         "--podsai-model-path",
         default=PODSAI_MODEL_ID,
         help=(
@@ -832,6 +865,29 @@ def main() -> int:
             if len(variant_names) != len(set(variant_names)):
                 raise ValueError("OrcaHello variant names must be unique")
 
+        # Handle PODS-AI aggregation configuration variants.
+        podsai_variants = []
+
+        if args.podsai_variant:
+            if "podsai" not in models:
+                raise ValueError(
+                    "--podsai-variant requires podsai in --models"
+                )
+
+            podsai_variants = [
+                parse_podsai_variant(spec)
+                for spec in args.podsai_variant
+            ]
+
+            variant_names = [
+                name for name, _ in podsai_variants
+            ]
+
+            if len(variant_names) != len(set(variant_names)):
+                raise ValueError(
+                    "PODS-AI variant names must be unique"
+        )
+
         seen_models: set[str] = set()
         for display_name, _, _ in parsed_models:
             if display_name in seen_models:
@@ -893,11 +949,18 @@ def main() -> int:
     print()
 
     results = []
+
     for model_type, inference_model_type, custom_path in model_specs:
 
-        # Expand OrcaHello into multiple configuration variants.
+        # Expand models into multiple configuration variants.
         if model_type == "orcahello":
-            variants = orcahello_variants or [("default", None)]
+            variants = orcahello_variants or [
+                ("default", None)
+            ]
+        elif model_type == "podsai":
+            variants = podsai_variants or [
+                ("default", None)
+            ]
         else:
             variants = [("default", None)]
 
@@ -925,10 +988,13 @@ def main() -> int:
             if is_onnx_format:
                 inference_model_type = "podsai"
 
-            if is_onnx_format and variant_name != "default":
+            # aggregation configuration not supported on the ONNX inference implementation
+            if is_onnx_format and variant_config is not None:
                 print(
-                    f"Error: --orcahello-variant {variant_name!r} cannot be applied to an "
-                    "ONNX model path; use a non-ONNX --orcahello-model-path or remove the variant.",
+                    f"Error: --{model_type}-variant {variant_name!r} "
+                    "cannot be applied to an ONNX model path; "
+                    f"use a non-ONNX --{model_type}-model-path "
+                    "or remove the variant.",
                     file=sys.stderr,
                 )
                 return 1
@@ -947,10 +1013,15 @@ def main() -> int:
                     fe = fe or PODSAI_MODEL_ID
                     kwargs['feature_extractor'] = fe
 
-                if inference_model_type == "orcahello" and variant_config is not None:
-                    # These settings currently apply only to the orcahello model.
-                    kwargs["config"] = variant_config
-                    print(f"  Configuration: {variant_config}")
+                    # Apply the aggregation configuration for this variant.
+                    if variant_config is not None:
+                        if model_type == "orcahello":
+                            kwargs["config"] = variant_config
+
+                        elif model_type == "podsai":
+                            kwargs.update(variant_config)
+
+                        print(f" Configuration: {variant_config}")
 
                 inference_model = get_model_inference(
                     model_type=inference_model_type,
