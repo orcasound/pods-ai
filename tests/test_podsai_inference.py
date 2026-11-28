@@ -19,7 +19,7 @@ from unittest.mock import Mock, patch, MagicMock
 import torch
 from podsai_inference import NUM_SPECIAL_TOKENS
 from model_revisions import LATEST_PODSAI_MODEL_REVISION
-
+from podsai_inference import PodsAIInference, aggregate_class_probabilities
 
 # Pinned PODS-AI model revision for integration-test stability.
 PODSAI_TEST_MODEL_ID = "davethaler/whale-call-detector"
@@ -1097,3 +1097,245 @@ class TestIntegrationWithRealModels:
             assert len(result["local_confidences"]) == 29
         finally:
             Path(wav_path).unlink(missing_ok=True)
+
+@pytest.mark.parametrize(
+    "strategy",
+    ["mean_thresholded", "mean_top_k"],
+)
+def test_empty_segment_probabilities(strategy):
+    """Empty segment probabilities produce a zero score."""
+    result = aggregate_class_probabilities(
+        segment_probs=[],
+        class_id=1,
+        strategy=strategy,
+        threshold=0.5,
+        mean_top_k=2,
+    )
+
+    assert result == 0.0
+
+def test_invalid_aggregation_strategy():
+    """An unsupported aggregation strategy raises ValueError."""
+    with pytest.raises(
+        ValueError,
+        match="Unsupported aggregation strategy",
+    ):
+        aggregate_class_probabilities(
+            segment_probs=[np.array([0.2, 0.8])],
+            class_id=1,
+            strategy="invalid",
+            threshold=0.5,
+            mean_top_k=2,
+        )
+
+class TestAggregationConfig:
+    """Tests for PODS-AI aggregation configuration."""
+
+    @patch("podsai_inference.AutoModelForAudioClassification")
+    @patch("podsai_inference.AutoFeatureExtractor")
+    def test_default_config(
+        self,
+        mock_extractor_class,
+        mock_model_class,
+        mock_feature_extractor,
+        mock_podsai_model,
+    ):
+        """Existing callers use the default aggregation strategy."""
+        mock_extractor_class.from_pretrained.return_value = (
+            mock_feature_extractor
+        )
+        mock_model_class.from_pretrained.return_value = (
+            mock_podsai_model
+        )
+
+        model = PodsAIInference("test-model-path")
+
+        assert model.aggregation_strategy == "default"
+        assert model.mean_top_k == 2
+
+    @pytest.mark.parametrize(
+        ("strategy", "top_k", "expected_strategy"),
+        [
+            (None, 2, "default"),
+            ("default", 2, "default"),
+            ("mean_thresholded", 2, "mean_thresholded"),
+            ("mean_top_k", 1, "mean_top_k"),
+            ("mean_top_k", 3, "mean_top_k"),
+        ],
+    )
+    @patch("podsai_inference.AutoModelForAudioClassification")
+    @patch("podsai_inference.AutoFeatureExtractor")
+    def test_aggregation_config(
+        self,
+        mock_extractor_class,
+        mock_model_class,
+        mock_feature_extractor,
+        mock_podsai_model,
+        strategy,
+        top_k,
+        expected_strategy,
+    ):
+        """Valid aggregation configurations are stored correctly."""
+        from podsai_inference import PodsAIInference
+
+        mock_extractor_class.from_pretrained.return_value = (
+            mock_feature_extractor
+        )
+        mock_model_class.from_pretrained.return_value = (
+            mock_podsai_model
+        )
+
+        model = PodsAIInference(
+            "test-model-path",
+            aggregation_strategy=strategy,
+            mean_top_k=top_k,
+        )
+
+        assert model.aggregation_strategy == expected_strategy
+        assert model.mean_top_k == top_k
+
+    @pytest.mark.parametrize(
+        "strategy",
+        ["invalid", "mean", "top_k"],
+    )
+    def test_invalid_aggregation_strategy(self, strategy):
+        """Unsupported strategies are rejected before model loading."""
+        from podsai_inference import PodsAIInference
+
+        with pytest.raises(
+            ValueError,
+            match="Invalid aggregation_strategy",
+        ):
+            PodsAIInference(
+                "test-model-path",
+                aggregation_strategy=strategy,
+            )
+
+    @pytest.mark.parametrize(
+        "top_k",
+        [0, -1, 2.5, True],
+    )
+    def test_invalid_mean_top_k(self, top_k):
+        """Top K must be a positive integer."""
+        from podsai_inference import PodsAIInference
+
+        with pytest.raises(
+            ValueError,
+            match="mean_top_k must be a positive integer",
+        ):
+            PodsAIInference(
+                "test-model-path",
+                aggregation_strategy="mean_top_k",
+                mean_top_k=top_k,
+            )
+
+class TestAggregationInference:
+    """Test aggregation strategies through predict()."""
+
+    @pytest.mark.parametrize(
+        ("strategy", "top_k", "expected_confidence"),
+        [
+            ("default", 2, 0.80),
+            ("mean_thresholded", 2, 0.80),
+            ("mean_top_k", 1, 0.90),
+            ("mean_top_k", 2, 0.85),
+            ("mean_top_k", 3, 0.80),
+            ("mean_top_k", 5, 0.58),
+        ],
+    )
+    @patch("podsai_inference.AutoModelForAudioClassification")
+    @patch("podsai_inference.AutoFeatureExtractor")
+    def test_predict_aggregation(
+        self,
+        mock_extractor_class,
+        mock_model_class,
+        mock_feature_extractor,
+        mock_podsai_model,
+        tmp_path,
+        strategy,
+        top_k,
+        expected_confidence,
+    ):
+        """Verify that predict() uses the selected aggregation strategy."""
+        from podsai_inference import PodsAIInference
+
+        mock_extractor_class.from_pretrained.return_value = (
+            mock_feature_extractor
+        )
+        mock_model_class.from_pretrained.return_value = (
+            mock_podsai_model
+        )
+
+        # Five segments with different resident probabilities.
+        probabilities = torch.tensor(
+            [
+                [0.80, 0.20, 0, 0, 0, 0, 0, 0],
+                [0.20, 0.80, 0, 0, 0, 0, 0, 0],
+                [0.30, 0.70, 0, 0, 0, 0, 0, 0],
+                [0.70, 0.30, 0, 0, 0, 0, 0, 0],
+                [0.10, 0.90, 0, 0, 0, 0, 0, 0],
+            ],
+            dtype=torch.float32,
+        )
+
+        def mock_forward(**kwargs):
+            batch_size = kwargs["input_values"].shape[0]
+            assert batch_size == 5
+
+            output = Mock()
+
+            # Convert probabilities to logits so that softmax
+            # reconstructs the original probabilities.
+            output.logits = torch.log(probabilities)
+
+            return output
+
+        mock_podsai_model.side_effect = mock_forward
+
+        model = PodsAIInference(
+            "test-model-path",
+            device="cpu",
+            threshold=0.5,
+            aggregation_strategy=strategy,
+            mean_top_k=top_k,
+        )
+
+        # 11 seconds produces five 3-second windows with a 2-second hop.
+        sr = 16000
+        audio_path = tmp_path / "test_aggregation.wav"
+
+        sf.write(
+            str(audio_path),
+            np.zeros(11 * sr, dtype=np.float32),
+            sr,
+        )
+
+        result = model.predict(
+            str(audio_path),
+            segment_duration=3,
+            hop_duration=2,
+        )
+
+        assert result["global_prediction"] == 1
+        assert result["global_prediction_label"] == "resident"
+
+        assert result["global_confidence"] == pytest.approx(
+            expected_confidence
+        )
+
+        assert result["per_class_probabilities"]["resident"] == (
+            pytest.approx(expected_confidence)
+        )
+
+        # Aggregation should not modify local predictions.
+        assert result["local_predictions"] == [0, 1, 1, 0, 1]
+
+        assert result["local_confidences"] == pytest.approx(
+            [0.20, 0.80, 0.70, 0.30, 0.90]
+        )
+
+        np.testing.assert_allclose(
+            np.asarray(result["local_probs"]),
+            probabilities.numpy(),
+            atol=1e-6,
+        )
